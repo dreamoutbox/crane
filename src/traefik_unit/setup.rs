@@ -6,6 +6,7 @@ pub fn setup_traefik(
     domain: &str,
     port_start: u16,
     port_end: u16,
+    health_check_path: &str,
 ) -> anyhow::Result<()> {
     // 1. Ensure Traefik is installed and configured to listen on ports 80 & 443
     install_traefik(interactor)?;
@@ -23,6 +24,18 @@ pub fn setup_traefik(
             port = port
         ));
     }
+    // Add active health check configuration
+    traefik_config.push_str(&format!(
+        r#"
+[http.services.{name}.loadBalancer.healthCheck]
+path = \"{health_path}\"
+interval = \"2s\"
+timeout = \"1s\"
+"#,
+        name = app_name,
+        health_path = health_check_path,
+    ));
+
     let traefik_dir = "/etc/traefik/dynamic";
     interactor.cmd(&format!("sudo mkdir -p '{}'", traefik_dir))?;
     let temp_traefik_path = format!("/tmp/{}.toml", app_name);

@@ -5,7 +5,7 @@
 When testing HTTP endpoints, use the -L (follow redirects) and -k (insecure TLS) flags:
 
 ```shell
-curl -L -k -i myapp.localhost/health
+curl -w "\n" -L -k -i myapp.localhost/health
 ```
 
 

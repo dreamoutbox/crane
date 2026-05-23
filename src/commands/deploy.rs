@@ -56,36 +56,56 @@ pub fn run(
 
             // Read .craneignore if it exists in the deploy_dir
             let craneignore_path = deploy_dir.join(".craneignore");
-            let mut excludes = vec![];
+            let mut ignores = vec![];
             if craneignore_path.exists() {
                 if let Ok(content) = std::fs::read_to_string(&craneignore_path) {
                     for line in content.lines() {
                         let trimmed = line.trim();
                         if !trimmed.is_empty() && !trimmed.starts_with('#') {
-                            excludes.push("-x".to_string());
-                            excludes.push(trimmed.to_string());
-                            excludes.push("-x".to_string());
-                            excludes.push(format!("{}/*", trimmed));
+                            ignores.push(trimmed.to_string());
                         }
                     }
                 }
             }
-            excludes.push("-x".to_string());
-            excludes.push(".git".to_string());
-            excludes.push("-x".to_string());
-            excludes.push(".git/*".to_string());
+            ignores.push(".git".to_string());
 
-            let mut zip_cmd = std::process::Command::new("zip");
+            let python_code = r#"
+import os, sys, zipfile
+zip_path = sys.argv[1]
+deploy_dir = sys.argv[2]
+ignores = sys.argv[3:]
+with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+    for root, dirs, files in os.walk(deploy_dir):
+        dirs[:] = [d for d in dirs if d not in ignores and not d.startswith('.')]
+        for file in files:
+            if file.startswith('.'):
+                continue
+            file_path = os.path.join(root, file)
+            rel_path = os.path.relpath(file_path, deploy_dir)
+            is_ignored = False
+            for ig in ignores:
+                if rel_path == ig or rel_path.startswith(ig + os.sep) or os.path.basename(rel_path) == ig:
+                    is_ignored = True
+                    break
+            if not is_ignored:
+                zipf.write(file_path, rel_path)
+"#;
+            let python_script_path =
+                std::env::temp_dir().join(format!("crane-zip-helper-{}.py", datetime));
+            std::fs::write(&python_script_path, python_code)?;
+
+            let mut zip_cmd = std::process::Command::new("python3");
             zip_cmd
-                .current_dir(&deploy_dir)
-                .arg("-r")
+                .arg(&python_script_path)
                 .arg(&zip_path)
-                .arg(".");
-            for opt in excludes {
-                zip_cmd.arg(opt);
+                .arg(&deploy_dir);
+            for ignore in ignores {
+                zip_cmd.arg(ignore);
             }
 
             let status = zip_cmd.status()?;
+            let _ = std::fs::remove_file(&python_script_path);
+
             if !status.success() {
                 anyhow::bail!("Failed to create zip archive of {:?}", deploy_dir);
             }
@@ -326,12 +346,14 @@ pub fn run(
                         .map(|d| d.name.clone())
                         .unwrap_or_else(|| "localhost".to_string())
                 });
+                let health_path = app.health_check_path.as_deref().unwrap_or("/health");
                 crate::traefik_unit::setup::setup_traefik(
                     &*interactor,
                     &app.name,
                     &domain,
                     app.port_start,
                     port_end,
+                    health_path,
                 )?;
 
                 // 6. Prune old releases
