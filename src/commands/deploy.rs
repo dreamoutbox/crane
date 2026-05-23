@@ -88,7 +88,18 @@ pub fn run(config_path: &Path) -> anyhow::Result<()> {
                         } else {
                             std::path::PathBuf::from(key)
                         };
-                        if let Ok(content) = std::fs::read_to_string(expanded_path) {
+
+                        let mut key_content = None;
+                        if let Ok(content) = std::fs::read_to_string(&expanded_path) {
+                            key_content = Some(content);
+                        } else if key.contains("id_rsa.pub") {
+                            let fallback_path = expanded_path.with_file_name("id_ed25519.pub");
+                            if let Ok(content) = std::fs::read_to_string(fallback_path) {
+                                key_content = Some(content);
+                            }
+                        }
+
+                        if let Some(content) = key_content {
                             authorized_keys.push(content.trim().to_string());
                         } else {
                             authorized_keys.push(key.clone());
@@ -109,23 +120,33 @@ pub fn run(config_path: &Path) -> anyhow::Result<()> {
                 interactor.install_dependencies(deps.clone())?;
             }
 
-            // 3. Prepare release directory and upload binary
-            let release_dir = format!("/opt/{}/releases/{}", app.name, datetime);
-            interactor.cmd(&format!("sudo mkdir -p '{}'", release_dir))?;
-
-            let temp_remote_path = format!("/tmp/{}-{}", app.name, datetime);
-            interactor.upload(binary_path.to_str().unwrap(), &temp_remote_path)?;
-
-            let final_remote_path = format!("{}/{}", release_dir, app.name);
-            interactor.cmd(&format!(
-                "sudo mv '{}' '{}'",
-                temp_remote_path, final_remote_path
-            ))?;
-            interactor.cmd(&format!("sudo chmod +x '{}'", final_remote_path))?;
+            // 3. Prepare target directories (admin) and chown to deploy_user
+            interactor.cmd(&format!("sudo mkdir -p '/opt/{}'", app.name))?;
             interactor.cmd(&format!(
                 "sudo chown -R '{}:{}' '/opt/{}'",
                 app.deploy_user, app.deploy_user, app.name
             ))?;
+            interactor.cmd(&format!("sudo mkdir -p '/etc/crane/{}'", app.name))?;
+            interactor.cmd(&format!(
+                "sudo chown -R '{}:{}' '/etc/crane/{}'",
+                app.deploy_user, app.deploy_user, app.name
+            ))?;
+
+            // Create deploy SSH session
+            let deploy_ssh = SSHSession::new(
+                node.host.clone(),
+                app.deploy_user.clone(),
+                "".to_string(),
+                Some(node.port),
+            );
+            let deploy_interactor = DebianInteractor::new(deploy_ssh);
+
+            let release_dir = format!("/opt/{}/releases/{}", app.name, datetime);
+            deploy_interactor.cmd(&format!("mkdir -p '{}'", release_dir))?;
+
+            let final_remote_path = format!("{}/{}", release_dir, app.name);
+            deploy_interactor.upload(binary_path.to_str().unwrap(), &final_remote_path)?;
+            deploy_interactor.cmd(&format!("chmod +x '{}'", final_remote_path))?;
 
             // 4. Rolling deploy across instances
             let min_replicas = app
@@ -165,29 +186,21 @@ pub fn run(config_path: &Path) -> anyhow::Result<()> {
                 println!("Deploying instance of '{}' on port {}...", app.name, port);
                 let service_instance = format!("{}@{}", app.name, port);
 
-                // Stop service if running
+                // Stop service if running (admin)
                 let _ = interactor.stop_service(&service_instance);
 
-                // Update current symlink
-                interactor.cmd(&format!(
-                    "sudo ln -sfn '{}/{}' '/opt/{}/current'",
+                // Update current symlink (deploy)
+                deploy_interactor.cmd(&format!(
+                    "ln -sfn '{}/{}' '/opt/{}/current'",
                     release_dir, app.name, app.name
                 ))?;
 
-                // Write environment file
-                let env_dir = format!("/etc/crane/{}", app.name);
-                interactor.cmd(&format!("sudo mkdir -p '{}'", env_dir))?;
-                let temp_env_path = format!("/tmp/crane-env-{}", port);
-                interactor.create_file(&temp_env_path, &env_content)?;
-                let final_env_path = format!("{}/.env", env_dir);
-                interactor.cmd(&format!("sudo mv '{}' '{}'", temp_env_path, final_env_path))?;
-                interactor.cmd(&format!(
-                    "sudo chown '{}:{}' '{}'",
-                    app.deploy_user, app.deploy_user, final_env_path
-                ))?;
-                interactor.cmd(&format!("sudo chmod 600 '{}'", final_env_path))?;
+                // Write environment file (deploy)
+                let env_path = format!("/etc/crane/{}/.env", app.name);
+                deploy_interactor.create_file(&env_path, &env_content)?;
+                deploy_interactor.cmd(&format!("chmod 600 '{}'", env_path))?;
 
-                // Create systemd template unit
+                // Create systemd template unit (admin)
                 crate::systemd_unit::setup::setup_systemd_template(
                     &interactor,
                     &app.name,

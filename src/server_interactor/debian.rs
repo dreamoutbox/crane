@@ -262,4 +262,14 @@ impl ServerInteractor for DebianInteractor {
         }
         Ok(())
     }
+
+    fn list_users(&self) -> anyhow::Result<Vec<String>> {
+        let output = self.run_checked("cut -d: -f1 /etc/passwd")?;
+        let users: Vec<String> = output
+            .lines()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        Ok(users)
+    }
 }

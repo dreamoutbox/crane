@@ -1,10 +1,8 @@
 use std::collections::HashMap;
 
 pub trait ServerInteractor {
-    // TEST
-    fn whoami(&self) -> anyhow::Result<String>;
-
     // BASIC
+    fn whoami(&self) -> anyhow::Result<String>;
     fn cmd(&self, command: &str) -> anyhow::Result<String>;
     fn get_os_info(&self) -> anyhow::Result<String>;
 
@@ -34,6 +32,7 @@ pub trait ServerInteractor {
     fn delete_user(&self, username: &str) -> anyhow::Result<()>;
     fn add_user_to_groups(&self, username: &str, groups: Vec<String>) -> anyhow::Result<()>;
     fn remove_user_from_groups(&self, username: &str, groups: Vec<String>) -> anyhow::Result<()>;
+    fn list_users(&self) -> anyhow::Result<Vec<String>>;
 }
 
 pub struct ServiceRegister {

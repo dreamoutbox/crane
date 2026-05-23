@@ -18,7 +18,7 @@ roles = ["app", "traefik", "postgres", "redis"]
 
 [[users]]
 name = "deployman"
-groups = ["www-data"]
+groups = ["www"]
 ssh_authorized_keys = ["~/.ssh/id_rsa.pub"]
 
 [app.myapp1]
