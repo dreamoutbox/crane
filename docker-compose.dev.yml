@@ -1,0 +1,82 @@
+# Docker compose for simulate vps setup
+
+name: crane-vps
+
+services:
+  vps1:
+    image: dreamoutbox/crane-dev-vps:latest
+    container_name: vps1
+    hostname: vps1
+    privileged: true # required for systemd
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      - ./keys/authorized_keys:/home/admin/.ssh/authorized_keys:ro
+    ports:
+      - "2221:22"
+      - "8081:80"
+      - "8441:443"
+    networks:
+      crane-net:
+        ipv4_address: 10.0.0.11
+    tmpfs:
+      - /run
+      - /run/lock
+      - /tmp
+    stop_signal: SIGRTMIN+3 # clean systemd shutdown
+    mem_limit: 4G
+    cpu_count: 4
+
+  vps2:
+    image: dreamoutbox/crane-dev-vps:latest
+    container_name: vps2
+    hostname: vps2
+    privileged: true
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      - ./keys/authorized_keys:/home/admin/.ssh/authorized_keys:ro
+    ports:
+      - "2222:22"
+      - "8082:80"
+      - "8442:443"
+    networks:
+      crane-net:
+        ipv4_address: 10.0.0.12
+    tmpfs:
+      - /run
+      - /run/lock
+      - /tmp
+    stop_signal: SIGRTMIN+3
+    mem_limit: 4G
+    cpu_count: 4
+
+  # simulate external s3 service
+  s3:
+    image: minio/minio
+    container_name: minio
+    hostname: minio
+    command: server /data --console-address ":9001"
+    restart: always
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      TZ: Asia/Bangkok
+      MINIO_ROOT_USER: miniominio
+      MINIO_ROOT_PASSWORD: miniominio
+    volumes:
+      - minio_data:/data
+    mem_limit: 1G
+    cpu_count: 1
+    networks:
+      crane-net:
+        ipv4_address: 10.0.0.200
+
+networks:
+  crane-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.0.0/24
+
+volumes:
+  minio_data:

@@ -1,0 +1,95 @@
+# crane.toml
+
+[[nodes]]
+host = "localhost"
+public_ip = "localhost"
+internal_ip = "localhost"
+port = 2221
+user = "admin"
+roles = ["app", "traefik"]
+
+[[nodes]]
+host = "localhost"
+public_ip = "localhost"
+internal_ip = "localhost"
+port = 2222
+user = "admin"
+roles = ["app", "traefik"]
+
+[[nodes]]
+host = "localhost"
+public_ip = "localhost"
+internal_ip = "localhost"
+port = 2223
+user = "admin"
+roles = ["postgres", "redis"]
+
+[[nodes]]
+host = "localhost"
+public_ip = "localhost"
+internal_ip = "localhost"
+port = 2224
+user = "admin"
+roles = ["minio"]
+
+[[users]]
+name = "deployman"
+groups = ["www-data"]
+ssh_authorized_keys = ["~/.ssh/id_rsa.pub"]
+
+[app.myapp1]
+name = "myapp"
+binary = "./target/release/myapp"
+# Deploy Info
+deploy_user = "deployman"
+port_start = 3000
+instances = 2
+dependencies = ["libssl3", "ca-certificates"]
+# Health Check
+health_check_path = "/health"
+health_check_timeout = 30
+health_check_interval = 2
+# Keep old app versions
+retain_releases = 3
+# Domain
+domain = "myapp.localhost"
+[app.myapp1.env]
+APP_ENV = "simulation"
+LOG_LEVEL = "debug"
+
+[domain]
+provider = "cloudflare"
+name = "localhost"
+tls_email = "dev@example.com"
+
+[db.postgres]
+version = "16"
+
+[db.postgres.myapp]
+db_name = "myappdb"
+user = "app1"
+password = "app1"
+
+[db.redis]
+version = "7"
+bind = "127.0.0.1"
+
+[backup.s3]
+bucket = "crane1"
+region = "us-east-1"
+endpoint = "http://localhost:9000" # omit for AWS S3
+# credentials in .env: S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY
+# or specify here if not using .env
+access_key_id = "minio"
+secret_access_key = "miniominio"
+
+[monitor]
+interval = 30
+
+[monitor.autoscale]
+min_replicas = 1
+max_replicas = 4
+scale_up_cpu = 80
+scale_down_cpu = 20
+scale_up_memory = 85
+cooldown = 120

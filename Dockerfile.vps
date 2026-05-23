@@ -1,0 +1,80 @@
+# IMAGE: dreamoutbox/crane-dev-vps:latest
+
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV container=docker
+
+# Install systemd + SSH + essential tools crane needs
+RUN apt-get update && apt-get install -y \
+    systemd \
+    systemd-sysv \
+    openssh-server \
+    sudo \
+    curl \
+    wget \
+    gnupg \
+    lsb-release \
+    ca-certificates \
+    ufw \
+    procps \
+    iproute2 \
+    net-tools \
+    vim \
+    zip \
+    unzip \
+    rsync \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Disable systemd units that don't make sense in containers
+RUN systemctl mask \
+    dev-hugepages.mount \
+    sys-fs-fuse-connections.mount \
+    sys-kernel-config.mount \
+    display-manager.service \
+    getty@.service \
+    systemd-logind.service \
+    systemd-remount-fs.service \
+    getty.target \
+    graphical.target \
+    kmod-static-nodes.service && \
+    systemctl set-default multi-user.target
+
+# SSH hardening + config + tmpfiles.d creation for /run/sshd
+RUN mkdir -p /run/sshd && \
+    ssh-keygen -A && \
+    sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config && \
+    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config && \
+    sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
+    sed -i 's/#AuthorizedKeysFile/AuthorizedKeysFile/' /etc/ssh/sshd_config && \
+    mkdir -p /etc/tmpfiles.d && \
+    echo "d /run/sshd 0755 root root -" > /etc/tmpfiles.d/ssh.conf
+
+# Create admin user (mirrors real VPS deploy user) with UID/GID 1000 to match host user
+RUN (userdel -r ubuntu || true) && \
+    (groupdel ubuntu || true) && \
+    useradd -u 1000 -U -m -s /bin/bash -G sudo admin && \
+    echo "admin ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/admin && \
+    chmod 440 /etc/sudoers.d/admin && \
+    mkdir -p /home/admin/.ssh && \
+    chmod 700 /home/admin/.ssh && \
+    chown admin:admin /home/admin/.ssh
+
+# Mount authorized_keys at runtime via volume (see docker-compose)
+# Fallback: copy if present at build time
+COPY --chown=admin:admin keys/authorized_keys /home/admin/.ssh/authorized_keys
+RUN chmod 600 /home/admin/.ssh/authorized_keys 2>/dev/null || true
+
+# Enable SSH service
+RUN systemctl enable ssh
+
+# Create crane-managed directories
+RUN mkdir -p /opt /etc/traefik/dynamic /etc/crane
+
+VOLUME ["/sys/fs/cgroup"]
+
+EXPOSE 22
+
+# systemd as PID 1
+CMD ["/lib/systemd/systemd"]
