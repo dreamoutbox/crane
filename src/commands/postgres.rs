@@ -33,6 +33,36 @@ fn connect_to_node(
     get_interactor(ssh)
 }
 
+fn find_node_config_with_fallback(
+    target: &str,
+    config: &config::Config,
+    get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
+) -> Option<config::NodeConfig> {
+    if let Some(n) = find_node_config(target, config) {
+        return Some(n.clone());
+    }
+
+    // Fallback: connect to pg nodes and check their hostname
+    let pg_nodes: Vec<_> = config
+        .nodes
+        .iter()
+        .filter(|n| n.roles.contains(&"postgres".to_string()))
+        .cloned()
+        .collect();
+
+    for node in pg_nodes {
+        if let Ok(interactor) = connect_to_node(&node, config, get_interactor) {
+            if let Ok(h) = interactor.cmd("hostname") {
+                if h.trim() == target {
+                    return Some(node);
+                }
+            }
+        }
+    }
+
+    None
+}
+
 fn discover_active_leader(
     config: &config::Config,
     get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
@@ -85,9 +115,8 @@ pub fn promote(
     let env_path = config_dir.join(".env");
     let dot_env = config::load_env_file(&env_path).unwrap_or_default();
 
-    let target_conf = find_node_config(target_node_str, &config)
-        .ok_or_else(|| anyhow::anyhow!("Node '{}' not found in configuration", target_node_str))?
-        .clone();
+    let target_conf = find_node_config_with_fallback(target_node_str, &config, get_interactor)
+        .ok_or_else(|| anyhow::anyhow!("Node '{}' not found in configuration", target_node_str))?;
 
     if !target_conf.roles.contains(&"postgres".to_string()) {
         anyhow::bail!(
@@ -248,9 +277,8 @@ pub fn demote(
     let env_path = config_dir.join(".env");
     let dot_env = config::load_env_file(&env_path).unwrap_or_default();
 
-    let target_conf = find_node_config(target_node_str, &config)
-        .ok_or_else(|| anyhow::anyhow!("Node '{}' not found in configuration", target_node_str))?
-        .clone();
+    let target_conf = find_node_config_with_fallback(target_node_str, &config, get_interactor)
+        .ok_or_else(|| anyhow::anyhow!("Node '{}' not found in configuration", target_node_str))?;
 
     if !target_conf.roles.contains(&"postgres".to_string()) {
         anyhow::bail!(
@@ -300,5 +328,124 @@ pub fn demote(
     )?;
 
     println!("\nDEMOTION COMPLETE FOR NODE '{}'", target_conf.host);
+    Ok(())
+}
+
+struct PostgresNodeStatus {
+    hostname: String,
+    address: String,
+    role: String,
+    version: String,
+    health: String,
+}
+
+pub fn status(
+    config_path: &Path,
+    get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
+) -> anyhow::Result<()> {
+    let config = config::load_config(config_path)?;
+
+    let pg_nodes: Vec<_> = config
+        .nodes
+        .iter()
+        .filter(|n| n.roles.contains(&"postgres".to_string()))
+        .cloned()
+        .collect();
+
+    let pg_version_config = config
+        .db
+        .as_ref()
+        .and_then(|db| db.postgres.as_ref())
+        .and_then(|pg| pg.get("version"))
+        .and_then(|val| val.as_str())
+        .unwrap_or("16")
+        .to_string();
+
+    let mut statuses = Vec::new();
+    let mut primary_host = "Unknown".to_string();
+
+    for node in &pg_nodes {
+        let address = format!("{}:{}", node.public_ip, node.port);
+        let mut hostname = node.host.clone();
+        let mut role = "Unknown".to_string();
+        let mut version = pg_version_config.clone();
+        let mut health = "Unhealthy".to_string();
+
+        match connect_to_node(node, &config, get_interactor) {
+            Ok(interactor) => {
+                // 1. Get Hostname
+                if let Ok(h) = interactor.cmd("hostname") {
+                    let h_trimmed = h.trim();
+                    if !h_trimmed.is_empty() {
+                        hostname = h_trimmed.to_string();
+                    }
+                }
+
+                // 2. Check Recovery & DB Version
+                let recovery_cmd =
+                    r#"sudo -u postgres psql -t -A -c "select pg_is_in_recovery();""#;
+                let version_cmd = r#"sudo -u postgres psql -t -A -c "show server_version;""#;
+
+                let is_recovery = interactor.cmd(recovery_cmd);
+                let db_ver_str = interactor.cmd(version_cmd);
+
+                if let Ok(rec) = is_recovery {
+                    let rec_trimmed = rec.trim();
+                    if rec_trimmed == "f" {
+                        role = "Leader".to_string();
+                        primary_host = hostname.clone();
+                        health = "Healthy".to_string();
+                    } else if rec_trimmed == "t" {
+                        role = "Follower".to_string();
+                        health = "Healthy".to_string();
+                    }
+                }
+
+                if let Ok(v_str) = db_ver_str {
+                    let v_trimmed = v_str.trim();
+                    if let Some(major) = v_trimmed.split('.').next() {
+                        let major_clean = major.trim();
+                        if !major_clean.is_empty() {
+                            version = major_clean.to_string();
+                        }
+                    }
+                }
+            }
+            Err(_) => {
+                // SSH connection failure defaults to Unhealthy
+            }
+        }
+
+        statuses.push(PostgresNodeStatus {
+            hostname,
+            address,
+            role,
+            version,
+            health,
+        });
+    }
+
+    // Identify backups (all postgres nodes that are not the leader)
+    let mut backups = Vec::new();
+    for status in &statuses {
+        if status.hostname != primary_host {
+            backups.push(format!("{}:5000", status.hostname));
+        }
+    }
+
+    // Print expected output format
+    println!("\nHAProxy");
+    println!("Primary: {}:5000", primary_host);
+    println!("Backup: {}", backups.join(","));
+
+    for status in &statuses {
+        println!("\n{}", status.hostname);
+        println!("Address: {}", status.address);
+        println!("Role: {}", status.role);
+        println!("DB version: {}", status.version);
+        println!("Health: {}", status.health);
+    }
+    println!();
+
     Ok(())
 }

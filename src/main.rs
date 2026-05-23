@@ -49,6 +49,9 @@ fn main() {
                                 .required(true)
                                 .help("The host/IP of the node to demote"),
                         ),
+                )
+                .subcommand(
+                    Command::new("status").about("Get the status of the PostgreSQL cluster"),
                 ),
         )
         .get_matches();
@@ -89,6 +92,16 @@ fn main() {
                         crane::server_interactor::get_interactor,
                     ) {
                         eprintln!("Demotion failed: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+
+                Some(("status", _)) => {
+                    if let Err(e) = crane::commands::postgres::status(
+                        config_path,
+                        crane::server_interactor::get_interactor,
+                    ) {
+                        eprintln!("Status check failed: {}", e);
                         std::process::exit(1);
                     }
                 }
