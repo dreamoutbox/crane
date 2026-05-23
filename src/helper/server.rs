@@ -1,4 +1,4 @@
-use crate::server_interactor::SSHSession;
+use crate::ssh::SSHSession;
 
 pub fn get_server_distro(ssh: &SSHSession) -> anyhow::Result<String> {
     // Read the ID field from /etc/os-release on the server

@@ -1,5 +1,4 @@
-use super::SSHSession;
-use crate::server_interactor::server_interactor_trait::ServerInteractor;
+use crate::{server_interactor::server_interactor_trait::ServerInteractor, ssh::SSHSession};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct DebianInteractor {

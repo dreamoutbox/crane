@@ -1,6 +1,6 @@
 use crate::config;
-use crate::server_interactor::SSHSession;
 use crate::server_interactor::server_interactor_trait::ServerInteractor;
+use crate::ssh::SSHSession;
 use std::path::Path;
 
 /// deploy app commands

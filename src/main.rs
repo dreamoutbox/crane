@@ -1,8 +1,8 @@
 use clap::{Arg, Command};
 use crane::helper::server::get_server_distro;
-use crane::server_interactor::SSHSession;
 use crane::server_interactor::debian::DebianInteractor;
 use crane::server_interactor::server_interactor_trait::ServerInteractor;
+use crane::ssh::SSHSession;
 
 fn main() {
     let matches = Command::new("crane")
