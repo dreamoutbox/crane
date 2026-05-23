@@ -7,6 +7,9 @@ pub fn setup_systemd_template(
     entrypoint: &str,
 ) -> anyhow::Result<()> {
     let clean_entrypoint = entrypoint.trim_start_matches("./");
+
+    println!("\tExecStart /opt/{app_name}/current/{entrypoint}");
+
     let systemd_template = format!(
         r#"[Unit]
 Description=crane managed: %p instance on port %i

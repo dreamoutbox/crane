@@ -9,7 +9,7 @@ docker exec vps1 systemctl stop myapp@3000.service
 # list myapp services
 
 ```sh
-systemctl list-units | grep myapp
+docker exec vps1 systemctl list-units | grep myapp
 ```
 
 # example list services output
@@ -24,5 +24,17 @@ root@vps1:/# systemctl list-units | grep myapp
 # stop service
 
 ```sh
-systemctl stop myapp@3000.service
+docker exec vps1 systemctl stop myapp@3000.service
 ```
+
+## Testing service name
+
+```sh
+# myapp → hits http://myapp2 (via /etc/hosts)
+curl -w "\n" -L -k -i myapp.localhost/curl?to=myapp2
+
+
+# myapp2 → hits http://myapp
+curl -w "\n" -L -k -i myapp2.localhost/curl?to=myapp
+```
+

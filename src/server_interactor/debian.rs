@@ -178,10 +178,12 @@ impl ServerInteractor for DebianInteractor {
             return Ok(());
         }
         let packages = dependencies.join(" ");
+
         self.run_checked(&format!(
             "sudo apt-get update && sudo apt-get install -y {}",
             packages
         ))?;
+
         Ok(())
     }
 
@@ -200,6 +202,12 @@ impl ServerInteractor for DebianInteractor {
             ))?;
         }
 
+        // Ensure home directory ownership is correct (in case it existed beforehand)
+        self.run_checked(&format!(
+            "sudo chown '{username}:{username}' '/home/{username}'",
+            username = user_register.username
+        ))?;
+
         // Add to groups
         if !user_register.groups.is_empty() {
             self.add_user_to_groups(&user_register.username, user_register.groups)?;
@@ -216,13 +224,15 @@ impl ServerInteractor for DebianInteractor {
 
             self.run_checked(&format!("sudo mkdir -p '{}'", ssh_dir))?;
             self.run_checked(&format!(
-                "sudo mv '{}' '{}'",
+                "sudo cp '{}' '{}'",
                 temp_keys_path, auth_keys_path
             ))?;
+
             self.run_checked(&format!(
                 "sudo chown -R '{}:{}' '{}'",
                 user_register.username, user_register.username, ssh_dir
             ))?;
+
             self.run_checked(&format!("sudo chmod 700 '{}'", ssh_dir))?;
             self.run_checked(&format!("sudo chmod 600 '{}'", auth_keys_path))?;
         }

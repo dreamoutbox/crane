@@ -3,6 +3,26 @@ use crate::server_interactor::server_interactor_trait::ServerInteractor;
 use crate::ssh::SSHSession;
 use std::path::Path;
 
+/// Idempotently add/update `/etc/hosts` entries on the remote server.
+/// For each (hostname, ip) pair: replace existing line if present, else append.
+fn update_hosts(
+    interactor: &dyn ServerInteractor,
+    entries: &[(String, String)], // (hostname, ip)
+) -> anyhow::Result<()> {
+    for (hostname, ip) in entries {
+        println!("  /etc/hosts: {} -> {}", hostname, ip);
+        // Remove old entry for this hostname, then append the new one.
+        // We use a temp file approach to avoid sed -i portability issues.
+        let cmd = format!(
+            r#"sudo sh -c 'grep -v " {hostname}" /etc/hosts > /tmp/hosts.tmp && echo "{ip} {hostname}" >> /tmp/hosts.tmp && cp /tmp/hosts.tmp /etc/hosts && rm /tmp/hosts.tmp'"#,
+            hostname = hostname,
+            ip = ip,
+        );
+        interactor.cmd(&cmd)?;
+    }
+    Ok(())
+}
+
 /// deploy app commands
 pub fn run(
     config_path: &Path,
@@ -24,6 +44,49 @@ pub fn run(
         anyhow::bail!("Failed to generate datetime prefix using 'date' command");
     }
 
+    // Collect all dependencies across all apps (deduped), then install once per node
+    let mut all_deps: Vec<String> = vec!["unzip".to_string()];
+    for (_, app) in &config.app {
+        if let Some(deps) = &app.dependencies {
+            for d in deps {
+                if !all_deps.contains(d) {
+                    all_deps.push(d.clone());
+                }
+            }
+        }
+    }
+
+    let app_nodes: Vec<_> = config
+        .nodes
+        .iter()
+        .filter(|n| n.roles.contains(&"app".to_string()))
+        .cloned()
+        .collect();
+
+    for node in &app_nodes {
+        println!(
+            "Installing dependencies on {}@{} (port: {})...",
+            node.user, node.host, node.port
+        );
+        let private_key = find_private_key_for_user(&node.user, &config);
+        let private_key = if private_key.is_empty() {
+            get_any_private_key(&config)
+        } else {
+            private_key
+        };
+        let ssh = SSHSession::new(
+            node.host.clone(),
+            node.user.clone(),
+            private_key,
+            Some(node.port),
+        );
+        let interactor = get_interactor(ssh)?;
+        interactor.install_dependencies(all_deps.clone())?;
+
+        // install traefik
+        crate::traefik_unit::setup::install_traefik(&*interactor)?;
+    }
+
     let mut handles = vec![];
 
     // Loop Apps in Config and deploy in parallel using threads
@@ -39,17 +102,21 @@ pub fn run(
                 app.name, app_id
             );
 
-            let mut deploy_dir = config_dir.join(&app.deploy_dir);
-            if !deploy_dir.exists() {
-                deploy_dir = Path::new(&app.deploy_dir).to_path_buf();
-            }
-            if !deploy_dir.exists() || !deploy_dir.is_dir() {
+            let deploy_dir_candidate = config_dir.join(&app.deploy_dir);
+            let deploy_dir_candidate = if deploy_dir_candidate.exists() {
+                deploy_dir_candidate
+            } else {
+                Path::new(&app.deploy_dir).to_path_buf()
+            };
+            if !deploy_dir_candidate.exists() || !deploy_dir_candidate.is_dir() {
                 anyhow::bail!(
                     "Deploy directory not found at {:?} or {:?}",
                     config_dir.join(&app.deploy_dir),
                     Path::new(&app.deploy_dir)
                 );
             }
+            // Canonicalize to absolute path so python script works regardless of CWD
+            let deploy_dir = deploy_dir_candidate.canonicalize()?;
 
             let zip_path =
                 std::env::temp_dir().join(format!("crane-deploy-{}-{}.zip", app.name, datetime));
@@ -142,13 +209,22 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                     "Deploying to node: {}@{} (port: {})",
                     node.user, node.host, node.port
                 );
+
+                let private_key = find_private_key_for_user(&node.user, &config);
+                let private_key = if private_key.is_empty() {
+                    get_any_private_key(&config)
+                } else {
+                    private_key
+                };
                 let ssh = SSHSession::new(
                     node.host.clone(),
                     node.user.clone(),
-                    "".to_string(),
+                    private_key,
                     Some(node.port),
                 );
-                let interactor = get_interactor(ssh)?;
+                let node_distro = crate::helper::server::get_server_distro(&ssh)?;
+                let interactor =
+                    crate::server_interactor::get_interactor_for_distro(ssh, &node_distro)?;
 
                 // 1. Setup user if specified
                 if let Some(ref users) = config.users {
@@ -183,22 +259,17 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                                 authorized_keys.push(key.clone());
                             }
                         }
+
                         let register =
                             crate::server_interactor::server_interactor_trait::UserRegister::new(
                                 user_config.name.clone(),
                                 user_config.groups.clone(),
                                 authorized_keys,
                             );
+
                         interactor.create_user(register)?;
                     }
                 }
-
-                // 2. Install dependencies (ensure unzip is installed)
-                let mut deps = app.dependencies.clone().unwrap_or_default();
-                if !deps.iter().any(|d| d == "unzip") {
-                    deps.push("unzip".to_string());
-                }
-                interactor.install_dependencies(deps)?;
 
                 // 3. Prepare target directories (admin) and chown to deploy_user
                 interactor.cmd(&format!("sudo mkdir -p '/opt/{}'", app.name))?;
@@ -212,14 +283,21 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                     app.deploy_user, app.deploy_user, app.name
                 ))?;
 
-                // Create deploy SSH session
+                let deploy_private_key = find_private_key_for_user(&app.deploy_user, &config);
+                let deploy_private_key = if deploy_private_key.is_empty() {
+                    get_any_private_key(&config)
+                } else {
+                    deploy_private_key
+                };
+                // Create deploy SSH session (reuse distro detected via admin)
                 let deploy_ssh = SSHSession::new(
                     node.host.clone(),
                     app.deploy_user.clone(),
-                    "".to_string(),
+                    deploy_private_key,
                     Some(node.port),
                 );
-                let deploy_interactor = get_interactor(deploy_ssh)?;
+                let deploy_interactor =
+                    crate::server_interactor::get_interactor_for_distro(deploy_ssh, &node_distro)?;
 
                 let release_dir = format!("/opt/{}/releases/{}", app.name, datetime);
                 deploy_interactor.cmd(&format!("mkdir -p '{}'", release_dir))?;
@@ -232,10 +310,11 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                     "unzip -o '{}' -d '{}'",
                     remote_zip_path, release_dir
                 ))?;
+                println!("extracted zip to {}", release_dir);
                 // Remove the remote zip file to clean up
                 deploy_interactor.cmd(&format!("rm -f '{}'", remote_zip_path))?;
 
-                // 4. Rolling deploy across instances
+                // 4. Rolling deploy across vps instances
                 let min_replicas = app
                     .min_replicas
                     .or_else(|| {
@@ -310,9 +389,13 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                     let timeout_secs = app.health_check_timeout.unwrap_or(30);
                     let interval_secs = app.health_check_interval.unwrap_or(2);
 
-                    println!("Polling health check for {} on port {}...", app.name, port);
+                    println!(
+                        "\tPolling health check for {} on port {}...",
+                        app.name, port
+                    );
                     let mut healthy = false;
                     let start_time = std::time::Instant::now();
+
                     while start_time.elapsed().as_secs() < timeout_secs {
                         let curl_cmd = format!(
                             "curl -s -o /dev/null -w \"%{{http_code}}\" http://127.0.0.1:{}{}",
@@ -329,13 +412,14 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
 
                     if !healthy {
                         anyhow::bail!(
-                            "Health check failed for {} on port {} within {} seconds",
+                            "\tHealth check failed for {} on port {} within {} seconds",
                             app.name,
                             port,
                             timeout_secs
                         );
                     }
-                    println!("Instance on port {} is healthy!", port);
+
+                    println!("\tInstance on port {} is healthy!", port);
                 }
 
                 // 5. Write Traefik dynamic config
@@ -355,6 +439,35 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                     port_end,
                     health_path,
                 )?;
+
+                // 5b. Update /etc/hosts on the VPS so apps can resolve each
+                // other by service name (e.g. curl myapp2.localhost/curl?to=myapp).
+                // Use domain's first label (e.g. "myapp2" from "myapp2.localhost") as hostname.
+                let global_domain = config
+                    .domain
+                    .as_ref()
+                    .map(|d| d.name.as_str())
+                    .unwrap_or("localhost");
+                let mut hosts_entries: Vec<(String, String)> = config
+                    .app
+                    .values()
+                    .filter_map(|a| {
+                        let dom = a.domain.as_deref().unwrap_or(&a.name);
+                        // Strip the shared domain suffix to get just the service label
+                        let hostname = if dom.ends_with(&format!(".{}", global_domain)) {
+                            dom.trim_end_matches(&format!(".{}", global_domain))
+                                .to_string()
+                        } else {
+                            dom.split('.').next().unwrap_or(dom).to_string()
+                        };
+                        Some((hostname, node.internal_ip.clone()))
+                    })
+                    .collect();
+                // Dedup by hostname
+                hosts_entries.sort_by(|a, b| a.0.cmp(&b.0));
+                hosts_entries.dedup_by(|a, b| a.0 == b.0);
+                println!("Updating /etc/hosts on node {}...", node.host);
+                update_hosts(&*interactor, &hosts_entries)?;
 
                 // 6. Prune old releases
                 let retain = app.retain_releases.unwrap_or(3) as usize;
@@ -391,5 +504,81 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
             .map_err(|e| anyhow::anyhow!("Thread panicked: {:?}", e))??;
     }
 
+    println!("\n\nDEPLOY COMPLETE\n\n");
+
     Ok(())
+}
+
+fn find_private_key_for_user(username: &str, config: &config::Config) -> String {
+    if let Some(ref users) = config.users {
+        if let Some(user_config) = users.iter().find(|u| u.name == username) {
+            for key in &user_config.ssh_authorized_keys {
+                let expanded = if key.starts_with('~') {
+                    if let Some(home) = std::env::var_os("HOME") {
+                        Path::new(&home)
+                            .join(key.strip_prefix("~").unwrap().trim_start_matches('/'))
+                    } else {
+                        std::path::PathBuf::from(key)
+                    }
+                } else {
+                    std::path::PathBuf::from(key)
+                };
+
+                let candidate = if expanded.extension().map_or(false, |ext| ext == "pub") {
+                    expanded.with_extension("")
+                } else {
+                    expanded.clone()
+                };
+
+                if candidate.exists() {
+                    return candidate.to_string_lossy().to_string();
+                }
+
+                if key.contains("id_rsa.pub") {
+                    let fallback = candidate.with_file_name("id_ed25519");
+                    if fallback.exists() {
+                        return fallback.to_string_lossy().to_string();
+                    }
+                }
+            }
+        }
+    }
+    "".to_string()
+}
+
+fn get_any_private_key(config: &config::Config) -> String {
+    if let Some(ref users) = config.users {
+        for user_config in users {
+            for key in &user_config.ssh_authorized_keys {
+                let expanded = if key.starts_with('~') {
+                    if let Some(home) = std::env::var_os("HOME") {
+                        Path::new(&home)
+                            .join(key.strip_prefix("~").unwrap().trim_start_matches('/'))
+                    } else {
+                        std::path::PathBuf::from(key)
+                    }
+                } else {
+                    std::path::PathBuf::from(key)
+                };
+
+                let candidate = if expanded.extension().map_or(false, |ext| ext == "pub") {
+                    expanded.with_extension("")
+                } else {
+                    expanded.clone()
+                };
+
+                if candidate.exists() {
+                    return candidate.to_string_lossy().to_string();
+                }
+
+                if key.contains("id_rsa.pub") {
+                    let fallback = candidate.with_file_name("id_ed25519");
+                    if fallback.exists() {
+                        return fallback.to_string_lossy().to_string();
+                    }
+                }
+            }
+        }
+    }
+    "".to_string()
 }

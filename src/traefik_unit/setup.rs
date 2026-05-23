@@ -8,29 +8,38 @@ pub fn setup_traefik(
     port_end: u16,
     health_check_path: &str,
 ) -> anyhow::Result<()> {
-    // 1. Ensure Traefik is installed and configured to listen on ports 80 & 443
-    install_traefik(interactor)?;
-
     // 2. Generate and write the dynamic configuration
     let mut traefik_config = format!(
-        "[http.routers.{name}]\n  rule = \"Host(`{domain}`)\"\n  service = \"{name}\"\n  [http.routers.{name}.tls]\n    certResolver = \"letsencrypt\"\n\n[http.services.{name}.loadBalancer]\n",
+        r#"
+[http.routers.{name}]
+  rule = "Host(`{domain}`)"
+  service = "{name}"
+  [http.routers.{name}.tls]
+    certResolver = "letsencrypt"
+
+[http.services.{name}.loadBalancer]
+"#,
         name = app_name,
         domain = domain,
     );
     for port in port_start..port_end {
         traefik_config.push_str(&format!(
-            "  [[http.services.{name}.loadBalancer.servers]]\n    url = \"http://127.0.0.1:{port}\"\n",
+            r#"  
+[[http.services.{name}.loadBalancer.servers]]
+url = "http://127.0.0.1:{port}"
+"#,
             name = app_name,
             port = port
         ));
     }
+
     // Add active health check configuration
     traefik_config.push_str(&format!(
         r#"
 [http.services.{name}.loadBalancer.healthCheck]
-path = \"{health_path}\"
-interval = \"2s\"
-timeout = \"1s\"
+path = "{health_path}"
+interval = "2s"
+timeout = "1s"
 "#,
         name = app_name,
         health_path = health_check_path,
@@ -47,12 +56,17 @@ timeout = \"1s\"
     ))?;
     interactor.cmd(&format!("sudo chown root:root '{}'", dest_traefik_path))?;
     interactor.cmd(&format!("sudo chmod 644 '{}'", dest_traefik_path))?;
+
     if let Err(e) = interactor.cmd("sudo systemctl reload traefik") {
         println!(
             "Warning: failed to reload traefik (it might not be running yet): {}",
             e
         );
+
+        let traefik_start_output = interactor.cmd("sudo systemctl start traefik")?;
+        println!("traefik_start_output: {}", traefik_start_output);
     }
+
     Ok(())
 }
 

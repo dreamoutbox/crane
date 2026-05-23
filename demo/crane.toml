@@ -47,13 +47,41 @@ max_replicas = 3
 APP_ENV = "simulation"
 LOG_LEVEL = "debug"
 
+
+[app.myapp2]
+name = "myapp2"
+# Deploy Info
+deploy_dir = "./demo"
+entrypoint = "./myapp"
+deploy_user = "deployman"
+port_start = 4000
+port_end = 4100
+instances = 1
+dependencies = ["libssl3", "ca-certificates"]
+# Health Check
+health_check_path = "/health"
+health_check_timeout = 30
+health_check_interval = 2
+# Domain
+domain = "myapp2.localhost"
+# Keep old app versions
+retain_releases = 3
+# Replicas
+min_replicas = 1
+max_replicas = 3
+# ENV for application
+[app.myapp2.env]
+APP_ENV = "simulation"
+LOG_LEVEL = "debug"
+
 [domain]
 provider = "cloudflare"
 name = "localhost"
 tls_email = "dev@example.com"
 
 [db.postgres]
-version = "16"
+enabled = true
+version = "17"
 
 [db.postgres.myapp]
 db_name = "myappdb"
@@ -61,7 +89,8 @@ user = "app1"
 password = "app1"
 
 [db.redis]
-version = "7"
+enabled = true
+version = "8"
 bind = "127.0.0.1"
 
 [backup.s3]
