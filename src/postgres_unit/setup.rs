@@ -178,6 +178,15 @@ pub fn install_postgres_repo_and_pkg(
     let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", version);
     if interactor.cmd(&format!("test -f {}", pg_ctl)).is_ok() {
         println!("\nPostgreSQL {} is already installed.", version);
+        let main_dir = format!("/var/lib/postgresql/{}/main", version);
+        if interactor.cmd(&format!("test -d {}", main_dir)).is_err() {
+            println!("\nPostgreSQL {} data directory is missing, initializing it...", version);
+            let initdb_cmd = format!(
+                "sudo -u postgres /usr/lib/postgresql/{}/bin/initdb -D {}",
+                version, main_dir
+            );
+            interactor.cmd(&initdb_cmd)?;
+        }
         let status_cmd = format!(
             "sudo -u postgres {} -D /var/lib/postgresql/{}/main status",
             pg_ctl, version
@@ -225,27 +234,20 @@ pub fn install_postgres_repo_and_pkg(
     Ok(())
 }
 
-pub fn setup_postgres_primary(
+pub fn configure_postgres_primary_rules(
     interactor: &dyn ServerInteractor,
     version: &str,
     replica_user: &str,
-    replica_pass: &str,
     follower_ips: &[String],
     app_node_ips: &[String],
-    db_configs: &[PostgresDbConfig],
 ) -> anyhow::Result<()> {
-    println!("\nSetting up PostgreSQL primary node...");
-    install_postgres_repo_and_pkg(interactor, version)?;
-
     // 1. Configure postgresql.conf parameters using ALTER SYSTEM
-    println!("\nConfiguring primary replication parameters...");
     interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET listen_addresses = '*';\"")?;
     interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET wal_level = 'replica';\"")?;
     interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET max_wal_senders = 10;\"")?;
     interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET hot_standby = 'on';\"")?;
 
-    // 2. Append replication and client connections to pg_hba.conf
-    println!("\nConfiguring pg_hba.conf...");
+    // 2. Configure pg_hba.conf
     let pg_hba_path = format!("/etc/postgresql/{}/main/pg_hba.conf", version);
     let existing_hba = interactor.cmd(&format!("sudo cat '{}'", pg_hba_path))?;
 
@@ -300,6 +302,7 @@ pub fn setup_postgres_primary(
         interactor.cmd(&format!("sudo chmod 640 '{}'", pg_hba_path))?;
     }
 
+    // Restart PostgreSQL cluster to apply replication config
     println!("\nRestarting PostgreSQL cluster to apply replication config...");
     let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", version);
     let restart_cmd = format!(
@@ -307,6 +310,30 @@ pub fn setup_postgres_primary(
         pg_ctl, version, version
     );
     interactor.cmd(&restart_cmd)?;
+
+    Ok(())
+}
+
+pub fn setup_postgres_primary(
+    interactor: &dyn ServerInteractor,
+    version: &str,
+    replica_user: &str,
+    replica_pass: &str,
+    follower_ips: &[String],
+    app_node_ips: &[String],
+    db_configs: &[PostgresDbConfig],
+) -> anyhow::Result<()> {
+    println!("\nSetting up PostgreSQL primary node...");
+    install_postgres_repo_and_pkg(interactor, version)?;
+
+    println!("\nConfiguring primary replication and local trust rules...");
+    configure_postgres_primary_rules(
+        interactor,
+        version,
+        replica_user,
+        follower_ips,
+        app_node_ips,
+    )?;
 
     // 4. Idempotently create replicator user
     println!("\nCreating replication user '{}'...", replica_user);
