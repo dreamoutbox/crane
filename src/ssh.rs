@@ -54,6 +54,7 @@ impl SSHSession {
 
     pub fn upload(&self, local_path: &str, remote_path: &str) -> anyhow::Result<()> {
         let mut command = std::process::Command::new("scp");
+
         command.arg("-o").arg("StrictHostKeyChecking=no");
         command.arg("-o").arg("UserKnownHostsFile=/dev/null");
 

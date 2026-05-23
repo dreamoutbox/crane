@@ -4,7 +4,9 @@ pub fn setup_systemd_template(
     interactor: &dyn ServerInteractor,
     app_name: &str,
     deploy_user: &str,
+    entrypoint: &str,
 ) -> anyhow::Result<()> {
+    let clean_entrypoint = entrypoint.trim_start_matches("./");
     let systemd_template = format!(
         r#"[Unit]
 Description=crane managed: %p instance on port %i
@@ -13,8 +15,8 @@ After=network.target
 [Service]
 Type=simple
 User={deploy_user}
-WorkingDirectory=/opt/{appname}
-ExecStart=/opt/{appname}/current --port %i
+WorkingDirectory=/opt/{appname}/current
+ExecStart=/opt/{appname}/current/{entrypoint} --port %i
 EnvironmentFile=/etc/crane/{appname}/.env
 Restart=on-failure
 RestartSec=5
@@ -28,6 +30,7 @@ WantedBy=multi-user.target
 "#,
         deploy_user = deploy_user,
         appname = app_name,
+        entrypoint = clean_entrypoint,
     );
 
     let temp_service_path = format!("/tmp/{}@.service", app_name);

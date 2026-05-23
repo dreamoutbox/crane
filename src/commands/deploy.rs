@@ -39,9 +39,55 @@ pub fn run(
                 app.name, app_id
             );
 
-            let binary_path = config_dir.join(&app.binary);
-            if !binary_path.exists() {
-                anyhow::bail!("Binary file not found at {:?}", binary_path);
+            let mut deploy_dir = config_dir.join(&app.deploy_dir);
+            if !deploy_dir.exists() {
+                deploy_dir = Path::new(&app.deploy_dir).to_path_buf();
+            }
+            if !deploy_dir.exists() || !deploy_dir.is_dir() {
+                anyhow::bail!(
+                    "Deploy directory not found at {:?} or {:?}",
+                    config_dir.join(&app.deploy_dir),
+                    Path::new(&app.deploy_dir)
+                );
+            }
+
+            let zip_path =
+                std::env::temp_dir().join(format!("crane-deploy-{}-{}.zip", app.name, datetime));
+
+            // Read .craneignore if it exists in the deploy_dir
+            let craneignore_path = deploy_dir.join(".craneignore");
+            let mut excludes = vec![];
+            if craneignore_path.exists() {
+                if let Ok(content) = std::fs::read_to_string(&craneignore_path) {
+                    for line in content.lines() {
+                        let trimmed = line.trim();
+                        if !trimmed.is_empty() && !trimmed.starts_with('#') {
+                            excludes.push("-x".to_string());
+                            excludes.push(trimmed.to_string());
+                            excludes.push("-x".to_string());
+                            excludes.push(format!("{}/*", trimmed));
+                        }
+                    }
+                }
+            }
+            excludes.push("-x".to_string());
+            excludes.push(".git".to_string());
+            excludes.push("-x".to_string());
+            excludes.push(".git/*".to_string());
+
+            let mut zip_cmd = std::process::Command::new("zip");
+            zip_cmd
+                .current_dir(&deploy_dir)
+                .arg("-r")
+                .arg(&zip_path)
+                .arg(".");
+            for opt in excludes {
+                zip_cmd.arg(opt);
+            }
+
+            let status = zip_cmd.status()?;
+            if !status.success() {
+                anyhow::bail!("Failed to create zip archive of {:?}", deploy_dir);
             }
 
             // Merge environment
@@ -127,10 +173,12 @@ pub fn run(
                     }
                 }
 
-                // 2. Install dependencies
-                if let Some(ref deps) = app.dependencies {
-                    interactor.install_dependencies(deps.clone())?;
+                // 2. Install dependencies (ensure unzip is installed)
+                let mut deps = app.dependencies.clone().unwrap_or_default();
+                if !deps.iter().any(|d| d == "unzip") {
+                    deps.push("unzip".to_string());
                 }
+                interactor.install_dependencies(deps)?;
 
                 // 3. Prepare target directories (admin) and chown to deploy_user
                 interactor.cmd(&format!("sudo mkdir -p '/opt/{}'", app.name))?;
@@ -156,9 +204,16 @@ pub fn run(
                 let release_dir = format!("/opt/{}/releases/{}", app.name, datetime);
                 deploy_interactor.cmd(&format!("mkdir -p '{}'", release_dir))?;
 
-                let final_remote_path = format!("{}/{}", release_dir, app.name);
-                deploy_interactor.upload(binary_path.to_str().unwrap(), &final_remote_path)?;
-                deploy_interactor.cmd(&format!("chmod +x '{}'", final_remote_path))?;
+                let remote_zip_path = format!("{}/deploy.zip", release_dir);
+                deploy_interactor.upload(zip_path.to_str().unwrap(), &remote_zip_path)?;
+
+                // Extract zip on server
+                deploy_interactor.cmd(&format!(
+                    "unzip -o '{}' -d '{}'",
+                    remote_zip_path, release_dir
+                ))?;
+                // Remove the remote zip file to clean up
+                deploy_interactor.cmd(&format!("rm -f '{}'", remote_zip_path))?;
 
                 // 4. Rolling deploy across instances
                 let min_replicas = app
@@ -203,8 +258,15 @@ pub fn run(
 
                     // Update current symlink (deploy)
                     deploy_interactor.cmd(&format!(
-                        "ln -sfn '{}/{}' '/opt/{}/current'",
-                        release_dir, app.name, app.name
+                        "ln -sfn '{}' '/opt/{}/current'",
+                        release_dir, app.name
+                    ))?;
+
+                    // Chmod the entrypoint to be executable
+                    deploy_interactor.cmd(&format!(
+                        "chmod +x '/opt/{}/current/{}'",
+                        app.name,
+                        app.entrypoint.trim_start_matches("./")
                     ))?;
 
                     // Write environment file (deploy)
@@ -217,6 +279,7 @@ pub fn run(
                         &*interactor,
                         &app.name,
                         &app.deploy_user,
+                        &app.entrypoint,
                     )?;
 
                     // Start service
@@ -290,6 +353,9 @@ pub fn run(
                     }
                 }
             }
+
+            // Clean up local temporary zip file
+            let _ = std::fs::remove_file(&zip_path);
 
             Ok(())
         });

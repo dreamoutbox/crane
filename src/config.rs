@@ -33,7 +33,8 @@ pub struct UserConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
     pub name: String,
-    pub binary: String,
+    pub deploy_dir: String,
+    pub entrypoint: String,
     pub deploy_user: String,
     pub port_start: u16,
     pub port_end: Option<u16>,
