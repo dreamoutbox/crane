@@ -9,7 +9,12 @@ pub struct SSHSession {
 }
 
 impl SSHSession {
-    pub fn new(host: String, username: String, private_key_path: String, port: Option<u16>) -> Self {
+    pub fn new(
+        host: String,
+        username: String,
+        private_key_path: String,
+        port: Option<u16>,
+    ) -> Self {
         Self {
             host,
             username,
@@ -18,7 +23,7 @@ impl SSHSession {
         }
     }
 
-    pub fn run_cmd(&self, cmd: &str) -> anyhow::Result<String> {
+    pub fn run_cmd(&self, cmd: &str) -> anyhow::Result<CmdOutput> {
         let mut command = std::process::Command::new("ssh");
         command.arg("-o").arg("StrictHostKeyChecking=no");
         command.arg("-o").arg("UserKnownHostsFile=/dev/null");
@@ -40,11 +45,14 @@ impl SSHSession {
         command.arg(cmd);
 
         let output = command.output()?;
-        if !output.status.success() {
-            let err_msg = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow::anyhow!("SSH command failed: {}", err_msg.trim()));
-        }
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+        let exit_code = output.status.code().unwrap_or(-1);
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        Ok(CmdOutput {
+            stdout,
+            stderr,
+            exit_code,
+        })
     }
 
     pub fn upload(&self, local_path: &str, remote_path: &str) -> anyhow::Result<()> {
@@ -105,4 +113,10 @@ impl SSHSession {
         }
         Ok(())
     }
+}
+
+pub struct CmdOutput {
+    pub stdout: String,
+    pub stderr: String,
+    pub exit_code: i32,
 }

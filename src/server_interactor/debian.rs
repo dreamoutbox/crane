@@ -10,19 +10,32 @@ impl DebianInteractor {
     pub fn new(ssh: SSHSession) -> Self {
         Self { ssh }
     }
+
+    fn run_checked(&self, cmd: &str) -> anyhow::Result<String> {
+        let out = self.ssh.run_cmd(cmd)?;
+        if out.exit_code != 0 {
+            anyhow::bail!(
+                "Command '{}' failed with exit code {}: {}",
+                cmd,
+                out.exit_code,
+                out.stderr
+            );
+        }
+        Ok(out.stdout)
+    }
 }
 
 impl ServerInteractor for DebianInteractor {
     fn whoami(&self) -> anyhow::Result<String> {
-        self.ssh.run_cmd("whoami")
+        self.run_checked("whoami")
     }
 
     fn cmd(&self, command: &str) -> anyhow::Result<String> {
-        self.ssh.run_cmd(command)
+        self.run_checked(command)
     }
 
     fn get_os_info(&self) -> anyhow::Result<String> {
-        self.ssh.run_cmd("uname -a")
+        self.run_checked("uname -a")
     }
 
     fn create_file(&self, path: &str, content: &str) -> anyhow::Result<()> {
@@ -39,7 +52,7 @@ impl ServerInteractor for DebianInteractor {
     }
 
     fn read_file(&self, path: &str) -> anyhow::Result<String> {
-        self.ssh.run_cmd(&format!("cat '{}'", path))
+        self.run_checked(&format!("cat '{}'", path))
     }
 
     fn upload(&self, local_path: &str, remote_path: &str) -> anyhow::Result<()> {
@@ -51,15 +64,29 @@ impl ServerInteractor for DebianInteractor {
     }
 
     fn chmod(&self, path: &str, permission: &str) -> anyhow::Result<()> {
-        self.ssh
-            .run_cmd(&format!("chmod '{}' '{}'", permission, path))?;
+        self.run_checked(&format!("chmod '{}' '{}'", permission, path))?;
         Ok(())
     }
 
     fn chown(&self, path: &str, user: &str, group: &str) -> anyhow::Result<()> {
-        self.ssh
-            .run_cmd(&format!("chown '{}:{}' '{}'", user, group, path))?;
+        self.run_checked(&format!("chown '{}:{}' '{}'", user, group, path))?;
         Ok(())
+    }
+
+    fn mkdir(&self, path: &str, user: &str, group: &str) -> anyhow::Result<()> {
+        self.run_checked(&format!("sudo mkdir -p '{}'", path))?;
+        self.run_checked(&format!("sudo chown '{}:{}' '{}'", user, group, path))?;
+        Ok(())
+    }
+
+    fn ls(&self, path: &str) -> anyhow::Result<Vec<String>> {
+        let output = self.run_checked(&format!("ls -1 '{}'", path))?;
+        let files: Vec<String> = output
+            .lines()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        Ok(files)
     }
 
     fn register_service(
@@ -95,20 +122,17 @@ impl ServerInteractor for DebianInteractor {
             service_register.service_name
         );
         self.create_file(&temp_path, &service_content)?;
-        self.ssh
-            .run_cmd(&format!("sudo mv '{}' '{}'", temp_path, dest_path))?;
-        self.ssh
-            .run_cmd(&format!("sudo chown root:root '{}'", dest_path))?;
-        self.ssh
-            .run_cmd(&format!("sudo chmod 644 '{}'", dest_path))?;
-        self.ssh.run_cmd("sudo systemctl daemon-reload")?;
+        self.run_checked(&format!("sudo mv '{}' '{}'", temp_path, dest_path))?;
+        self.run_checked(&format!("sudo chown root:root '{}'", dest_path))?;
+        self.run_checked(&format!("sudo chmod 644 '{}'", dest_path))?;
+        self.run_checked("sudo systemctl daemon-reload")?;
 
         if service_register.auto_start {
-            self.ssh.run_cmd(&format!(
+            self.run_checked(&format!(
                 "sudo systemctl enable '{}'",
                 service_register.service_name
             ))?;
-            self.ssh.run_cmd(&format!(
+            self.run_checked(&format!(
                 "sudo systemctl start '{}'",
                 service_register.service_name
             ))?;
@@ -118,26 +142,22 @@ impl ServerInteractor for DebianInteractor {
     }
 
     fn restart_service(&self, service_name: &str) -> anyhow::Result<()> {
-        self.ssh
-            .run_cmd(&format!("sudo systemctl restart '{}'", service_name))?;
+        self.run_checked(&format!("sudo systemctl restart '{}'", service_name))?;
         Ok(())
     }
 
     fn stop_service(&self, service_name: &str) -> anyhow::Result<()> {
-        self.ssh
-            .run_cmd(&format!("sudo systemctl stop '{}'", service_name))?;
+        self.run_checked(&format!("sudo systemctl stop '{}'", service_name))?;
         Ok(())
     }
 
     fn start_service(&self, service_name: &str) -> anyhow::Result<()> {
-        self.ssh
-            .run_cmd(&format!("sudo systemctl start '{}'", service_name))?;
+        self.run_checked(&format!("sudo systemctl start '{}'", service_name))?;
         Ok(())
     }
 
     fn status_service(&self, service_name: &str) -> anyhow::Result<()> {
-        self.ssh
-            .run_cmd(&format!("sudo systemctl status '{}'", service_name))?;
+        self.run_checked(&format!("sudo systemctl status '{}'", service_name))?;
         Ok(())
     }
 
@@ -149,9 +169,8 @@ impl ServerInteractor for DebianInteractor {
         let _ = self
             .ssh
             .run_cmd(&format!("sudo systemctl disable '{}'", service_name));
-        self.ssh
-            .run_cmd(&format!("sudo rm -f '{}'", service_path))?;
-        self.ssh.run_cmd("sudo systemctl daemon-reload")?;
+        self.run_checked(&format!("sudo rm -f '{}'", service_path))?;
+        self.run_checked("sudo systemctl daemon-reload")?;
         Ok(())
     }
 
@@ -160,7 +179,7 @@ impl ServerInteractor for DebianInteractor {
             return Ok(());
         }
         let packages = dependencies.join(" ");
-        self.ssh.run_cmd(&format!(
+        self.run_checked(&format!(
             "sudo apt-get update && sudo apt-get install -y {}",
             packages
         ))?;
@@ -172,12 +191,11 @@ impl ServerInteractor for DebianInteractor {
         user_register: super::server_interactor_trait::UserRegister,
     ) -> anyhow::Result<()> {
         // Check if user exists. If not, create it.
-        if self
+        let user_check = self
             .ssh
-            .run_cmd(&format!("id -u {}", user_register.username))
-            .is_err()
-        {
-            self.ssh.run_cmd(&format!(
+            .run_cmd(&format!("id -u {}", user_register.username))?;
+        if user_check.exit_code != 0 {
+            self.run_checked(&format!(
                 "sudo useradd -m -s /bin/bash {}",
                 user_register.username
             ))?;
@@ -197,25 +215,24 @@ impl ServerInteractor for DebianInteractor {
             let ssh_dir = format!("/home/{}/.ssh", user_register.username);
             let auth_keys_path = format!("{}/authorized_keys", ssh_dir);
 
-            self.ssh.run_cmd(&format!("sudo mkdir -p '{}'", ssh_dir))?;
-            self.ssh.run_cmd(&format!(
+            self.run_checked(&format!("sudo mkdir -p '{}'", ssh_dir))?;
+            self.run_checked(&format!(
                 "sudo mv '{}' '{}'",
                 temp_keys_path, auth_keys_path
             ))?;
-            self.ssh.run_cmd(&format!(
+            self.run_checked(&format!(
                 "sudo chown -R '{}:{}' '{}'",
                 user_register.username, user_register.username, ssh_dir
             ))?;
-            self.ssh.run_cmd(&format!("sudo chmod 700 '{}'", ssh_dir))?;
-            self.ssh
-                .run_cmd(&format!("sudo chmod 600 '{}'", auth_keys_path))?;
+            self.run_checked(&format!("sudo chmod 700 '{}'", ssh_dir))?;
+            self.run_checked(&format!("sudo chmod 600 '{}'", auth_keys_path))?;
         }
 
         Ok(())
     }
 
     fn delete_user(&self, username: &str) -> anyhow::Result<()> {
-        self.ssh.run_cmd(&format!("sudo userdel -r {}", username))?;
+        self.run_checked(&format!("sudo userdel -r {}", username))?;
         Ok(())
     }
 
@@ -227,7 +244,7 @@ impl ServerInteractor for DebianInteractor {
             let _ = self.ssh.run_cmd(&format!("sudo groupadd '{}'", g));
         }
         let groups_csv = groups.join(",");
-        self.ssh.run_cmd(&format!(
+        self.run_checked(&format!(
             "sudo usermod -a -G '{}' '{}'",
             groups_csv, username
         ))?;

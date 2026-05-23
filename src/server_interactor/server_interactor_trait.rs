@@ -15,6 +15,8 @@ pub trait ServerInteractor {
     fn download(&self, local_path: &str, remote_path: &str) -> anyhow::Result<()>;
     fn chmod(&self, path: &str, permission: &str) -> anyhow::Result<()>;
     fn chown(&self, path: &str, user: &str, group: &str) -> anyhow::Result<()>;
+    fn mkdir(&self, path: &str, user: &str, group: &str) -> anyhow::Result<()>;
+    fn ls(&self, path: &str) -> anyhow::Result<Vec<String>>;
 
     // DEPENDENCIES
     fn install_dependencies(&self, dependencies: Vec<String>) -> anyhow::Result<()>;
