@@ -17,6 +17,15 @@ user = "admin"
 roles = ["app", "traefik", "postgres", "redis"]
 
 
+[[nodes]]
+host = "localhost"
+public_ip = "localhost"
+internal_ip = "10.0.0.13"
+port = 2223
+user = "admin"
+roles = ["app", "traefik", "postgres", "redis"]
+
+
 [[users]]
 name = "deployman"
 groups = ["www"]

@@ -262,18 +262,7 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                                 authorized_keys,
                             );
 
-                        let result = interactor.create_user(register);
-                        match result {
-                            Ok(_) => println!("User created successfully"),
-
-                            Err(e) => {
-                                if e.to_string().contains("already exists") {
-                                    println!("User already exists, no update");
-                                } else {
-                                    anyhow::bail!("Failed to create user: {}", e);
-                                }
-                            }
-                        }
+                        interactor.create_user(register)?;
                     }
                 }
 

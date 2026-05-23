@@ -110,7 +110,7 @@ pub fn postgres_setup_wrapper(
 
         // 3. Setup HAProxy on all vps nodes
         for app_node in &app_nodes {
-            println!("\nSetting up HAProxy on app node {}...", app_node.host);
+            println!("\tSetting up HAProxy on app node {}...", app_node.host);
             let private_key = find_private_key_for_user(&app_node.user, config);
             let private_key = if private_key.is_empty() {
                 get_any_private_key(config)
@@ -177,10 +177,13 @@ pub fn install_postgres_repo_and_pkg(
 ) -> anyhow::Result<()> {
     let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", version);
     if interactor.cmd(&format!("test -f {}", pg_ctl)).is_ok() {
-        println!("\nPostgreSQL {} is already installed.", version);
+        println!("\tPostgreSQL {} is already installed.", version);
         let main_dir = format!("/var/lib/postgresql/{}/main", version);
         if interactor.cmd(&format!("test -d {}", main_dir)).is_err() {
-            println!("\nPostgreSQL {} data directory is missing, initializing it...", version);
+            println!(
+                "\tPostgreSQL {} data directory is missing, initializing it...",
+                version
+            );
             let initdb_cmd = format!(
                 "sudo -u postgres /usr/lib/postgresql/{}/bin/initdb -D {}",
                 version, main_dir
@@ -192,7 +195,7 @@ pub fn install_postgres_repo_and_pkg(
             pg_ctl, version
         );
         if interactor.cmd(&status_cmd).is_err() {
-            println!("\nPostgreSQL {} is stopped, starting it...", version);
+            println!("\tPostgreSQL {} is stopped, starting it...", version);
             let start_cmd = format!(
                 "sudo -u postgres {} -D /var/lib/postgresql/{}/main -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf\" start > /dev/null 2>&1 < /dev/null",
                 pg_ctl, version, version
@@ -202,7 +205,7 @@ pub fn install_postgres_repo_and_pkg(
         return Ok(());
     }
 
-    println!("\nEnsuring GnuPG and Curl are installed...");
+    println!("\tEnsuring GnuPG and Curl are installed...");
     interactor.install_dependencies(vec!["curl".to_string(), "gnupg".to_string()])?;
 
     println!(
@@ -213,18 +216,18 @@ pub fn install_postgres_repo_and_pkg(
     interactor.cmd("sudo sh -c 'echo \"deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main\" > /etc/apt/sources.list.d/pgdg.list'")?;
     interactor.cmd("curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg")?;
 
-    println!("\nUpdating package lists...");
+    println!("\tUpdating package lists...");
     interactor.cmd("sudo apt-get update")?;
 
-    println!("\nInstalling postgresql-{} and client...", version);
+    println!("\tInstalling postgresql-{} and client...", version);
     interactor.install_dependencies(vec![
         format!("postgresql-{}", version),
         format!("postgresql-client-{}", version),
     ])?;
 
-    println!("\nEnabling PostgreSQL service for boot...");
+    println!("\tEnabling PostgreSQL service for boot...");
     interactor.cmd("sudo systemctl enable postgresql")?;
-    println!("\nStarting PostgreSQL cluster...");
+    println!("\tStarting PostgreSQL cluster...");
     let start_cmd = format!(
         "sudo -u postgres {} -D /var/lib/postgresql/{}/main -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf\" start > /dev/null 2>&1 < /dev/null",
         pg_ctl, version, version
@@ -303,7 +306,7 @@ pub fn configure_postgres_primary_rules(
     }
 
     // Restart PostgreSQL cluster to apply replication config
-    println!("\nRestarting PostgreSQL cluster to apply replication config...");
+    println!("\tRestarting PostgreSQL cluster to apply replication config...");
     let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", version);
     let restart_cmd = format!(
         "sudo -u postgres {} -D /var/lib/postgresql/{}/main -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf\" restart > /dev/null 2>&1 < /dev/null",
@@ -323,10 +326,10 @@ pub fn setup_postgres_primary(
     app_node_ips: &[String],
     db_configs: &[PostgresDbConfig],
 ) -> anyhow::Result<()> {
-    println!("\nSetting up PostgreSQL primary node...");
+    println!("\tSetting up PostgreSQL primary node...");
     install_postgres_repo_and_pkg(interactor, version)?;
 
-    println!("\nConfiguring primary replication and local trust rules...");
+    println!("\tConfiguring primary replication and local trust rules...");
     configure_postgres_primary_rules(
         interactor,
         version,
@@ -336,7 +339,7 @@ pub fn setup_postgres_primary(
     )?;
 
     // 4. Idempotently create replicator user
-    println!("\nCreating replication user '{}'...", replica_user);
+    println!("\tCreating replication user '{}'...", replica_user);
     let replicator_sql = format!(
         "DO \\$\\$ BEGIN IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{}') THEN CREATE ROLE {} WITH REPLICATION PASSWORD '{}' LOGIN; END IF; END \\$\\$;",
         replica_user, replica_user, replica_pass
@@ -386,7 +389,7 @@ pub fn setup_postgres_follower(
     );
     install_postgres_repo_and_pkg(interactor, version)?;
 
-    println!("\nStopping PostgreSQL cluster on follower...");
+    println!("\tStopping PostgreSQL cluster on follower...");
     let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", version);
     let stop_cmd = format!(
         "sudo -u postgres {} -D /var/lib/postgresql/{}/main stop > /dev/null 2>&1 < /dev/null",
@@ -394,10 +397,10 @@ pub fn setup_postgres_follower(
     );
     let _ = interactor.cmd(&stop_cmd);
 
-    println!("\nClearing follower PostgreSQL data directory...");
+    println!("\tClearing follower PostgreSQL data directory...");
     interactor.cmd(&format!("sudo rm -rf /var/lib/postgresql/{}/main", version))?;
 
-    println!("\nRunning pg_basebackup from primary...");
+    println!("\tRunning pg_basebackup from primary...");
     let backup_cmd = format!(
         "sudo -u postgres PGPASSWORD='{}' pg_basebackup -h {} -D /var/lib/postgresql/{}/main/ -U {} -c fast -P -R",
         replica_pass, primary_ip, version, replica_user
@@ -405,7 +408,7 @@ pub fn setup_postgres_follower(
     interactor.cmd(&backup_cmd)?;
 
     // Configure local trust on the follower node pg_hba.conf
-    println!("\nConfiguring local trust on follower pg_hba.conf...");
+    println!("\tConfiguring local trust on follower pg_hba.conf...");
     let pg_hba_path = format!("/etc/postgresql/{}/main/pg_hba.conf", version);
     if let Ok(existing_hba) = interactor.cmd(&format!("sudo cat '{}'", pg_hba_path)) {
         let mut updated_hba = existing_hba.clone();
@@ -433,7 +436,7 @@ pub fn setup_postgres_follower(
         }
     }
 
-    println!("\nStarting PostgreSQL cluster on follower...");
+    println!("\tStarting PostgreSQL cluster on follower...");
     let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", version);
     let start_cmd = format!(
         "sudo -u postgres {} -D /var/lib/postgresql/{}/main -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf\" start > /dev/null 2>&1 < /dev/null",
@@ -449,9 +452,9 @@ pub fn setup_haproxy(
     primary_ip: &str,
     follower_ips: &[String],
 ) -> anyhow::Result<()> {
-    println!("\nSetting up HAProxy in front of the PostgreSQL cluster...");
+    println!("\tSetting up HAProxy in front of the PostgreSQL cluster...");
 
-    println!("\nInstalling HAProxy...");
+    println!("\tInstalling HAProxy...");
     interactor.install_dependencies(vec!["haproxy".to_string()])?;
 
     let mut haproxy_cfg = format!(
@@ -497,13 +500,13 @@ backend postgres_back
         ));
     }
 
-    println!("\nWriting HAProxy configuration...");
+    println!("\tWriting HAProxy configuration...");
     interactor.create_file("/tmp/haproxy.cfg.tmp", &haproxy_cfg)?;
     interactor.cmd("sudo mv /tmp/haproxy.cfg.tmp /etc/haproxy/haproxy.cfg")?;
     interactor.cmd("sudo chown root:root /etc/haproxy/haproxy.cfg")?;
     interactor.cmd("sudo chmod 644 /etc/haproxy/haproxy.cfg")?;
 
-    println!("\nRestarting and enabling HAProxy service...");
+    println!("\tRestarting and enabling HAProxy service...");
     interactor.cmd("sudo systemctl daemon-reload")?;
     interactor.cmd("sudo systemctl enable haproxy")?;
     interactor.cmd("sudo systemctl restart haproxy")?;

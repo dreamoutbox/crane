@@ -2,7 +2,7 @@
 
 ### 1. Replication Status on Primary (`vps1`)
 
-```bash
+```sh
 docker exec vps1 sudo -u postgres psql -c "select client_addr, state, sync_state from pg_stat_replication;"
 ```
 
@@ -16,7 +16,7 @@ expected output:
 
 ### 2. Standby/Recovery Status on Follower (`vps2`)
 
-```bash
+```sh
 docker exec vps2 sudo -u postgres psql -c "select pg_is_in_recovery();"
 ```
 
@@ -30,7 +30,7 @@ expected output:
 
 ### 3. HAProxy Load Balancer
 
-```bash
+```sh
 docker exec vps1 pg_isready -h 127.0.0.1 -p 5000
 ```
 
@@ -39,20 +39,8 @@ expected output:
 127.0.0.1:5000 - accepting connections
 ```
 
+### Get postgres status
 
-## Promote/Demote node
-
-- Promote `vps2` to leader:
-```bash
-cargo run -- postgres promote vps2
-```
-
-- Verify status:
-  - `vps2` should return `pg_is_in_recovery() -> f`
-  - `vps1` should return `pg_is_in_recovery() -> t`
-  - HAProxy should route connections to `vps2`.
-
-- Demote `vps2` to follower (after making `vps1` leader again):
-```bash
-cargo run -- postgres promote vps1
+```sh
+docker exec vps1 sudo -u postgres psql -t -A -c "show server_version;"
 ```

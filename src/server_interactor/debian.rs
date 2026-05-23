@@ -20,6 +20,7 @@ impl DebianInteractor {
                 out.stderr
             );
         }
+
         Ok(out.stdout)
     }
 }
@@ -196,10 +197,22 @@ impl ServerInteractor for DebianInteractor {
             .ssh
             .run_cmd(&format!("id -u {}", user_register.username))?;
         if user_check.exit_code != 0 {
-            self.run_checked(&format!(
+            let create_result = self.run_checked(&format!(
                 "sudo useradd -m -s /bin/bash {}",
                 user_register.username
-            ))?;
+            ));
+
+            match create_result {
+                Ok(_) => println!("User created successfully"),
+
+                Err(e) => {
+                    if e.to_string().contains("already exists") {
+                        println!("User already exists, no update");
+                    } else {
+                        anyhow::bail!("Failed to create user: {}", e);
+                    }
+                }
+            }
         }
 
         // Ensure home directory ownership is correct (in case it existed beforehand)
