@@ -3,32 +3,12 @@ use crate::server_interactor::server_interactor_trait::ServerInteractor;
 use crate::ssh::SSHSession;
 use std::path::Path;
 
-/// Idempotently add/update `/etc/hosts` entries on the remote server.
-/// For each (hostname, ip) pair: replace existing line if present, else append.
-fn update_hosts(
-    interactor: &dyn ServerInteractor,
-    entries: &[(String, String)], // (hostname, ip)
-) -> anyhow::Result<()> {
-    for (hostname, ip) in entries {
-        println!("  /etc/hosts: {} -> {}", hostname, ip);
-        // Remove old entry for this hostname, then append the new one.
-        // We use a temp file approach to avoid sed -i portability issues.
-        let cmd = format!(
-            r#"sudo sh -c 'grep -v " {hostname}" /etc/hosts > /tmp/hosts.tmp && echo "{ip} {hostname}" >> /tmp/hosts.tmp && cp /tmp/hosts.tmp /etc/hosts && rm /tmp/hosts.tmp'"#,
-            hostname = hostname,
-            ip = ip,
-        );
-        interactor.cmd(&cmd)?;
-    }
-    Ok(())
-}
-
 /// deploy app commands
 pub fn run(
     config_path: &Path,
     get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
 ) -> anyhow::Result<()> {
-    println!("Loading configuration from {:?}", config_path);
+    println!("Loading configuration from {:?}\n\n", config_path);
 
     let config = config::load_config(config_path)?;
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
@@ -267,7 +247,18 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                                 authorized_keys,
                             );
 
-                        interactor.create_user(register)?;
+                        let result = interactor.create_user(register);
+                        match result {
+                            Ok(_) => println!("User created successfully"),
+
+                            Err(e) => {
+                                if e.to_string().contains("already exists") {
+                                    println!("User already exists, no update");
+                                } else {
+                                    anyhow::bail!("Failed to create user: {}", e);
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -506,6 +497,26 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
 
     println!("\n\nDEPLOY COMPLETE\n\n");
 
+    Ok(())
+}
+
+/// Idempotently add/update `/etc/hosts` entries on the remote server.
+/// For each (hostname, ip) pair: replace existing line if present, else append.
+fn update_hosts(
+    interactor: &dyn ServerInteractor,
+    entries: &[(String, String)], // (hostname, ip)
+) -> anyhow::Result<()> {
+    for (hostname, ip) in entries {
+        println!("  /etc/hosts: {} -> {}", hostname, ip);
+        // Remove old entry for this hostname, then append the new one.
+        // We use a temp file approach to avoid sed -i portability issues.
+        let cmd = format!(
+            r#"sudo sh -c 'grep -v " {hostname}" /etc/hosts > /tmp/hosts.tmp && echo "{ip} {hostname}" >> /tmp/hosts.tmp && cp /tmp/hosts.tmp /etc/hosts && rm /tmp/hosts.tmp'"#,
+            hostname = hostname,
+            ip = ip,
+        );
+        interactor.cmd(&cmd)?;
+    }
     Ok(())
 }
 

@@ -3,7 +3,7 @@
 [[nodes]]
 host = "localhost"
 public_ip = "localhost"
-internal_ip = "localhost"
+internal_ip = "10.0.0.11"
 port = 2221
 user = "admin"
 roles = ["app", "traefik", "postgres", "redis"]
@@ -11,7 +11,7 @@ roles = ["app", "traefik", "postgres", "redis"]
 [[nodes]]
 host = "localhost"
 public_ip = "localhost"
-internal_ip = "localhost"
+internal_ip = "10.0.0.12"
 port = 2222
 user = "admin"
 roles = ["app", "traefik", "postgres", "redis"]
@@ -56,7 +56,7 @@ entrypoint = "./myapp"
 deploy_user = "deployman"
 port_start = 4000
 port_end = 4100
-instances = 1
+instances = 2
 dependencies = ["libssl3", "ca-certificates"]
 # Health Check
 health_check_path = "/health"
@@ -74,10 +74,12 @@ max_replicas = 3
 APP_ENV = "simulation"
 LOG_LEVEL = "debug"
 
+
 [domain]
 provider = "cloudflare"
 name = "localhost"
 tls_email = "dev@example.com"
+
 
 [db.postgres]
 enabled = true
@@ -88,10 +90,12 @@ db_name = "myappdb"
 user = "app1"
 password = "app1"
 
+
 [db.redis]
 enabled = true
 version = "8"
 bind = "127.0.0.1"
+
 
 [backup.s3]
 bucket = "crane1"
@@ -101,6 +105,7 @@ endpoint = "http://localhost:9000" # omit for AWS S3
 # or specify here if not using .env
 access_key_id = "minio"
 secret_access_key = "miniominio"
+
 
 [monitor]
 interval = 30
