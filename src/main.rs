@@ -66,7 +66,9 @@ fn main() {
         Some(("deploy", sub_m)) => {
             let config_file = sub_m.get_one::<String>("config").unwrap();
             let config_path = std::path::Path::new(config_file);
-            if let Err(e) = crane::commands::deploy::run(config_path) {
+            if let Err(e) =
+                crane::commands::deploy::run(config_path, crane::server_interactor::get_interactor)
+            {
                 eprintln!("Deployment failed: {}", e);
                 std::process::exit(1);
             }
