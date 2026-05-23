@@ -31,15 +31,18 @@ func main() {
 			return c.Status(fiber.StatusBadRequest).SendString("missing ?to= query param")
 		}
 		target := fmt.Sprintf("http://%s", to)
+
 		resp, err := http.Get(target)
 		if err != nil {
 			return c.Status(fiber.StatusBadGateway).SendString(fmt.Sprintf("error reaching %s: %v", target, err))
 		}
 		defer resp.Body.Close()
+
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).SendString("failed to read response body")
 		}
+
 		c.Set("Content-Type", resp.Header.Get("Content-Type"))
 		return c.Status(resp.StatusCode).Send(body)
 	})

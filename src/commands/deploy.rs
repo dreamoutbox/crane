@@ -410,7 +410,7 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                         );
                     }
 
-                    println!("\tInstance on port {} is healthy!", port);
+                    println!("\tInstance {} on port {} is healthy!", app.name, port);
                 }
 
                 // 5. Write Traefik dynamic config
