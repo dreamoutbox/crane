@@ -6,7 +6,7 @@ public_ip = "localhost"
 internal_ip = "localhost"
 port = 2221
 user = "admin"
-roles = ["app", "traefik"]
+roles = ["app", "traefik", "postgres", "redis"]
 
 [[nodes]]
 host = "localhost"
@@ -14,23 +14,7 @@ public_ip = "localhost"
 internal_ip = "localhost"
 port = 2222
 user = "admin"
-roles = ["app", "traefik"]
-
-[[nodes]]
-host = "localhost"
-public_ip = "localhost"
-internal_ip = "localhost"
-port = 2223
-user = "admin"
-roles = ["postgres", "redis"]
-
-[[nodes]]
-host = "localhost"
-public_ip = "localhost"
-internal_ip = "localhost"
-port = 2224
-user = "admin"
-roles = ["minio"]
+roles = ["app", "traefik", "postgres", "redis"]
 
 [[users]]
 name = "deployman"
@@ -39,7 +23,7 @@ ssh_authorized_keys = ["~/.ssh/id_rsa.pub"]
 
 [app.myapp1]
 name = "myapp"
-binary = "./target/release/myapp"
+binary = "./myapp"
 # Deploy Info
 deploy_user = "deployman"
 port_start = 3000
@@ -49,10 +33,14 @@ dependencies = ["libssl3", "ca-certificates"]
 health_check_path = "/health"
 health_check_timeout = 30
 health_check_interval = 2
-# Keep old app versions
-retain_releases = 3
 # Domain
 domain = "myapp.localhost"
+# Keep old app versions
+retain_releases = 3
+# Replicas
+min_replicas = 1
+max_replicas = 3
+# ENV for application
 [app.myapp1.env]
 APP_ENV = "simulation"
 LOG_LEVEL = "debug"

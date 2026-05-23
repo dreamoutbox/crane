@@ -1,4 +1,4 @@
-use clap::Command;
+use clap::{Arg, Command};
 use crane::helper::server::get_server_distro;
 use crane::server_interactor::SSHSession;
 use crane::server_interactor::debian::DebianInteractor;
@@ -11,12 +11,24 @@ fn main() {
         .subcommand_required(true)
         .arg_required_else_help(true)
         .subcommand(Command::new("mvptest").about("Connect to vps1 and execute whoami"))
+        .subcommand(
+            Command::new("deploy")
+                .about("Deploy apps to VPS nodes")
+                .arg(
+                    Arg::new("config")
+                        .short('f')
+                        .long("config")
+                        .value_name("FILE")
+                        .help("Sets a custom config file")
+                        .default_value("crane.toml"),
+                ),
+        )
         .get_matches();
 
     match matches.subcommand() {
         Some(("mvptest", _)) => {
             // Instantiate SSHSession for vps1 (MVP defaults)
-            let ssh = SSHSession::new("vps1".to_string(), "admin".to_string(), "".to_string());
+            let ssh = SSHSession::new("vps1".to_string(), "admin".to_string(), "".to_string(), None);
 
             // Get server distribution
             let distro = match get_server_distro(&ssh) {
@@ -42,6 +54,14 @@ fn main() {
             // Execute mvptest subcommand using the interactor
             if let Err(e) = crane::commands::mvptest::run(interactor.as_ref()) {
                 eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+        Some(("deploy", sub_m)) => {
+            let config_file = sub_m.get_one::<String>("config").unwrap();
+            let config_path = std::path::Path::new(config_file);
+            if let Err(e) = crane::commands::deploy::run(config_path) {
+                eprintln!("Deployment failed: {}", e);
                 std::process::exit(1);
             }
         }

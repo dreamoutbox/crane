@@ -5,14 +5,16 @@ pub struct SSHSession {
     pub host: String,
     pub username: String,
     pub private_key_path: String,
+    pub port: Option<u16>,
 }
 
 impl SSHSession {
-    pub fn new(host: String, username: String, private_key_path: String) -> Self {
+    pub fn new(host: String, username: String, private_key_path: String, port: Option<u16>) -> Self {
         Self {
             host,
             username,
             private_key_path,
+            port,
         }
     }
 
@@ -20,6 +22,10 @@ impl SSHSession {
         let mut command = std::process::Command::new("ssh");
         command.arg("-o").arg("StrictHostKeyChecking=no");
         command.arg("-o").arg("UserKnownHostsFile=/dev/null");
+
+        if let Some(port) = self.port {
+            command.arg("-p").arg(port.to_string());
+        }
 
         if !self.private_key_path.is_empty() {
             command.arg("-i").arg(&self.private_key_path);
@@ -46,6 +52,10 @@ impl SSHSession {
         command.arg("-o").arg("StrictHostKeyChecking=no");
         command.arg("-o").arg("UserKnownHostsFile=/dev/null");
 
+        if let Some(port) = self.port {
+            command.arg("-P").arg(port.to_string());
+        }
+
         if !self.private_key_path.is_empty() {
             command.arg("-i").arg(&self.private_key_path);
         }
@@ -71,6 +81,10 @@ impl SSHSession {
         let mut command = std::process::Command::new("scp");
         command.arg("-o").arg("StrictHostKeyChecking=no");
         command.arg("-o").arg("UserKnownHostsFile=/dev/null");
+
+        if let Some(port) = self.port {
+            command.arg("-P").arg(port.to_string());
+        }
 
         if !self.private_key_path.is_empty() {
             command.arg("-i").arg(&self.private_key_path);
