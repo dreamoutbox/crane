@@ -16,10 +16,12 @@ port = 2222
 user = "admin"
 roles = ["app", "traefik", "postgres", "redis"]
 
+
 [[users]]
 name = "deployman"
 groups = ["www"]
 ssh_authorized_keys = ["~/.ssh/id_rsa.pub"]
+
 
 [app.myapp1]
 name = "myapp"

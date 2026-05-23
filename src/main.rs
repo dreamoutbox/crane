@@ -1,8 +1,4 @@
 use clap::{Arg, Command};
-use crane::helper::server::get_server_distro;
-use crane::server_interactor::debian::DebianInteractor;
-use crane::server_interactor::server_interactor_trait::ServerInteractor;
-use crane::ssh::SSHSession;
 
 fn main() {
     let matches = Command::new("crane")
@@ -26,43 +22,42 @@ fn main() {
         .get_matches();
 
     match matches.subcommand() {
-        Some(("mvptest", _)) => {
-            // Instantiate SSHSession for vps1 (MVP defaults)
-            let ssh = SSHSession::new(
-                "vps1".to_string(),
-                "admin".to_string(),
-                "".to_string(),
-                None,
-            );
+        // Some(("mvptest", _)) => {
+        //     // Instantiate SSHSession for vps1 (MVP defaults)
+        //     let ssh = SSHSession::new(
+        //         "vps1".to_string(),
+        //         "admin".to_string(),
+        //         "".to_string(),
+        //         None,
+        //     );
 
-            // Get server distribution
-            let distro = match get_server_distro(&ssh) {
-                Ok(d) => d,
-                Err(e) => {
-                    eprintln!("Error detecting server distribution: {}", e);
-                    std::process::exit(1);
-                }
-            };
+        //     // Get server distribution
+        //     let distro = match get_server_distro(&ssh) {
+        //         Ok(d) => d,
+        //         Err(e) => {
+        //             eprintln!("Error detecting server distribution: {}", e);
+        //             std::process::exit(1);
+        //         }
+        //     };
 
-            // Match distro to interactor
-            let interactor: Box<dyn ServerInteractor> = match distro.as_str() {
-                "debian" | "ubuntu" => Box::new(DebianInteractor::new(ssh)),
-                other => {
-                    eprintln!(
-                        "Unsupported server distribution: {}. Only Debian and Ubuntu are supported.",
-                        other
-                    );
-                    std::process::exit(1);
-                }
-            };
+        //     // Match distro to interactor
+        //     let interactor: Box<dyn ServerInteractor> = match distro.as_str() {
+        //         "debian" | "ubuntu" => Box::new(DebianInteractor::new(ssh)),
+        //         other => {
+        //             eprintln!(
+        //                 "Unsupported server distribution: {}. Only Debian and Ubuntu are supported.",
+        //                 other
+        //             );
+        //             std::process::exit(1);
+        //         }
+        //     };
 
-            // Execute mvptest subcommand using the interactor
-            if let Err(e) = crane::commands::mvptest::run(interactor.as_ref()) {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
-            }
-        }
-
+        //     // Execute mvptest subcommand using the interactor
+        //     if let Err(e) = crane::commands::mvptest::run(interactor.as_ref()) {
+        //         eprintln!("Error: {}", e);
+        //         std::process::exit(1);
+        //     }
+        // }
         Some(("deploy", sub_m)) => {
             let config_file = sub_m.get_one::<String>("config").unwrap();
             let config_path = std::path::Path::new(config_file);

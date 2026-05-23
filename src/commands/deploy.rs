@@ -1,4 +1,6 @@
 use crate::config;
+use crate::helper::keys::{find_private_key_for_user, get_any_private_key};
+use crate::postgres_unit::setup::postgres_setup_wrapper;
 use crate::server_interactor::server_interactor_trait::ServerInteractor;
 use crate::ssh::SSHSession;
 use std::path::Path;
@@ -65,6 +67,19 @@ pub fn run(
 
         // install traefik
         crate::traefik_unit::setup::install_traefik(&*interactor)?;
+    }
+
+    // Install postgres database cluster if enabled
+    let pg_enabled = config
+        .db
+        .as_ref()
+        .and_then(|db| db.postgres.as_ref())
+        .and_then(|pg| pg.get("enabled"))
+        .and_then(|val| val.as_bool())
+        .unwrap_or(false);
+
+    if pg_enabled {
+        postgres_setup_wrapper(get_interactor, &config, &dot_env, app_nodes)?;
     }
 
     let mut handles = vec![];
@@ -518,78 +533,4 @@ fn update_hosts(
         interactor.cmd(&cmd)?;
     }
     Ok(())
-}
-
-fn find_private_key_for_user(username: &str, config: &config::Config) -> String {
-    if let Some(ref users) = config.users {
-        if let Some(user_config) = users.iter().find(|u| u.name == username) {
-            for key in &user_config.ssh_authorized_keys {
-                let expanded = if key.starts_with('~') {
-                    if let Some(home) = std::env::var_os("HOME") {
-                        Path::new(&home)
-                            .join(key.strip_prefix("~").unwrap().trim_start_matches('/'))
-                    } else {
-                        std::path::PathBuf::from(key)
-                    }
-                } else {
-                    std::path::PathBuf::from(key)
-                };
-
-                let candidate = if expanded.extension().map_or(false, |ext| ext == "pub") {
-                    expanded.with_extension("")
-                } else {
-                    expanded.clone()
-                };
-
-                if candidate.exists() {
-                    return candidate.to_string_lossy().to_string();
-                }
-
-                if key.contains("id_rsa.pub") {
-                    let fallback = candidate.with_file_name("id_ed25519");
-                    if fallback.exists() {
-                        return fallback.to_string_lossy().to_string();
-                    }
-                }
-            }
-        }
-    }
-    "".to_string()
-}
-
-fn get_any_private_key(config: &config::Config) -> String {
-    if let Some(ref users) = config.users {
-        for user_config in users {
-            for key in &user_config.ssh_authorized_keys {
-                let expanded = if key.starts_with('~') {
-                    if let Some(home) = std::env::var_os("HOME") {
-                        Path::new(&home)
-                            .join(key.strip_prefix("~").unwrap().trim_start_matches('/'))
-                    } else {
-                        std::path::PathBuf::from(key)
-                    }
-                } else {
-                    std::path::PathBuf::from(key)
-                };
-
-                let candidate = if expanded.extension().map_or(false, |ext| ext == "pub") {
-                    expanded.with_extension("")
-                } else {
-                    expanded.clone()
-                };
-
-                if candidate.exists() {
-                    return candidate.to_string_lossy().to_string();
-                }
-
-                if key.contains("id_rsa.pub") {
-                    let fallback = candidate.with_file_name("id_ed25519");
-                    if fallback.exists() {
-                        return fallback.to_string_lossy().to_string();
-                    }
-                }
-            }
-        }
-    }
-    "".to_string()
 }
