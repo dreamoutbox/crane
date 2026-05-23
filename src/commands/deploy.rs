@@ -5,7 +5,7 @@ use crate::server_interactor::server_interactor_trait::ServerInteractor;
 use std::path::Path;
 
 /// deploy app commands
-pub fn run(config_path: &Path) -> anyhow::Result<()> {
+pub fn run(config_path: &Path, server_interact: &dyn ServerInteractor) -> anyhow::Result<()> {
     println!("Loading configuration from {:?}", config_path);
 
     let config = config::load_config(config_path)?;

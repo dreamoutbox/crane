@@ -7,6 +7,14 @@ pub fn setup_traefik(
     port_start: u16,
     port_end: u16,
 ) -> anyhow::Result<()> {
+    // 1. Ensure Traefik is installed and configured to listen on ports 80 & 443
+    let check = interactor.cmd("which traefik");
+    let is_installed = check.is_ok() && !check.unwrap().trim().is_empty();
+    if !is_installed {
+        install_traefik(interactor)?;
+    }
+
+    // 2. Generate and write the dynamic configuration
     let mut traefik_config = format!(
         "[http.routers.{name}]\n  rule = \"Host(`{domain}`)\"\n  service = \"{name}\"\n  [http.routers.{name}.tls]\n    certResolver = \"letsencrypt\"\n\n[http.services.{name}.loadBalancer]\n",
         name = app_name,
@@ -36,5 +44,69 @@ pub fn setup_traefik(
             e
         );
     }
+    Ok(())
+}
+
+pub fn install_traefik(interactor: &dyn ServerInteractor) -> anyhow::Result<()> {
+    // Check if Traefik is already installed
+    let check = interactor.cmd("which traefik");
+    if check.is_ok() && !check.unwrap().trim().is_empty() {
+        return Ok(());
+    }
+
+    println!("Installing Traefik on remote server...");
+
+    // Download and extract Traefik AMD64 Linux release
+    let download_cmd = "wget -q https://github.com/traefik/traefik/releases/download/v3.0.0/traefik_v3.0.0_linux_amd64.tar.gz -O /tmp/traefik.tar.gz || curl -L https://github.com/traefik/traefik/releases/download/v3.0.0/traefik_v3.0.0_linux_amd64.tar.gz -o /tmp/traefik.tar.gz";
+    interactor.cmd(download_cmd)?;
+    interactor.cmd("tar -xzf /tmp/traefik.tar.gz -C /tmp/ traefik")?;
+    interactor.cmd("sudo mv /tmp/traefik /usr/local/bin/traefik")?;
+    interactor.cmd("sudo chmod +x /usr/local/bin/traefik")?;
+    let _ = interactor.cmd("rm -f /tmp/traefik.tar.gz");
+
+    // Create configuration directories
+    interactor.cmd("sudo mkdir -p /etc/traefik/dynamic")?;
+
+    // Create Traefik static configuration (listening on 80 and 443)
+    let static_config = r#"entryPoints:
+  web:
+    address: ":80"
+  websecure:
+    address: ":443"
+
+providers:
+  file:
+    directory: "/etc/traefik/dynamic"
+    watch: true
+"#;
+    interactor.create_file("/tmp/traefik.yml", static_config)?;
+    interactor.cmd("sudo mv /tmp/traefik.yml /etc/traefik/traefik.yml")?;
+    interactor.cmd("sudo chown root:root /etc/traefik/traefik.yml")?;
+    interactor.cmd("sudo chmod 644 /etc/traefik/traefik.yml")?;
+
+    // Create systemd service for Traefik
+    let service_config = r#"[Unit]
+Description=Traefik
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/traefik --configfile=/etc/traefik/traefik.yml
+ExecReload=/bin/true
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+"#;
+    interactor.create_file("/tmp/traefik.service", service_config)?;
+    interactor.cmd("sudo mv /tmp/traefik.service /etc/systemd/system/traefik.service")?;
+    interactor.cmd("sudo chown root:root /etc/systemd/system/traefik.service")?;
+    interactor.cmd("sudo chmod 644 /etc/systemd/system/traefik.service")?;
+
+    // Reload systemd and start Traefik
+    interactor.cmd("sudo systemctl daemon-reload")?;
+    interactor.cmd("sudo systemctl enable traefik")?;
+    interactor.cmd("sudo systemctl start traefik")?;
+
     Ok(())
 }
