@@ -36,6 +36,7 @@ pub struct AppConfig {
     pub binary: String,
     pub deploy_user: String,
     pub port_start: u16,
+    pub port_end: Option<u16>,
     pub instances: u32,
     pub dependencies: Option<Vec<String>>,
     pub health_check_path: Option<String>,
@@ -44,8 +45,8 @@ pub struct AppConfig {
     pub retain_releases: Option<u32>,
     pub domain: Option<String>,
     pub env: Option<HashMap<String, String>>,
-    pub min_replicas: u32,
-    pub max_replicas: u32,
+    pub min_replicas: Option<u32>,
+    pub max_replicas: Option<u32>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -69,7 +70,17 @@ pub struct BackupConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub struct MonitorConfig {
     pub interval: Option<u32>,
-    pub autoscale: Option<HashMap<String, toml::Value>>,
+    pub autoscale: Option<AutoscaleConfig>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct AutoscaleConfig {
+    pub min_replicas: Option<u32>,
+    pub max_replicas: Option<u32>,
+    pub scale_up_cpu: Option<u32>,
+    pub scale_down_cpu: Option<u32>,
+    pub scale_up_memory: Option<u32>,
+    pub cooldown: Option<u32>,
 }
 
 pub fn load_config<P: AsRef<Path>>(path: P) -> anyhow::Result<Config> {

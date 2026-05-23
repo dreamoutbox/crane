@@ -28,7 +28,12 @@ fn main() {
     match matches.subcommand() {
         Some(("mvptest", _)) => {
             // Instantiate SSHSession for vps1 (MVP defaults)
-            let ssh = SSHSession::new("vps1".to_string(), "admin".to_string(), "".to_string(), None);
+            let ssh = SSHSession::new(
+                "vps1".to_string(),
+                "admin".to_string(),
+                "".to_string(),
+                None,
+            );
 
             // Get server distribution
             let distro = match get_server_distro(&ssh) {
@@ -57,6 +62,7 @@ fn main() {
                 std::process::exit(1);
             }
         }
+
         Some(("deploy", sub_m)) => {
             let config_file = sub_m.get_one::<String>("config").unwrap();
             let config_path = std::path::Path::new(config_file);
@@ -65,6 +71,7 @@ fn main() {
                 std::process::exit(1);
             }
         }
+
         _ => unreachable!(),
     }
 }

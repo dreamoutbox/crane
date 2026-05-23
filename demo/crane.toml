@@ -27,6 +27,7 @@ binary = "./myapp"
 # Deploy Info
 deploy_user = "deployman"
 port_start = 3000
+port_end = 3100
 instances = 2
 dependencies = ["libssl3", "ca-certificates"]
 # Health Check

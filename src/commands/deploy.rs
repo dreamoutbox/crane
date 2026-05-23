@@ -22,6 +22,7 @@ pub fn run(config_path: &Path) -> anyhow::Result<()> {
         anyhow::bail!("Failed to generate datetime prefix using 'date' command");
     }
 
+    // Loop Apps in Config
     for (app_id, app) in &config.app {
         println!(
             "Starting deployment for app '{}' (ID: {})...",
@@ -127,7 +128,39 @@ pub fn run(config_path: &Path) -> anyhow::Result<()> {
             ))?;
 
             // 4. Rolling deploy across instances
-            let port_end = app.port_start + app.instances as u16;
+            let min_replicas = app
+                .min_replicas
+                .or_else(|| {
+                    config
+                        .monitor
+                        .as_ref()
+                        .and_then(|m| m.autoscale.as_ref())
+                        .and_then(|a| a.min_replicas)
+                })
+                .unwrap_or(1);
+            let max_replicas = app
+                .max_replicas
+                .or_else(|| {
+                    config
+                        .monitor
+                        .as_ref()
+                        .and_then(|m| m.autoscale.as_ref())
+                        .and_then(|a| a.max_replicas)
+                })
+                .unwrap_or(4);
+
+            let mut count = std::cmp::max(app.instances, min_replicas);
+            count = std::cmp::min(count, max_replicas);
+
+            let port_limit = app.port_end.unwrap_or(app.port_start + 100);
+            let max_by_ports = if port_limit > app.port_start {
+                (port_limit - app.port_start) as u32
+            } else {
+                0
+            };
+            count = std::cmp::min(count, max_by_ports);
+
+            let port_end = app.port_start + count as u16;
             for port in app.port_start..port_end {
                 println!("Deploying instance of '{}' on port {}...", app.name, port);
                 let service_instance = format!("{}@{}", app.name, port);
@@ -155,22 +188,11 @@ pub fn run(config_path: &Path) -> anyhow::Result<()> {
                 interactor.cmd(&format!("sudo chmod 600 '{}'", final_env_path))?;
 
                 // Create systemd template unit
-                let systemd_template = format!(
-                    "[Unit]\nDescription=crane managed: %p instance on port %i\nAfter=network.target\n\n[Service]\nType=simple\nUser={deploy_user}\nWorkingDirectory=/opt/{appname}\nExecStart=/opt/{appname}/current --port %i\nEnvironmentFile=/etc/crane/{appname}/.env\nRestart=on-failure\nRestartSec=5\nNoNewPrivileges=true\nProtectSystem=strict\nProtectHome=true\nPrivateTmp=true\n\n[Install]\nWantedBy=multi-user.target\n",
-                    deploy_user = app.deploy_user,
-                    appname = app.name,
-                );
-                let temp_service_path = format!("/tmp/{}@.service", app.name);
-                interactor.create_file(&temp_service_path, &systemd_template)?;
-                let dest_service_path = format!("/etc/systemd/system/{}@.service", app.name);
-                interactor.cmd(&format!(
-                    "sudo mv '{}' '{}'",
-                    temp_service_path, dest_service_path
-                ))?;
-                interactor.cmd(&format!("sudo chown root:root '{}'", dest_service_path))?;
-                interactor.cmd(&format!("sudo chmod 644 '{}'", dest_service_path))?;
-                interactor.cmd("sudo systemctl daemon-reload")?;
-                let _ = interactor.cmd(&format!("sudo systemctl enable '{}@'", app.name));
+                crate::systemd_unit::setup::setup_systemd_template(
+                    &interactor,
+                    &app.name,
+                    &app.deploy_user,
+                )?;
 
                 // Start service
                 interactor.cmd(&format!("sudo systemctl start '{}'", service_instance))?;
