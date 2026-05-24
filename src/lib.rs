@@ -2,6 +2,7 @@ pub mod commands;
 pub mod config;
 pub mod helper;
 pub mod postgres_unit;
+pub mod s3;
 pub mod server_interactor;
 pub mod ssh;
 pub mod systemd_unit;
