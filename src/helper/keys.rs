@@ -72,5 +72,6 @@ pub fn get_any_private_key(config: &config::Config) -> String {
             }
         }
     }
+
     "".to_string()
 }
