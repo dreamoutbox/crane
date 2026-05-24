@@ -249,6 +249,9 @@ pub fn configure_postgres_primary_rules(
     interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET wal_level = 'replica';\"")?;
     interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET max_wal_senders = 10;\"")?;
     interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET hot_standby = 'on';\"")?;
+    if version.parse::<i32>().unwrap_or(0) >= 17 {
+        interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET summarize_wal = 'on';\"")?;
+    }
 
     // 2. Configure pg_hba.conf
     let pg_hba_path = format!("/etc/postgresql/{}/main/pg_hba.conf", version);

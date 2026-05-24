@@ -23,3 +23,25 @@ _Avoid_: Slave, Replica, Standby, Read-Only DB
 **HAProxy**:
 The TCP load balancer deployed on application nodes that routes client database connections to the active primary node.
 _Avoid_: DB Gateway, Postgres Proxy
+
+**Backup**:
+An archived snapshot of the PostgreSQL database cluster's data and write-ahead logs (WALs).
+_Avoid_: Dump, DB Export
+
+**Full Backup**:
+A complete, self-contained backup of all files in the database cluster.
+
+**Incremental Backup**:
+A backup containing only the blocks/files modified since a previous backup.
+_Avoid_: Partial Backup, Delta Backup
+
+**Backup ID**:
+A unique timestamp-based identifier assigned to a backup.
+
+**Backup Chain**:
+The chronological sequence of backups starting with a Full Backup followed by zero or more Incremental Backups.
+
+**Backup Registry**:
+A central manifest tracking all existing backups, their locations, and relationship links.
+_Avoid_: Catalog, DB list
+

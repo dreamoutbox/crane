@@ -1,4 +1,5 @@
 use crate::config;
+use crate::postgres_unit::backup::S3Client;
 use crate::postgres_unit::postgres_node::PostgresNode;
 use crate::postgres_unit::tasks::*;
 use crate::server_interactor::server_interactor_trait::ServerInteractor;
@@ -341,5 +342,246 @@ pub fn status(
     }
     println!();
 
+    Ok(())
+}
+
+fn get_s3_config(
+    config: &config::Config,
+    dot_env: &std::collections::HashMap<String, String>,
+) -> anyhow::Result<crate::postgres_unit::backup::S3Config> {
+    let s3_section = config
+        .backup
+        .as_ref()
+        .and_then(|b| b.s3.as_ref())
+        .ok_or_else(|| {
+            anyhow::anyhow!("S3 backup configuration [backup.s3] is missing in crane.toml")
+        })?;
+
+    let bucket = s3_section
+        .get("bucket")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("S3 bucket is not specified in crane.toml"))?
+        .to_string();
+
+    let region = s3_section
+        .get("region")
+        .and_then(|v| v.as_str())
+        .unwrap_or("us-east-1")
+        .to_string();
+
+    let endpoint = s3_section
+        .get("endpoint")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    let access_key = dot_env.get("S3_ACCESS_KEY_ID")
+        .cloned()
+        .or_else(|| s3_section.get("access_key_id").and_then(|v| v.as_str()).map(|s| s.to_string()))
+        .ok_or_else(|| anyhow::anyhow!("S3 access key id is not configured (set S3_ACCESS_KEY_ID in .env or access_key_id in crane.toml)"))?;
+
+    let secret_key = dot_env.get("S3_SECRET_ACCESS_KEY")
+        .cloned()
+        .or_else(|| s3_section.get("secret_access_key").and_then(|v| v.as_str()).map(|s| s.to_string()))
+        .ok_or_else(|| anyhow::anyhow!("S3 secret access key is not configured (set S3_SECRET_ACCESS_KEY in .env or secret_access_key in crane.toml)"))?;
+
+    Ok(crate::postgres_unit::backup::S3Config {
+        bucket,
+        region,
+        endpoint,
+        access_key,
+        secret_key,
+    })
+}
+
+fn get_pg_version(config: &config::Config) -> String {
+    config
+        .db
+        .as_ref()
+        .and_then(|db| db.postgres.as_ref())
+        .and_then(|pg| pg.get("version"))
+        .and_then(|val| val.as_str())
+        .unwrap_or("16")
+        .to_string()
+}
+
+fn get_replica_pass(dot_env: &std::collections::HashMap<String, String>) -> String {
+    dot_env
+        .get("POSTGRES_PASSWORD")
+        .cloned()
+        .unwrap_or_else(|| "repl_password".to_string())
+}
+
+pub fn backup(
+    config_path: &Path,
+    backup_type: &str,
+    get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
+) -> anyhow::Result<()> {
+    let config = config::load_config(config_path)?;
+    let config_dir = config_path.parent().unwrap_or(Path::new("."));
+    let env_path = config_dir.join(".env");
+    let dot_env = config::load_env_file(&env_path).unwrap_or_default();
+
+    let s3_config = get_s3_config(&config, &dot_env)?;
+    let primary_node = postgres_get_leader(&config, get_interactor)?
+        .ok_or_else(|| anyhow::anyhow!("No active PostgreSQL leader found in the cluster."))?;
+
+    let pg_version = get_pg_version(&config);
+    let replica_pass = get_replica_pass(&dot_env);
+
+    let s3_client = crate::postgres_unit::backup::RealS3Client::new(&s3_config)?;
+    let interactor = connect_to_node(&primary_node, &config, get_interactor)?;
+
+    let registry_key = "backups/registry.toml";
+    let registry = match s3_client.get_object(registry_key) {
+        Ok(data) => {
+            let content = String::from_utf8_lossy(&data).to_string();
+            toml::from_str::<crate::postgres_unit::backup::BackupRegistry>(&content)
+                .unwrap_or_default()
+        }
+        Err(_) => crate::postgres_unit::backup::BackupRegistry::default(),
+    };
+    let last_backup = registry.backups.last();
+
+    println!(
+        "Starting PostgreSQL {} backup...",
+        backup_type.to_uppercase()
+    );
+    let meta = crate::postgres_unit::backup::run_backup(
+        &*interactor,
+        &s3_client,
+        &pg_version,
+        backup_type,
+        &replica_pass,
+        &s3_config.bucket,
+        last_backup,
+    )?;
+
+    println!("\nBackup successful!");
+    println!("{}", meta.id);
+    println!("Date: {}", meta.date);
+    println!("Time: {}", meta.time);
+    println!("Type: {}", meta.backup_type);
+    println!("LOCAL: {}", meta.local_path);
+    println!("S3: {}", meta.s3_path);
+
+    Ok(())
+}
+
+pub fn list_backups(
+    config_path: &Path,
+    _get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
+) -> anyhow::Result<()> {
+    let config = config::load_config(config_path)?;
+    let config_dir = config_path.parent().unwrap_or(Path::new("."));
+    let env_path = config_dir.join(".env");
+    let dot_env = config::load_env_file(&env_path).unwrap_or_default();
+
+    let s3_config = get_s3_config(&config, &dot_env)?;
+    let s3_client = crate::postgres_unit::backup::RealS3Client::new(&s3_config)?;
+
+    let registry_key = "backups/registry.toml";
+    let registry = match s3_client.get_object(registry_key) {
+        Ok(data) => {
+            let content = String::from_utf8_lossy(&data).to_string();
+            toml::from_str::<crate::postgres_unit::backup::BackupRegistry>(&content)
+                .unwrap_or_default()
+        }
+        Err(_) => {
+            println!("No backups found in cluster.");
+            return Ok(());
+        }
+    };
+
+    if registry.backups.is_empty() {
+        println!("No backups found in cluster.");
+        return Ok(());
+    }
+
+    for (idx, backup) in registry.backups.iter().enumerate() {
+        if idx > 0 {
+            println!();
+        }
+        println!("{}", backup.id);
+        println!("Date: {}", backup.date);
+        println!("Time: {}", backup.time);
+        println!("Type: {}", backup.backup_type);
+        println!("LOCAL: {}", backup.local_path);
+        println!("S3: {}", backup.s3_path);
+    }
+
+    Ok(())
+}
+
+pub fn restore(
+    config_path: &Path,
+    target_id: &str,
+    get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
+) -> anyhow::Result<()> {
+    let config = config::load_config(config_path)?;
+    let config_dir = config_path.parent().unwrap_or(Path::new("."));
+    let env_path = config_dir.join(".env");
+    let dot_env = config::load_env_file(&env_path).unwrap_or_default();
+
+    let s3_config = get_s3_config(&config, &dot_env)?;
+    let primary_node = match postgres_get_leader(&config, get_interactor)? {
+        Some(node) => node,
+        None => config
+            .nodes
+            .iter()
+            .find(|n| n.roles.contains(&"postgres".to_string()))
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("No PostgreSQL nodes found in configuration"))?,
+    };
+
+    let pg_version = get_pg_version(&config);
+    let s3_client = crate::postgres_unit::backup::RealS3Client::new(&s3_config)?;
+
+    let registry_key = "backups/registry.toml";
+    let registry_data = s3_client
+        .get_object(registry_key)
+        .map_err(|e| anyhow::anyhow!("Failed to download backup registry from S3: {}", e))?;
+    let content = String::from_utf8_lossy(&registry_data).to_string();
+    let registry = toml::from_str::<crate::postgres_unit::backup::BackupRegistry>(&content)
+        .unwrap_or_default();
+
+    let target_backup = registry
+        .backups
+        .iter()
+        .find(|b| b.id == target_id)
+        .ok_or_else(|| anyhow::anyhow!("Backup ID '{}' not found in registry", target_id))?;
+
+    let mut chain = Vec::new();
+    let mut current = target_backup.clone();
+    chain.push(current.clone());
+
+    while let Some(ref base_id) = current.base {
+        let parent = registry
+            .backups
+            .iter()
+            .find(|b| &b.id == base_id)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Broken backup chain: parent backup ID '{}' not found in registry",
+                    base_id
+                )
+            })?;
+        chain.push(parent.clone());
+        current = parent.clone();
+    }
+
+    chain.reverse();
+
+    let interactor = connect_to_node(&primary_node, &config, get_interactor)?;
+
+    println!("Restoring database to backup ID: {}...", target_id);
+    crate::postgres_unit::backup::run_restore(
+        &*interactor,
+        &s3_client,
+        &pg_version,
+        target_backup,
+        &chain,
+    )?;
+
+    println!("Restore complete! PostgreSQL is online.");
     Ok(())
 }
