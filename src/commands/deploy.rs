@@ -532,7 +532,8 @@ fn update_hosts(
     entries: &[(String, String)], // (hostname, ip)
 ) -> anyhow::Result<()> {
     for (hostname, ip) in entries {
-        println!("\t\t/etc/hosts: {} -> {}", hostname, ip);
+        println!("\t- pointing {} -> {}", hostname, ip);
+
         // Remove old entry for this hostname, then append the new one.
         // We use a temp file approach to avoid sed -i portability issues.
         let cmd = format!(

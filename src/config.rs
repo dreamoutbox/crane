@@ -63,6 +63,21 @@ pub struct DbConfig {
     pub redis: Option<HashMap<String, toml::Value>>,
 }
 
+// Postgres database config mapping
+#[derive(Debug, Clone)]
+pub struct PostgresDbConfig {
+    pub name: String,
+    pub db_name: String,
+}
+
+// Postgres user config mapping
+#[derive(Debug, Clone)]
+pub struct PostgresUserConfig {
+    pub user: String,
+    pub password: Option<String>,
+    pub databases: Vec<String>,
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct BackupConfig {
     pub s3: Option<HashMap<String, toml::Value>>,

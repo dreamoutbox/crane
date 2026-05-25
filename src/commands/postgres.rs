@@ -157,7 +157,8 @@ pub fn promote(
             app_node.host
         );
         let app_interactor = connect_to_node(app_node, &config, get_interactor)?;
-        crate::postgres_unit::setup::setup_haproxy(
+
+        crate::postgres_unit::haproxy::setup_haproxy(
             &*app_interactor,
             &target_conf.internal_ip,
             &follower_ips,

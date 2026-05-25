@@ -96,10 +96,18 @@ tls_email = "dev@example.com"
 enabled = true
 version = "17"
 
-[db.postgres.myapp]
-db_name = "myappdb"
+[[db.postgres.users]]
 user = "app1"
 password = "app1"
+databases = ["myapp"]
+
+[[db.postgres.users]]
+user = "u2"
+password = "u2"
+databases = ["myapp"]
+
+[db.postgres.myapp]
+db_name = "myapp"
 
 
 [db.redis]

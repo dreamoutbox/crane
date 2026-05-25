@@ -1,18 +1,10 @@
 use crate::{
-    config,
+    config::{self, PostgresDbConfig, PostgresUserConfig},
     helper::keys::{find_private_key_for_user, get_any_private_key},
     postgres_unit::install::install_postgres,
     server_interactor::server_interactor_trait::ServerInteractor,
     ssh::SSHSession,
 };
-
-#[derive(Debug, Clone)]
-pub struct PostgresDbConfig {
-    pub name: String,
-    pub db_name: String,
-    pub user: String,
-    pub password: Option<String>,
-}
 
 pub fn postgres_setup_wrapper(
     get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
@@ -38,7 +30,8 @@ pub fn postgres_setup_wrapper(
         .filter(|n| n.roles.contains(&"postgres".to_string()))
         .cloned()
         .collect();
-    Ok(if !pg_nodes.is_empty() {
+
+    if !pg_nodes.is_empty() {
         let primary_node = &pg_nodes[0];
         let follower_ips: Vec<String> = pg_nodes[1..]
             .iter()
@@ -50,7 +43,7 @@ pub fn postgres_setup_wrapper(
             .filter(|n| n.roles.contains(&"app".to_string()))
             .map(|n| n.internal_ip.clone())
             .collect();
-        let db_configs = crate::postgres_unit::setup::get_postgres_db_configs(config);
+        let (db_configs, user_configs) = get_postgres_configs(config);
 
         // 1. Setup primary node
         println!(
@@ -71,7 +64,7 @@ pub fn postgres_setup_wrapper(
             Some(primary_node.port),
         );
         let interactor = get_interactor(ssh)?;
-        crate::postgres_unit::setup::setup_postgres_primary(
+        setup_postgres_primary(
             &*interactor,
             &pg_version,
             "replicator",
@@ -79,6 +72,7 @@ pub fn postgres_setup_wrapper(
             &follower_ips,
             &app_node_ips,
             &db_configs,
+            &user_configs,
         )?;
 
         // 2. Setup follower nodes
@@ -100,7 +94,7 @@ pub fn postgres_setup_wrapper(
                 Some(follower_node.port),
             );
             let interactor = get_interactor(ssh)?;
-            crate::postgres_unit::setup::setup_postgres_follower(
+            setup_postgres_follower(
                 &*interactor,
                 &pg_version,
                 &primary_node.internal_ip,
@@ -125,51 +119,111 @@ pub fn postgres_setup_wrapper(
                 Some(app_node.port),
             );
             let interactor = get_interactor(ssh)?;
-            crate::postgres_unit::setup::setup_haproxy(
+
+            crate::postgres_unit::haproxy::setup_haproxy(
                 &*interactor,
                 &primary_node.internal_ip,
                 &follower_ips,
             )?;
         }
-    })
+    }
+
+    Ok(())
 }
 
-pub fn get_postgres_db_configs(config: &crate::config::Config) -> Vec<PostgresDbConfig> {
+// Parses database and user configs from TOML structure
+pub fn get_postgres_configs(
+    config: &crate::config::Config,
+) -> (Vec<PostgresDbConfig>, Vec<PostgresUserConfig>) {
     let mut db_configs = Vec::new();
+    let mut user_configs = std::collections::HashMap::new();
+
     if let Some(ref db) = config.db {
         if let Some(ref pg_map) = db.postgres {
+            // 1. Parse databases
             for (key, val) in pg_map {
-                if key == "enabled" || key == "version" {
+                if key == "enabled" || key == "version" || key == "users" {
                     continue;
                 }
+
                 if let Some(table) = val.as_table() {
                     let db_name = table
                         .get("db_name")
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
                         .to_string();
-                    let user = table
+
+                    if !db_name.is_empty() {
+                        db_configs.push(PostgresDbConfig {
+                            name: key.clone(),
+                            db_name,
+                        });
+                    }
+                }
+            }
+
+            // 2. config postgres users
+            // println!("\tConfigure postgres users");
+            configure_postgres_users(&mut user_configs, pg_map);
+        }
+    }
+
+    let users = user_configs.into_values().collect();
+
+    (db_configs, users)
+}
+
+pub fn configure_postgres_users(
+    user_configs: &mut std::collections::HashMap<String, PostgresUserConfig>,
+    pg_map: &std::collections::HashMap<String, toml::Value>,
+) {
+    if let Some(users_val) = pg_map.get("users") {
+        // Parse users array
+        if let Some(users_arr) = users_val.as_array() {
+            for u_val in users_arr {
+                if let Some(u_table) = u_val.as_table() {
+                    let user = u_table
                         .get("user")
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
                         .to_string();
-                    let password = table
-                        .get("password")
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string());
-                    if !db_name.is_empty() && !user.is_empty() {
-                        db_configs.push(PostgresDbConfig {
-                            name: key.clone(),
-                            db_name,
-                            user,
-                            password,
+
+                    if !user.is_empty() {
+                        let password = u_table
+                            .get("password")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+
+                        let mut databases = Vec::new();
+
+                        if let Some(db_list_val) = u_table.get("databases") {
+                            if let Some(db_arr) = db_list_val.as_array() {
+                                for db_item in db_arr {
+                                    if let Some(db_name_str) = db_item.as_str() {
+                                        databases.push(db_name_str.to_string());
+                                    }
+                                }
+                            }
+                        }
+
+                        let user_entry = user_configs.entry(user.clone()).or_insert_with(|| {
+                            PostgresUserConfig {
+                                user: user.clone(),
+                                password,
+                                databases: Vec::new(),
+                            }
                         });
+
+                        for db_name in databases {
+                            if !user_entry.databases.contains(&db_name) {
+                                user_entry.databases.push(db_name);
+                            }
+                        }
                     }
                 }
             }
         }
     }
-    db_configs
 }
 
 pub fn configure_postgres_primary_rules(
@@ -263,6 +317,7 @@ pub fn setup_postgres_primary(
     follower_ips: &[String],
     app_node_ips: &[String],
     db_configs: &[PostgresDbConfig],
+    user_configs: &[PostgresUserConfig],
 ) -> anyhow::Result<()> {
     println!("\tSetting up PostgreSQL primary node...");
     install_postgres(interactor, version)?;
@@ -287,20 +342,9 @@ pub fn setup_postgres_primary(
     );
     interactor.cmd(&format!("sudo -u postgres psql -c \"{}\"", replicator_sql))?;
 
-    // 5. Idempotently create databases and users
+    // 5. Idempotently create databases
     for db in db_configs {
-        println!(
-            "Setting up database '{}' and user '{}'...",
-            db.db_name, db.user
-        );
-        let user_sql = format!(
-            "DO \\$\\$ BEGIN IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{}') THEN CREATE ROLE {} WITH PASSWORD '{}' LOGIN; END IF; END \\$\\$;",
-            db.user,
-            db.user,
-            db.password.as_deref().unwrap_or("")
-        );
-        interactor.cmd(&format!("sudo -u postgres psql -c \"{}\"", user_sql))?;
-
+        println!("Setting up database '{}'...", db.db_name);
         let check_db_sql = format!("SELECT 1 FROM pg_database WHERE datname = '{}'", db.db_name);
         let db_exists = interactor.cmd(&format!(
             "sudo -u postgres psql -t -A -c \"{}\"",
@@ -308,8 +352,47 @@ pub fn setup_postgres_primary(
         ))?;
         if db_exists.stdout.trim() != "1" {
             interactor.cmd(&format!(
-                "sudo -u postgres psql -c \"CREATE DATABASE {} OWNER {};\"",
-                db.db_name, db.user
+                "sudo -u postgres psql -c \"CREATE DATABASE {};\"",
+                db.db_name
+            ))?;
+        }
+    }
+
+    // 6. Idempotently create users and grant permissions
+    for user in user_configs {
+        println!("Setting up user '{}'...", user.user);
+
+        let user_sql = format!(
+            "DO \\$\\$ BEGIN IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{}') THEN CREATE ROLE {} WITH PASSWORD '{}' LOGIN; END IF; END \\$\\$;",
+            user.user,
+            user.user,
+            user.password.as_deref().unwrap_or("")
+        );
+        interactor.cmd(&format!("sudo -u postgres psql -c \"{}\"", user_sql))?;
+
+        for db_ref in &user.databases {
+            // Find db_name corresponding to db_ref (which could be key or db_name itself)
+            let db_name = db_configs
+                .iter()
+                .find(|d| &d.name == db_ref || &d.db_name == db_ref)
+                .map(|d| d.db_name.as_str())
+                .unwrap_or(db_ref);
+
+            println!(
+                "Granting access for user '{}' to database '{}'...",
+                user.user, db_name
+            );
+
+            // Grant privileges on the database
+            interactor.cmd(&format!(
+                "sudo -u postgres psql -c \"GRANT ALL PRIVILEGES ON DATABASE {} TO {};\"",
+                db_name, user.user
+            ))?;
+
+            // Grant privileges on schema public inside that database
+            interactor.cmd(&format!(
+                "sudo -u postgres psql -d {} -c \"GRANT ALL ON SCHEMA public TO {};\"",
+                db_name, user.user
             ))?;
         }
     }
@@ -393,73 +476,6 @@ pub fn setup_postgres_follower(
 
     // Verify postgres is running. if not try start it. if can't start then print error and exit.
     crate::postgres_unit::helper::ensure_postgres_running(interactor, version);
-
-    Ok(())
-}
-
-pub fn setup_haproxy(
-    interactor: &dyn ServerInteractor,
-    primary_ip: &str,
-    follower_ips: &[String],
-) -> anyhow::Result<()> {
-    println!("\tSetting up HAProxy in front of the PostgreSQL cluster...");
-
-    println!("\tInstalling HAProxy...");
-    interactor.install_dependencies(vec!["haproxy".to_string()])?;
-
-    let mut haproxy_cfg = format!(
-        r#"
-global
-    log /dev/log local0
-    log /dev/log local1 notice
-    chroot /var/lib/haproxy
-    user haproxy
-    group haproxy
-    daemon
-
-defaults
-    log global
-    mode tcp
-    option tcplog
-    option dontlognull
-    retries 3
-    timeout connect 5000ms
-    timeout client 50000ms
-    timeout server 50000ms
-
-frontend postgres_front
-    bind *:5000
-    mode tcp
-    default_backend postgres_back
-
-backend postgres_back
-    mode tcp
-    option tcp-check
-    server postgres-primary {}:5432 check
-
-
-"#,
-        primary_ip
-    );
-
-    for (idx, follower) in follower_ips.iter().enumerate() {
-        haproxy_cfg.push_str(&format!(
-            "    server postgres-follower-{} {}:5432 check backup\n",
-            idx + 1,
-            follower
-        ));
-    }
-
-    println!("\tWriting HAProxy configuration...");
-    interactor.create_file("/tmp/haproxy.cfg.tmp", &haproxy_cfg)?;
-    interactor.cmd("sudo mv /tmp/haproxy.cfg.tmp /etc/haproxy/haproxy.cfg")?;
-    interactor.cmd("sudo chown root:root /etc/haproxy/haproxy.cfg")?;
-    interactor.cmd("sudo chmod 644 /etc/haproxy/haproxy.cfg")?;
-
-    println!("\tRestarting and enabling HAProxy service...");
-    interactor.cmd("sudo systemctl daemon-reload")?;
-    interactor.cmd("sudo systemctl enable haproxy")?;
-    interactor.cmd("sudo systemctl restart haproxy")?;
 
     Ok(())
 }

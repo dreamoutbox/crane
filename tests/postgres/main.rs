@@ -14,4 +14,5 @@ mod postgres {
     include!("../common/mock_s3.rs");
     include!("backup_test.rs");
     include!("restore_test.rs");
+    include!("config_test.rs");
 }
