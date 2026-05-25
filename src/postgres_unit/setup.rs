@@ -48,7 +48,7 @@ pub fn postgres_setup_wrapper(
         // 1. Setup primary node
         println!(
             "Setting up primary PostgreSQL node at {}...",
-            primary_node.host
+            primary_node.name
         );
 
         let private_key = find_private_key_for_user(&primary_node.user, config);
@@ -79,7 +79,7 @@ pub fn postgres_setup_wrapper(
         for follower_node in &pg_nodes[1..] {
             println!(
                 "Setting up follower PostgreSQL node at {}...",
-                follower_node.host
+                follower_node.name
             );
             let private_key = find_private_key_for_user(&follower_node.user, config);
             let private_key = if private_key.is_empty() {
@@ -105,7 +105,7 @@ pub fn postgres_setup_wrapper(
 
         // 3. Setup HAProxy on all vps nodes
         for app_node in &app_nodes {
-            println!("\tSetting up HAProxy on app node {}...", app_node.host);
+            println!("\tSetting up HAProxy on app node {}...", app_node.name);
             let private_key = find_private_key_for_user(&app_node.user, config);
             let private_key = if private_key.is_empty() {
                 get_any_private_key(config)

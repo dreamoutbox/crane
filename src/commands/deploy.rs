@@ -48,7 +48,7 @@ pub fn run(
     for node in &app_nodes {
         println!(
             "Installing dependencies on {}@{} (port: {})...",
-            node.user, node.host, node.port
+            node.user, node.name, node.port
         );
         let private_key = find_private_key_for_user(&node.user, &config);
         let private_key = if private_key.is_empty() {
@@ -147,8 +147,8 @@ pub fn run(
 
             for node in app_nodes {
                 println!(
-                    "\nDeploying {} to node: {}@{} (port: {})",
-                    app.name, node.user, node.host, node.port
+                    "\n[{}] Deploying to node {}: {}@{} (port: {})",
+                    app.name, node.user, node.name, node.host, node.port
                 );
 
                 let private_key = find_private_key_for_user(&node.user, &config);
@@ -364,7 +364,7 @@ pub fn run(
                 hosts_entries.sort_by(|a, b| a.0.cmp(&b.0));
                 hosts_entries.dedup_by(|a, b| a.0 == b.0);
 
-                println!("\tUpdating /etc/hosts on node {}...", node.host);
+                println!("\tUpdating /etc/hosts on node {}...", node.name);
                 update_hosts(&*node_interactor, &hosts_entries)?;
 
                 // 6. Prune old releases

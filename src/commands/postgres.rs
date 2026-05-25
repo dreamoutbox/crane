@@ -1,6 +1,8 @@
 use crate::config;
 use crate::postgres_unit::entity::BackupRegistry;
 use crate::postgres_unit::entity::PostgresNode;
+use crate::postgres_unit::helper::connect_to_node;
+use crate::postgres_unit::helper::find_node_config_with_fallback;
 use crate::postgres_unit::helper::{get_pg_version, get_replica_pass};
 use crate::postgres_unit::tasks::*;
 use crate::s3::get_s3_config;
@@ -58,7 +60,7 @@ pub fn promote(
         // 1. Demote the target follower node first to follow the current leader (synchronize fully)
         println!(
             "\nSynchronizing target follower node {} with current leader {} before promotion...",
-            target_conf.host, leader.host
+            target_conf.name, leader.name
         );
         run_demote_node(
             &target_conf,
@@ -73,9 +75,10 @@ pub fn promote(
     // Configure target node's primary rules before promotion
     println!(
         "\nConfiguring replication and local trust rules on node {}...",
-        target_conf.host
+        target_conf.name
     );
     let target_interactor = connect_to_node(&target_conf, &config, get_interactor)?;
+
     let target_follower_ips: Vec<String> = config
         .nodes
         .iter()
@@ -101,7 +104,7 @@ pub fn promote(
     // 2. Promote the target node to leader
     println!(
         "\nPromoting node {} to PostgreSQL leader...",
-        target_conf.host
+        target_conf.name
     );
     let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", pg_version);
     let promote_cmd = format!(
@@ -122,7 +125,7 @@ pub fn promote(
         if node.internal_ip != target_conf.internal_ip {
             println!(
                 "\nDemoting node {} to follow new leader {}...",
-                node.host, target_conf.host
+                node.name, target_conf.name
             );
             run_demote_node(
                 &node,
@@ -154,7 +157,7 @@ pub fn promote(
     for app_node in &app_nodes {
         println!(
             "\nUpdating HAProxy configuration on app node {}...",
-            app_node.host
+            app_node.name
         );
         let app_interactor = connect_to_node(app_node, &config, get_interactor)?;
 
@@ -167,7 +170,7 @@ pub fn promote(
 
     println!(
         "\nPROMOTION TO LEADER COMPLETE FOR NODE '{}'",
-        target_conf.host
+        target_conf.name
     );
     Ok(())
 }
@@ -221,7 +224,7 @@ pub fn demote(
 
     println!(
         "\nDemoting node {} to follow leader {}...",
-        target_conf.host, leader.host
+        target_conf.name, leader.name
     );
 
     run_demote_node(
@@ -233,7 +236,7 @@ pub fn demote(
         get_interactor,
     )?;
 
-    println!("\nDEMOTION COMPLETE FOR NODE '{}'", target_conf.host);
+    println!("\nDEMOTION COMPLETE FOR NODE '{}'", target_conf.name);
     Ok(())
 }
 
