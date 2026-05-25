@@ -60,6 +60,15 @@ fn main() {
                                 .required(true)
                                 .help("The ID of the backup to restore"),
                         ),
+                )
+                .subcommand(
+                    Command::new("logs")
+                        .about("Get the logs of PostgreSQL from a node")
+                        .arg(
+                            Arg::new("node")
+                                .required(true)
+                                .help("The host/IP or name of the node to get logs from"),
+                        ),
                 ),
         )
         .get_matches();
@@ -150,6 +159,18 @@ fn main() {
                         crane::server_interactor::get_interactor,
                     ) {
                         eprintln!("Restore failed: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+
+                Some(("logs", sub_sub_m)) => {
+                    let target_node = sub_sub_m.get_one::<String>("node").unwrap();
+                    if let Err(e) = crane::commands::postgres::logs(
+                        config_path,
+                        target_node,
+                        crane::server_interactor::get_interactor,
+                    ) {
+                        eprintln!("Logs failed: {}", e);
                         std::process::exit(1);
                     }
                 }

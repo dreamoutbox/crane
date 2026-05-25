@@ -6,10 +6,9 @@ pub fn find_node_config<'a>(
     target: &str,
     config: &'a config::Config,
 ) -> Option<&'a config::NodeConfig> {
-    config
-        .nodes
-        .iter()
-        .find(|n| n.host == target || n.internal_ip == target || n.public_ip == target)
+    config.nodes.iter().find(|n| {
+        n.host == target || n.internal_ip == target || n.public_ip == target || n.name == target
+    })
 }
 
 pub fn connect_to_node(

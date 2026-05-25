@@ -1,6 +1,7 @@
 # crane.toml
 
 [[nodes]]
+name = "vps1"
 host = "localhost"
 public_ip = "localhost"
 internal_ip = "10.0.0.11"
@@ -9,6 +10,7 @@ user = "admin"
 roles = ["app", "traefik", "postgres", "redis"]
 
 [[nodes]]
+name = "vps2"
 host = "localhost"
 public_ip = "localhost"
 internal_ip = "10.0.0.12"
@@ -18,6 +20,7 @@ roles = ["app", "traefik", "postgres", "redis"]
 
 
 [[nodes]]
+name = "vps3"
 host = "localhost"
 public_ip = "localhost"
 internal_ip = "10.0.0.13"

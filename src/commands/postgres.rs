@@ -522,3 +522,38 @@ pub fn restore(
     println!("Restore complete! PostgreSQL is online.");
     Ok(())
 }
+
+pub fn logs(
+    config_path: &Path,
+    target_node_str: &str,
+    get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
+) -> anyhow::Result<()> {
+    let config = config::load_config(config_path)?;
+    let target_conf = find_node_config_with_fallback(target_node_str, &config, get_interactor)
+        .ok_or_else(|| anyhow::anyhow!("Node '{}' not found in configuration", target_node_str))?;
+
+    if !target_conf.roles.contains(&"postgres".to_string()) {
+        anyhow::bail!(
+            "Node '{}' does not have the 'postgres' role",
+            target_node_str
+        );
+    }
+
+    let pg_version = config
+        .db
+        .as_ref()
+        .and_then(|db| db.postgres.as_ref())
+        .and_then(|pg| pg.get("version"))
+        .and_then(|val| val.as_str())
+        .unwrap_or("16")
+        .to_string();
+
+    let interactor = connect_to_node(&target_conf, &config, get_interactor)?;
+
+    let log_path = format!("/var/log/postgresql/postgresql-{}-main.log", pg_version);
+    let cmd = format!("sudo tail -n 100 {}", log_path);
+    let output = interactor.cmd(&cmd)?;
+    print!("{}", output.stdout);
+
+    Ok(())
+}

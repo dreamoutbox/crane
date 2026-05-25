@@ -4,6 +4,7 @@ use crane::postgres_unit::setup::get_postgres_configs;
 fn test_get_postgres_configs() {
     let toml_str = r#"
             [[nodes]]
+            name = "vps1"
             host = "localhost"
             public_ip = "localhost"
             internal_ip = "10.0.0.11"
