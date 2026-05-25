@@ -23,7 +23,7 @@ pub fn install_postgres(interactor: &dyn ServerInteractor, version: &str) -> any
         if interactor.cmd(&status_cmd).is_err() {
             println!("\tPostgreSQL {} is stopped, starting it...", version);
             let start_cmd = format!(
-                "sudo -u postgres {} -D /var/lib/postgresql/{}/main -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf\" start > /dev/null 2>&1 < /dev/null",
+                "sudo -u postgres {} -D /var/lib/postgresql/{}/main -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf -c restore_command=false\" start > /dev/null 2>&1 < /dev/null",
                 pg_ctl, version, version
             );
             let _ = interactor.cmd(&start_cmd);
@@ -55,7 +55,7 @@ pub fn install_postgres(interactor: &dyn ServerInteractor, version: &str) -> any
     interactor.cmd("sudo systemctl enable postgresql")?;
     println!("\tStarting PostgreSQL cluster...");
     let start_cmd = format!(
-        "sudo -u postgres {} -D /var/lib/postgresql/{}/main -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf\" start > /dev/null 2>&1 < /dev/null",
+        "sudo -u postgres {} -D /var/lib/postgresql/{}/main -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf -c restore_command=false\" start > /dev/null 2>&1 < /dev/null",
         pg_ctl, version, version
     );
     let _ = interactor.cmd(&start_cmd);

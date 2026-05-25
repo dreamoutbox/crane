@@ -31,7 +31,7 @@ pub fn is_postgres_running(interactor: &dyn ServerInteractor, version: &str) -> 
 pub fn start_postgres(interactor: &dyn ServerInteractor, version: &str) -> anyhow::Result<()> {
     let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", version);
     let postgres_start_cmd = format!(
-        "sudo -u postgres {} -D /var/lib/postgresql/{}/main -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf\" start > /dev/null 2>&1 < /dev/null",
+        "sudo -u postgres {} -D /var/lib/postgresql/{}/main -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf -c restore_command=false\" start > /dev/null 2>&1 < /dev/null",
         pg_ctl, version, version
     );
 

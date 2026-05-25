@@ -17,8 +17,12 @@ pub fn run_backup(
     let date_output = interactor.cmd("date +'%Y%m%d%H%M%S%3N %Y-%m-%d %H:%M:%S'")?;
     let parts: Vec<&str> = date_output.stdout.trim().split_whitespace().collect();
     if parts.len() < 3 {
-        anyhow::bail!("Failed to parse date output from server: '{}'", date_output.stdout);
+        anyhow::bail!(
+            "Failed to parse date output from server: '{}'",
+            date_output.stdout
+        );
     }
+
     let id = parts[0].to_string();
     let date = parts[1].to_string();
     let time = parts[2].to_string();
@@ -360,8 +364,10 @@ pub fn run_restore(
     interactor.cmd(&format!("sudo chmod 700 {}", pgdata_dir))?;
 
     // Restart postgres service using direct pg_ctl command (matching setup.rs follower setup)
+    // We add `-c restore_command=false` so PostgreSQL 12+ can perform archive recovery from
+    // the backup_label checkpoint without needing standby.signal or an actual archive connection.
     let start_cmd = format!(
-        "sudo -u postgres {} -D {} -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf\" start > /dev/null 2>&1 < /dev/null",
+        "sudo -u postgres {} -D {} -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf -c restore_command=false\" start > /dev/null 2>&1 < /dev/null",
         pg_ctl, pgdata_dir, pg_version
     );
     interactor.cmd(&start_cmd)?;

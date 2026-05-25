@@ -553,7 +553,7 @@ pub fn logs(
     let log_path = format!("/var/log/postgresql/postgresql-{}-main.log", pg_version);
     let cmd = format!("sudo tail -n 100 {}", log_path);
     let output = interactor.cmd(&cmd)?;
-    print!("{}", output.stdout);
+    print!("{}\n", output.stdout);
 
     Ok(())
 }

@@ -301,7 +301,7 @@ pub fn configure_postgres_primary_rules(
     println!("\tRestarting PostgreSQL cluster to apply replication config...");
     let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", version);
     let restart_cmd = format!(
-        "sudo -u postgres {} -D /var/lib/postgresql/{}/main -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf\" restart > /dev/null 2>&1 < /dev/null",
+        "sudo -u postgres {} -D /var/lib/postgresql/{}/main -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf -c restore_command=false\" restart > /dev/null 2>&1 < /dev/null",
         pg_ctl, version, version
     );
     interactor.cmd(&restart_cmd)?;
@@ -469,7 +469,7 @@ pub fn setup_postgres_follower(
     println!("\tStarting PostgreSQL cluster on follower...");
     let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", version);
     let start_cmd = format!(
-        "sudo -u postgres {} -D /var/lib/postgresql/{}/main -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf\" start > /dev/null 2>&1 < /dev/null",
+        "sudo -u postgres {} -D /var/lib/postgresql/{}/main -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf -c restore_command=false\" start > /dev/null 2>&1 < /dev/null",
         pg_ctl, version, version
     );
     interactor.cmd(&start_cmd)?;
