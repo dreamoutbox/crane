@@ -44,3 +44,15 @@ fn test_get_postgres_configs() {
     assert_eq!(users[0].password, Some("app1".to_string()));
     assert_eq!(users[0].databases, vec!["myapp".to_string()]);
 }
+
+#[test]
+fn test_interval_to_cron() {
+    use crane::postgres_unit::helper::interval_to_cron;
+    assert_eq!(interval_to_cron("1m"), "* * * * *");
+    assert_eq!(interval_to_cron("5m"), "*/5 * * * *");
+    assert_eq!(interval_to_cron("1h"), "0 * * * *");
+    assert_eq!(interval_to_cron("2h"), "0 */2 * * *");
+    assert_eq!(interval_to_cron("1d"), "0 0 * * *");
+    assert_eq!(interval_to_cron("3d"), "0 0 */3 * *");
+    assert_eq!(interval_to_cron("invalid"), "0 0 * * *");
+}

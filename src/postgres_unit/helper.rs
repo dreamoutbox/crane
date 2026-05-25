@@ -1,4 +1,4 @@
-use crate::config;
+use crate::config::{self, PostgresBackupSchedule};
 use crate::server_interactor::server_interactor_trait::ServerInteractor;
 use crate::ssh::SSHSession;
 
@@ -143,4 +143,65 @@ pub fn ensure_postgres_running(interactor: &dyn ServerInteractor, version: &str)
     //     "PostgreSQL {} failed to start or respond to status check",
     //     version
     // )
+}
+
+pub fn get_postgres_backup_schedule(
+    config: &crate::config::Config,
+) -> Option<PostgresBackupSchedule> {
+    if let Some(ref db) = config.db {
+        if let Some(ref pg_map) = db.postgres {
+            if let Some(backup_val) = pg_map.get("backup") {
+                if let Some(backup_table) = backup_val.as_table() {
+                    let full = backup_table
+                        .get("full_backup_every")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let incremental = backup_table
+                        .get("incremental_backup_every")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    if !full.is_empty() && !incremental.is_empty() {
+                        return Some(PostgresBackupSchedule {
+                            full_backup_every: full,
+                            incremental_backup_every: incremental,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+pub fn interval_to_cron(interval: &str) -> String {
+    let num_str: String = interval.chars().filter(|c| c.is_ascii_digit()).collect();
+    let unit: String = interval.chars().filter(|c| c.is_alphabetic()).collect();
+    let num: u32 = num_str.parse().unwrap_or(1);
+
+    match unit.as_str() {
+        "m" => {
+            if num == 1 {
+                "* * * * *".to_string()
+            } else {
+                format!("*/{} * * * *", num)
+            }
+        }
+        "h" => {
+            if num == 1 {
+                "0 * * * *".to_string()
+            } else {
+                format!("0 */{} * * *", num)
+            }
+        }
+        "d" => {
+            if num == 1 {
+                "0 0 * * *".to_string()
+            } else {
+                format!("0 0 */{} * *", num)
+            }
+        }
+        _ => "0 0 * * *".to_string(), // default to daily
+    }
 }

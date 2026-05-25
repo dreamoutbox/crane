@@ -1,7 +1,11 @@
 use crate::{
     config::{self, PostgresDbConfig, PostgresUserConfig},
     helper::keys::{find_private_key_for_user, get_any_private_key},
-    postgres_unit::install::install_postgres,
+    postgres_unit::{
+        helper::{get_postgres_backup_schedule, interval_to_cron},
+        install::install_postgres,
+        python_backup_script::PYTHON_BACKUP_SCRIPT,
+    },
     server_interactor::server_interactor_trait::ServerInteractor,
     ssh::SSHSession,
 };
@@ -73,6 +77,8 @@ pub fn postgres_setup_wrapper(
             &app_node_ips,
             &db_configs,
             &user_configs,
+            config,
+            dot_env,
         )?;
 
         // 2. Setup follower nodes
@@ -142,7 +148,7 @@ pub fn get_postgres_configs(
         if let Some(ref pg_map) = db.postgres {
             // 1. Parse databases
             for (key, val) in pg_map {
-                if key == "enabled" || key == "version" || key == "users" {
+                if key == "enabled" || key == "version" || key == "users" || key == "backup" {
                     continue;
                 }
 
@@ -318,6 +324,8 @@ pub fn setup_postgres_primary(
     app_node_ips: &[String],
     db_configs: &[PostgresDbConfig],
     user_configs: &[PostgresUserConfig],
+    config: &crate::config::Config,
+    dot_env: &std::collections::HashMap<String, String>,
 ) -> anyhow::Result<()> {
     println!("\tSetting up PostgreSQL primary node...");
     install_postgres(interactor, version)?;
@@ -395,6 +403,84 @@ pub fn setup_postgres_primary(
                 db_name, user.user
             ))?;
         }
+    }
+
+    configure_postgres_backup(interactor, version, replica_pass, config, dot_env)?;
+
+    Ok(())
+}
+
+fn configure_postgres_backup(
+    interactor: &dyn ServerInteractor,
+    version: &str,
+    replica_pass: &str,
+    config: &config::Config,
+    dot_env: &std::collections::HashMap<String, String>,
+) -> anyhow::Result<()> {
+    if let Some(schedule) = get_postgres_backup_schedule(config) {
+        println!("\tSetting up automated cron backups...");
+
+        // Resolve S3Config
+        let s3_config = crate::s3::get_s3_config(config, dot_env)?;
+
+        // Ensure directories exist
+        interactor.cmd("sudo mkdir -p /etc/crane /opt/crane /var/lib/postgresql/backups")?;
+        interactor.cmd("sudo chown postgres:postgres /var/lib/postgresql/backups")?;
+        interactor.cmd("sudo chmod 755 /var/lib/postgresql/backups")?;
+
+        // Write postgres-backup-config.json
+        let s3_json_str = format!(
+            r#"
+{{
+  "bucket": "{}",
+  "region": "{}",
+  "endpoint": {},
+  "access_key": "{}",
+  "secret_key": "{}",
+  "pg_version": "{}",
+  "replica_pass": "{}"
+}}"#,
+            s3_config.bucket,
+            s3_config.region,
+            s3_config
+                .endpoint
+                .as_ref()
+                .map(|e| format!("\"{}\"", e))
+                .unwrap_or_else(|| "null".to_string()),
+            s3_config.access_key,
+            s3_config.secret_key,
+            version,
+            replica_pass
+        );
+        // Write postgres-backup-config.json via tmp
+        interactor.create_file("/tmp/postgres-backup-config.json.tmp", &s3_json_str)?;
+        interactor.cmd(
+            "sudo mv /tmp/postgres-backup-config.json.tmp /etc/crane/postgres-backup-config.json",
+        )?;
+        interactor.cmd("sudo chown root:root /etc/crane/postgres-backup-config.json")?;
+        interactor.cmd("sudo chmod 600 /etc/crane/postgres-backup-config.json")?;
+
+        // Write postgres-backup.py via tmp
+        interactor.create_file("/tmp/postgres-backup.py.tmp", PYTHON_BACKUP_SCRIPT)?;
+        interactor.cmd("sudo mv /tmp/postgres-backup.py.tmp /opt/crane/postgres-backup.py")?;
+        interactor.cmd("sudo chown root:root /opt/crane/postgres-backup.py")?;
+        interactor.cmd("sudo chmod 755 /opt/crane/postgres-backup.py")?;
+
+        // Write cron schedule via tmp
+        let full_cron = interval_to_cron(&schedule.full_backup_every);
+        let incr_cron = interval_to_cron(&schedule.incremental_backup_every);
+        let cron_content = format!(
+            r#"
+# Crane Postgres Backups
+{} root python3 /opt/crane/postgres-backup.py full >> /var/log/crane-backup.log 2>&1
+{} root python3 /opt/crane/postgres-backup.py incr >> /var/log/crane-backup.log 2>&1
+            "#,
+            full_cron, incr_cron
+        );
+        interactor.create_file("/tmp/postgres-backup-cron.tmp", &cron_content)?;
+        interactor.cmd("sudo mv /tmp/postgres-backup-cron.tmp /etc/cron.d/postgres-backup")?;
+        interactor.cmd("sudo chown root:root /etc/cron.d/postgres-backup")?;
+        interactor.cmd("sudo chmod 644 /etc/cron.d/postgres-backup")?;
     }
 
     Ok(())

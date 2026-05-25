@@ -45,10 +45,14 @@ pub fn install_postgres(interactor: &dyn ServerInteractor, version: &str) -> any
     println!("\tUpdating package lists...");
     interactor.cmd("sudo apt-get update")?;
 
-    println!("\tInstalling postgresql-{} and client...", version);
+    println!(
+        "\tInstalling postgresql-{} + client + python3-boto3...",
+        version
+    );
     interactor.install_dependencies(vec![
         format!("postgresql-{}", version),
         format!("postgresql-client-{}", version),
+        "python3-boto3".to_string(),
     ])?;
 
     println!("\tEnabling PostgreSQL service for boot...");

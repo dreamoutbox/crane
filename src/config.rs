@@ -84,6 +84,12 @@ pub struct BackupConfig {
     pub s3: Option<HashMap<String, toml::Value>>,
 }
 
+#[derive(Debug, Clone)]
+pub struct PostgresBackupSchedule {
+    pub full_backup_every: String,
+    pub incremental_backup_every: String,
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct MonitorConfig {
     pub interval: Option<u32>,
