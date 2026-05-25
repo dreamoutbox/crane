@@ -1,7 +1,7 @@
 use crate::config;
 use crate::postgres_unit::entity::BackupRegistry;
+use crate::postgres_unit::entity::PostgresNode;
 use crate::postgres_unit::helper::{get_pg_version, get_replica_pass};
-use crate::postgres_unit::postgres_node::PostgresNode;
 use crate::postgres_unit::tasks::*;
 use crate::s3::get_s3_config;
 use crate::s3::s3_client::{RealS3Client, S3Client};
@@ -272,7 +272,7 @@ pub fn status(
             Ok(interactor) => {
                 // 1. Get Hostname
                 if let Ok(h) = interactor.cmd("hostname") {
-                    let h_trimmed = h.trim();
+                    let h_trimmed = h.stdout.trim();
                     if !h_trimmed.is_empty() {
                         hostname = h_trimmed.to_string();
                     }
@@ -287,7 +287,7 @@ pub fn status(
                 let db_ver_str = interactor.cmd(version_cmd);
 
                 if let Ok(rec) = is_recovery {
-                    let rec_trimmed = rec.trim();
+                    let rec_trimmed = rec.stdout.trim();
                     if rec_trimmed == "f" {
                         role = "Leader".to_string();
                         primary_host = hostname.clone();
@@ -299,7 +299,7 @@ pub fn status(
                 }
 
                 if let Ok(v_str) = db_ver_str {
-                    let v_trimmed = v_str.trim();
+                    let v_trimmed = v_str.stdout.trim();
                     if let Some(major) = v_trimmed.split('.').next() {
                         let major_clean = major.trim();
                         if !major_clean.is_empty() {

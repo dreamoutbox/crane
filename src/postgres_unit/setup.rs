@@ -1,6 +1,7 @@
 use crate::{
     config,
     helper::keys::{find_private_key_for_user, get_any_private_key},
+    postgres_unit::install::install_postgres,
     server_interactor::server_interactor_trait::ServerInteractor,
     ssh::SSHSession,
 };
@@ -171,72 +172,6 @@ pub fn get_postgres_db_configs(config: &crate::config::Config) -> Vec<PostgresDb
     db_configs
 }
 
-pub fn install_postgres_repo_and_pkg(
-    interactor: &dyn ServerInteractor,
-    version: &str,
-) -> anyhow::Result<()> {
-    let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", version);
-    if interactor.cmd(&format!("test -f {}", pg_ctl)).is_ok() {
-        println!("\tPostgreSQL {} is already installed.", version);
-        let main_dir = format!("/var/lib/postgresql/{}/main", version);
-        if interactor.cmd(&format!("test -d {}", main_dir)).is_err() {
-            println!(
-                "\tPostgreSQL {} data directory is missing, initializing it...",
-                version
-            );
-            let initdb_cmd = format!(
-                "sudo -u postgres /usr/lib/postgresql/{}/bin/initdb -D {}",
-                version, main_dir
-            );
-            interactor.cmd(&initdb_cmd)?;
-        }
-        let status_cmd = format!(
-            "sudo -u postgres {} -D /var/lib/postgresql/{}/main status",
-            pg_ctl, version
-        );
-        if interactor.cmd(&status_cmd).is_err() {
-            println!("\tPostgreSQL {} is stopped, starting it...", version);
-            let start_cmd = format!(
-                "sudo -u postgres {} -D /var/lib/postgresql/{}/main -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf\" start > /dev/null 2>&1 < /dev/null",
-                pg_ctl, version, version
-            );
-            let _ = interactor.cmd(&start_cmd);
-        }
-        return Ok(());
-    }
-
-    println!("\tEnsuring GnuPG and Curl are installed...");
-    interactor.install_dependencies(vec!["curl".to_string(), "gnupg".to_string()])?;
-
-    println!(
-        "Adding official PostgreSQL repository for version {}...",
-        version
-    );
-    interactor.cmd("sudo rm -f /etc/apt/trusted.gpg.d/postgresql.gpg")?;
-    interactor.cmd("sudo sh -c 'echo \"deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main\" > /etc/apt/sources.list.d/pgdg.list'")?;
-    interactor.cmd("curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg")?;
-
-    println!("\tUpdating package lists...");
-    interactor.cmd("sudo apt-get update")?;
-
-    println!("\tInstalling postgresql-{} and client...", version);
-    interactor.install_dependencies(vec![
-        format!("postgresql-{}", version),
-        format!("postgresql-client-{}", version),
-    ])?;
-
-    println!("\tEnabling PostgreSQL service for boot...");
-    interactor.cmd("sudo systemctl enable postgresql")?;
-    println!("\tStarting PostgreSQL cluster...");
-    let start_cmd = format!(
-        "sudo -u postgres {} -D /var/lib/postgresql/{}/main -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf\" start > /dev/null 2>&1 < /dev/null",
-        pg_ctl, version, version
-    );
-    let _ = interactor.cmd(&start_cmd);
-
-    Ok(())
-}
-
 pub fn configure_postgres_primary_rules(
     interactor: &dyn ServerInteractor,
     version: &str,
@@ -256,8 +191,8 @@ pub fn configure_postgres_primary_rules(
     // 2. Configure pg_hba.conf
     let pg_hba_path = format!("/etc/postgresql/{}/main/pg_hba.conf", version);
     let existing_hba = interactor.cmd(&format!("sudo cat '{}'", pg_hba_path))?;
+    let mut updated_hba = existing_hba.stdout.clone();
 
-    let mut updated_hba = existing_hba.clone();
     // Allow local connections without password (trust)
     updated_hba = updated_hba.replace(
         "local   all             postgres                                peer",
@@ -301,7 +236,7 @@ pub fn configure_postgres_primary_rules(
         updated_hba.push_str(&new_rules);
     }
 
-    if updated_hba != existing_hba {
+    if updated_hba != existing_hba.stdout {
         interactor.create_file("/tmp/pg_hba.conf.tmp", &updated_hba)?;
         interactor.cmd(&format!("sudo mv /tmp/pg_hba.conf.tmp '{}'", pg_hba_path))?;
         interactor.cmd(&format!("sudo chown postgres:postgres '{}'", pg_hba_path))?;
@@ -368,7 +303,7 @@ pub fn setup_postgres_primary(
             "sudo -u postgres psql -t -A -c \"{}\"",
             check_db_sql
         ))?;
-        if db_exists.trim() != "1" {
+        if db_exists.stdout.trim() != "1" {
             interactor.cmd(&format!(
                 "sudo -u postgres psql -c \"CREATE DATABASE {} OWNER {};\"",
                 db.db_name, db.user
@@ -414,7 +349,7 @@ pub fn setup_postgres_follower(
     println!("\tConfiguring local trust on follower pg_hba.conf...");
     let pg_hba_path = format!("/etc/postgresql/{}/main/pg_hba.conf", version);
     if let Ok(existing_hba) = interactor.cmd(&format!("sudo cat '{}'", pg_hba_path)) {
-        let mut updated_hba = existing_hba.clone();
+        let mut updated_hba = existing_hba.stdout.clone();
         updated_hba = updated_hba.replace(
             "local   all             postgres                                peer",
             "local   all             postgres                                trust",
@@ -431,7 +366,7 @@ pub fn setup_postgres_follower(
             "host    all             all             ::1/128                 scram-sha-256",
             "host    all             all             ::1/128                 trust",
         );
-        if updated_hba != existing_hba {
+        if updated_hba != existing_hba.stdout {
             interactor.create_file("/tmp/pg_hba.conf.tmp", &updated_hba)?;
             interactor.cmd(&format!("sudo mv /tmp/pg_hba.conf.tmp '{}'", pg_hba_path))?;
             interactor.cmd(&format!("sudo chown postgres:postgres '{}'", pg_hba_path))?;

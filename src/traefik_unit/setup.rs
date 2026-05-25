@@ -73,6 +73,9 @@ timeout = "1s"
     interactor.cmd(&format!("sudo chown root:root '{}'", dest_traefik_path))?;
     interactor.cmd(&format!("sudo chmod 644 '{}'", dest_traefik_path))?;
 
+    println!("\tUpdated traefik config at {}", dest_traefik_path);
+
+    println!("\tReloading traefik");
     if let Err(e) = interactor.cmd("sudo systemctl reload traefik") {
         println!(
             "Warning: failed to reload traefik (it might not be running yet): {}",
@@ -80,8 +83,10 @@ timeout = "1s"
         );
 
         let traefik_start_output = interactor.cmd("sudo systemctl start traefik")?;
-        println!("traefik_start_output: {}", traefik_start_output);
+        println!("traefik_start_output: {}", traefik_start_output.stdout);
     }
+
+    println!("\n\tTraefik reloaded successfully\n\n");
 
     Ok(())
 }

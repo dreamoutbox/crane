@@ -3,7 +3,7 @@ use crate::server_interactor::server_interactor_trait::ServerInteractor;
 pub fn install_traefik(interactor: &dyn ServerInteractor) -> anyhow::Result<()> {
     // Check if Traefik binary is already installed
     let check = interactor.cmd("which traefik");
-    let binary_installed = check.is_ok() && !check.unwrap().trim().is_empty();
+    let binary_installed = check.is_ok() && !check.unwrap().stdout.trim().is_empty();
 
     if !binary_installed {
         println!("Installing Traefik on remote server...");

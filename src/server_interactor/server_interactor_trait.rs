@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 
+use crate::ssh::CmdOutput;
+
 pub trait ServerInteractor {
     // BASIC
     fn whoami(&self) -> anyhow::Result<String>;
-    fn cmd(&self, command: &str) -> anyhow::Result<String>;
+    fn cmd(&self, command: &str) -> anyhow::Result<CmdOutput>;
     fn get_os_info(&self) -> anyhow::Result<String>;
 
     // FILES

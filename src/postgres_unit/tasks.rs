@@ -52,7 +52,7 @@ pub fn find_node_config_with_fallback(
     for node in pg_nodes {
         if let Ok(interactor) = connect_to_node(&node, config, get_interactor) {
             if let Ok(h) = interactor.cmd("hostname") {
-                if h.trim() == target {
+                if h.stdout.trim() == target {
                     return Some(node);
                 }
             }
@@ -78,7 +78,7 @@ pub fn postgres_get_leader(
             let cmd = r#"sudo -u postgres psql -t -A -c "select pg_is_in_recovery();""#;
 
             if let Ok(output) = interactor.cmd(cmd) {
-                if output.trim() == "f" {
+                if output.stdout.trim() == "f" {
                     return Ok(Some(node));
                 }
             }

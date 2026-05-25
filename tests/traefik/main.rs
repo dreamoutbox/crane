@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crane::server_interactor::server_interactor_trait::{ServerInteractor, ServiceRegister, UserRegister};
 use crane::traefik_unit::install::install_traefik;
 use crane::traefik_unit::setup::setup_traefik;
+use crane::ssh::CmdOutput;
 
 include!("../common/mock_interactor.rs");
 

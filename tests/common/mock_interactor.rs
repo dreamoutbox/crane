@@ -18,34 +18,37 @@ impl ServerInteractor for MockInteractor {
     fn whoami(&self) -> anyhow::Result<String> {
         Ok("postgres".to_string())
     }
-    fn cmd(&self, command: &str) -> anyhow::Result<String> {
+    fn cmd(&self, command: &str) -> anyhow::Result<CmdOutput> {
         self.commands.borrow_mut().push(command.to_string());
-        if command.contains("date") {
+        let stdout = if command.contains("date") {
             let count = self
                 .commands
                 .borrow()
                 .iter()
                 .filter(|c| c.contains("date"))
                 .count();
-            let date_str = self
-                .simulated_dates
+            self.simulated_dates
                 .get(count - 1)
                 .cloned()
-                .unwrap_or_else(|| "20251211152749155 2025-12-11 15:27:49".to_string());
-            Ok(date_str)
+                .unwrap_or_else(|| "20251211152749155 2025-12-11 15:27:49".to_string())
         } else if command.contains("pg_is_in_recovery") {
-            Ok("f".to_string())
+            "f".to_string()
         } else if command.contains("lsb_release") {
-            Ok("distro=debian".to_string())
+            "distro=debian".to_string()
         } else if command.contains("test -f") {
             if command.contains("registry.toml") {
-                Ok("yes".to_string())
+                "yes".to_string()
             } else {
-                Ok("no".to_string())
+                "no".to_string()
             }
         } else {
-            Ok("".to_string())
-        }
+            "".to_string()
+        };
+        Ok(CmdOutput {
+            stdout,
+            stderr: "".to_string(),
+            exit_code: 0,
+        })
     }
     fn get_os_info(&self) -> anyhow::Result<String> {
         Ok("Linux".to_string())

@@ -62,6 +62,7 @@ pub fn run(
             private_key,
             Some(node.port),
         );
+
         let interactor = get_interactor(ssh)?;
         interactor.install_dependencies(all_deps.clone())?;
 
@@ -397,7 +398,7 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                             port, health_path
                         );
                         if let Ok(code) = interactor.cmd(&curl_cmd) {
-                            if code.trim() == "200" {
+                            if code.stdout.trim() == "200" {
                                 healthy = true;
                                 break;
                             }
@@ -469,6 +470,7 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 let releases_dir = format!("/opt/{}/releases", app.name);
                 if let Ok(list_output) = interactor.cmd(&format!("ls -1d {}/*", releases_dir)) {
                     let mut dirs: Vec<String> = list_output
+                        .stdout
                         .lines()
                         .map(|s| s.trim().to_string())
                         .filter(|s| !s.is_empty())

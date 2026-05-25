@@ -15,9 +15,9 @@ pub fn run_backup(
 ) -> anyhow::Result<BackupMetadata> {
     // 1. Get Date and Time from DB Node
     let date_output = interactor.cmd("date +'%Y%m%d%H%M%S%3N %Y-%m-%d %H:%M:%S'")?;
-    let parts: Vec<&str> = date_output.trim().split_whitespace().collect();
+    let parts: Vec<&str> = date_output.stdout.trim().split_whitespace().collect();
     if parts.len() < 3 {
-        anyhow::bail!("Failed to parse date output from server: '{}'", date_output);
+        anyhow::bail!("Failed to parse date output from server: '{}'", date_output.stdout);
     }
     let id = parts[0].to_string();
     let date = parts[1].to_string();
@@ -56,7 +56,7 @@ pub fn run_backup(
                 "test -f {} && echo 'yes' || echo 'no'",
                 parent_manifest
             ))?;
-            if test_manifest.trim() != "yes" {
+            if test_manifest.stdout.trim() != "yes" {
                 // Recreate parent directory and restore manifest from S3
                 interactor.cmd(&format!(
                     "sudo -u postgres mkdir -p /var/lib/postgresql/backups/{}",
@@ -103,7 +103,7 @@ pub fn run_backup(
         "test -f {}/pg_wal.tar && echo 'yes' || echo 'no'",
         local_path
     ))?;
-    if test_wal.trim() == "yes" {
+    if test_wal.stdout.trim() == "yes" {
         interactor.cmd(&format!("sudo -u postgres mkdir -p {}/pg_wal", verify_dir))?;
         interactor.cmd(&format!(
             "sudo -u postgres tar -xf {}/pg_wal.tar -C {}/pg_wal/",
@@ -280,7 +280,7 @@ pub fn run_restore(
             "test -f /var/lib/postgresql/backups/{}/pg_wal.tar && echo 'yes' || echo 'no'",
             backup.id
         ))?;
-        if test_wal.trim() == "yes" {
+        if test_wal.stdout.trim() == "yes" {
             interactor.cmd(&format!("sudo -u postgres mkdir -p {}/pg_wal", pgdata_dir))?;
             interactor.cmd(&format!(
                 "sudo -u postgres tar -xf /var/lib/postgresql/backups/{}/pg_wal.tar -C {}/pg_wal/",
@@ -329,7 +329,7 @@ pub fn run_restore(
             "test -f /var/lib/postgresql/backups/{}/pg_wal.tar && echo 'yes' || echo 'no'",
             backup.id
         ))?;
-        if test_wal.trim() == "yes" {
+        if test_wal.stdout.trim() == "yes" {
             interactor.cmd(&format!(
                 "sudo -u postgres mkdir -p {}/pg_wal",
                 combined_dir

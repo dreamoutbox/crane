@@ -1,4 +1,7 @@
-use crate::{server_interactor::server_interactor_trait::ServerInteractor, ssh::SSHSession};
+use crate::{
+    server_interactor::server_interactor_trait::ServerInteractor,
+    ssh::{CmdOutput, SSHSession},
+};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct DebianInteractor {
@@ -12,7 +15,14 @@ impl DebianInteractor {
 
     fn run_checked(&self, cmd: &str) -> anyhow::Result<String> {
         let out = self.ssh.run_cmd(cmd)?;
+
         if out.exit_code != 0 {
+            println!(
+                "error executing command {} (exit code: {})",
+                cmd, out.exit_code
+            );
+            println!("\nSTDERR: \n\n{}\n\n", out.stderr);
+
             anyhow::bail!(
                 "Command '{}' failed with exit code {}: {}",
                 cmd,
@@ -30,8 +40,8 @@ impl ServerInteractor for DebianInteractor {
         self.run_checked("whoami")
     }
 
-    fn cmd(&self, command: &str) -> anyhow::Result<String> {
-        self.run_checked(command)
+    fn cmd(&self, command: &str) -> anyhow::Result<CmdOutput> {
+        self.ssh.run_cmd(command)
     }
 
     fn get_os_info(&self) -> anyhow::Result<String> {
