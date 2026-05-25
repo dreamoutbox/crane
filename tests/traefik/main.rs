@@ -4,7 +4,7 @@ use crane::server_interactor::server_interactor_trait::{ServerInteractor, Servic
 use crane::traefik_unit::install::install_traefik;
 use crane::traefik_unit::setup::setup_traefik;
 
-include!("common/mock_interactor.rs");
+include!("../common/mock_interactor.rs");
 
 #[test]
 fn test_traefik_install_config() {

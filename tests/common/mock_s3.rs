@@ -17,6 +17,7 @@ impl S3Client for MockS3Client {
             .insert(key.to_string(), data.to_vec());
         Ok(())
     }
+
     fn get_object(&self, key: &str) -> anyhow::Result<Vec<u8>> {
         self.objects
             .borrow_mut()

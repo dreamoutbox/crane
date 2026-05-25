@@ -11,3 +11,6 @@ trigger: always_on
 - when need to run command for testing use `cargo run --bin crane -- -f demo/crane.toml [OPTIONS] <COMMAND>`
 
 - we use docker to simulate VPS setup.
+
+- please read `tests/README.md` about testing.
+
