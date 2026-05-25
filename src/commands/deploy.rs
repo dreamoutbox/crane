@@ -66,7 +66,7 @@ pub fn run(
         interactor.install_dependencies(all_deps.clone())?;
 
         // install traefik
-        crate::traefik_unit::setup::install_traefik(&*interactor)?;
+        crate::traefik_unit::install::install_traefik(&*interactor)?;
     }
 
     // Install postgres database cluster if enabled
@@ -436,7 +436,7 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 )?;
 
                 // 5b. Update /etc/hosts on the VPS so apps can resolve each
-                // other by service name (e.g. curl myapp2.localhost/curl?to=myapp).
+                // other by service name (e.g. curl myapp2/curl?to=myapp).
                 // Use domain's first label (e.g. "myapp2" from "myapp2.localhost") as hostname.
                 let global_domain = config
                     .domain
@@ -455,7 +455,7 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                         } else {
                             dom.split('.').next().unwrap_or(dom).to_string()
                         };
-                        Some((hostname, node.internal_ip.clone()))
+                        Some((hostname, "127.0.0.1".to_string()))
                     })
                     .collect();
                 // Dedup by hostname
