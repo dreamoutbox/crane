@@ -83,7 +83,7 @@ pub fn run(
         postgres_setup_wrapper(get_interactor, &config, &dot_env, app_nodes)?;
     }
 
-    let mut handles = vec![];
+    // let mut handles = vec![];
 
     // Loop Apps in Config and deploy in parallel using threads
     for (app_id, app) in config.app.clone() {
@@ -92,7 +92,9 @@ pub fn run(
         let config = config.clone();
         let datetime = datetime.clone();
 
-        let handle = std::thread::spawn(move || -> anyhow::Result<()> {
+        // let handle = std::thread::spawn(move || -> anyhow::Result<()> , {});
+
+        {
             println!(
                 "Starting deployment for app '{}' (ID: {})...",
                 app.name, app_id
@@ -112,66 +114,9 @@ pub fn run(
                 );
             }
             // Canonicalize to absolute path so python script works regardless of CWD
-            let deploy_dir = deploy_dir_candidate.canonicalize()?;
+            let dir_to_deploy = deploy_dir_candidate.canonicalize()?;
 
-            let zip_path =
-                std::env::temp_dir().join(format!("crane-deploy-{}-{}.zip", app.name, datetime));
-
-            // Read .craneignore if it exists in the deploy_dir
-            let craneignore_path = deploy_dir.join(".craneignore");
-            let mut ignores = vec![];
-            if craneignore_path.exists() {
-                if let Ok(content) = std::fs::read_to_string(&craneignore_path) {
-                    for line in content.lines() {
-                        let trimmed = line.trim();
-                        if !trimmed.is_empty() && !trimmed.starts_with('#') {
-                            ignores.push(trimmed.to_string());
-                        }
-                    }
-                }
-            }
-            ignores.push(".git".to_string());
-
-            let python_code = r#"
-import os, sys, zipfile
-zip_path = sys.argv[1]
-deploy_dir = sys.argv[2]
-ignores = sys.argv[3:]
-with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-    for root, dirs, files in os.walk(deploy_dir):
-        dirs[:] = [d for d in dirs if d not in ignores and not d.startswith('.')]
-        for file in files:
-            if file.startswith('.'):
-                continue
-            file_path = os.path.join(root, file)
-            rel_path = os.path.relpath(file_path, deploy_dir)
-            is_ignored = False
-            for ig in ignores:
-                if rel_path == ig or rel_path.startswith(ig + os.sep) or os.path.basename(rel_path) == ig:
-                    is_ignored = True
-                    break
-            if not is_ignored:
-                zipf.write(file_path, rel_path)
-"#;
-            let python_script_path =
-                std::env::temp_dir().join(format!("crane-zip-helper-{}.py", datetime));
-            std::fs::write(&python_script_path, python_code)?;
-
-            let mut zip_cmd = std::process::Command::new("python3");
-            zip_cmd
-                .arg(&python_script_path)
-                .arg(&zip_path)
-                .arg(&deploy_dir);
-            for ignore in ignores {
-                zip_cmd.arg(ignore);
-            }
-
-            let status = zip_cmd.status()?;
-            let _ = std::fs::remove_file(&python_script_path);
-
-            if !status.success() {
-                anyhow::bail!("Failed to create zip archive of {:?}", deploy_dir);
-            }
+            let zip_path = zip_app(&app, &datetime, dir_to_deploy)?;
 
             // Merge environment
             let mut merged_env = std::collections::HashMap::new();
@@ -202,8 +147,8 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
 
             for node in app_nodes {
                 println!(
-                    "Deploying to node: {}@{} (port: {})",
-                    node.user, node.host, node.port
+                    "\nDeploying {} to node: {}@{} (port: {})",
+                    app.name, node.user, node.host, node.port
                 );
 
                 let private_key = find_private_key_for_user(&node.user, &config);
@@ -219,62 +164,20 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                     Some(node.port),
                 );
                 let node_distro = crate::helper::server::get_server_distro(&ssh)?;
-                let interactor =
+                let node_interactor =
                     crate::server_interactor::get_interactor_for_distro(ssh, &node_distro)?;
 
                 // 1. Setup user if specified
-                if let Some(ref users) = config.users {
-                    if let Some(user_config) = users.iter().find(|u| u.name == app.deploy_user) {
-                        let mut authorized_keys = Vec::new();
-                        for key in &user_config.ssh_authorized_keys {
-                            let expanded_path = if key.starts_with('~') {
-                                if let Some(home) = std::env::var_os("HOME") {
-                                    Path::new(&home).join(
-                                        key.strip_prefix("~").unwrap().trim_start_matches('/'),
-                                    )
-                                } else {
-                                    std::path::PathBuf::from(key)
-                                }
-                            } else {
-                                std::path::PathBuf::from(key)
-                            };
-
-                            let mut key_content = None;
-                            if let Ok(content) = std::fs::read_to_string(&expanded_path) {
-                                key_content = Some(content);
-                            } else if key.contains("id_rsa.pub") {
-                                let fallback_path = expanded_path.with_file_name("id_ed25519.pub");
-                                if let Ok(content) = std::fs::read_to_string(fallback_path) {
-                                    key_content = Some(content);
-                                }
-                            }
-
-                            if let Some(content) = key_content {
-                                authorized_keys.push(content.trim().to_string());
-                            } else {
-                                authorized_keys.push(key.clone());
-                            }
-                        }
-
-                        let register =
-                            crate::server_interactor::server_interactor_trait::UserRegister::new(
-                                user_config.name.clone(),
-                                user_config.groups.clone(),
-                                authorized_keys,
-                            );
-
-                        interactor.create_user(register)?;
-                    }
-                }
+                setup_users(&app, &config, &node_interactor)?;
 
                 // 3. Prepare target directories (admin) and chown to deploy_user
-                interactor.cmd(&format!("sudo mkdir -p '/opt/{}'", app.name))?;
-                interactor.cmd(&format!(
+                node_interactor.cmd(&format!("sudo mkdir -p '/opt/{}'", app.name))?;
+                node_interactor.cmd(&format!(
                     "sudo chown -R '{}:{}' '/opt/{}'",
                     app.deploy_user, app.deploy_user, app.name
                 ))?;
-                interactor.cmd(&format!("sudo mkdir -p '/etc/crane/{}'", app.name))?;
-                interactor.cmd(&format!(
+                node_interactor.cmd(&format!("sudo mkdir -p '/etc/crane/{}'", app.name))?;
+                node_interactor.cmd(&format!(
                     "sudo chown -R '{}:{}' '/etc/crane/{}'",
                     app.deploy_user, app.deploy_user, app.name
                 ))?;
@@ -306,9 +209,9 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                     "unzip -o '{}' -d '{}'",
                     remote_zip_path, release_dir
                 ))?;
-                println!("extracted zip to {}", release_dir);
                 // Remove the remote zip file to clean up
                 deploy_interactor.cmd(&format!("rm -f '{}'", remote_zip_path))?;
+                println!("Extracted zip to {}\n", release_dir);
 
                 // 4. Rolling deploy across vps instances
                 let min_replicas = app
@@ -349,7 +252,7 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                     let service_instance = format!("{}@{}", app.name, port);
 
                     // Stop service if running (admin)
-                    let _ = interactor.stop_service(&service_instance);
+                    let _ = node_interactor.stop_service(&service_instance);
 
                     // Update current symlink (deploy)
                     deploy_interactor.cmd(&format!(
@@ -371,24 +274,21 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
 
                     // Create systemd template unit (admin)
                     crate::systemd_unit::setup::setup_systemd_template(
-                        &*interactor,
+                        &*node_interactor,
                         &app.name,
                         &app.deploy_user,
                         &app.entrypoint,
                     )?;
 
                     // Start service
-                    interactor.cmd(&format!("sudo systemctl start '{}'", service_instance))?;
+                    node_interactor.cmd(&format!("sudo systemctl start '{}'", service_instance))?;
 
                     // Health check loop
                     let health_path = app.health_check_path.as_deref().unwrap_or("/health");
                     let timeout_secs = app.health_check_timeout.unwrap_or(30);
-                    let interval_secs = app.health_check_interval.unwrap_or(2);
+                    let interval_secs = app.health_check_interval.unwrap_or(1);
 
-                    println!(
-                        "\tPolling health check for {} on port {}...",
-                        app.name, port
-                    );
+                    println!("\t[{}] polling health check on port {}...", app.name, port);
                     let mut healthy = false;
                     let start_time = std::time::Instant::now();
 
@@ -397,7 +297,7 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                             "curl -s -o /dev/null -w \"%{{http_code}}\" http://127.0.0.1:{}{}",
                             port, health_path
                         );
-                        if let Ok(code) = interactor.cmd(&curl_cmd) {
+                        if let Ok(code) = node_interactor.cmd(&curl_cmd) {
                             if code.stdout.trim() == "200" {
                                 healthy = true;
                                 break;
@@ -408,14 +308,14 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
 
                     if !healthy {
                         anyhow::bail!(
-                            "\tHealth check failed for {} on port {} within {} seconds",
+                            "\t{} health check failed on port {} within {} seconds",
                             app.name,
                             port,
                             timeout_secs
                         );
                     }
 
-                    println!("\tInstance {} on port {} is healthy!", app.name, port);
+                    println!("\t[{}] instance on port {} is healthy!", app.name, port);
                 }
 
                 // 5. Write Traefik dynamic config
@@ -428,12 +328,13 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 });
                 let health_path = app.health_check_path.as_deref().unwrap_or("/health");
                 crate::traefik_unit::setup::setup_traefik(
-                    &*interactor,
+                    &*node_interactor,
                     &app.name,
                     &domain,
                     app.port_start,
                     port_end,
                     health_path,
+                    false, // will reload once at the end
                 )?;
 
                 // 5b. Update /etc/hosts on the VPS so apps can resolve each
@@ -459,16 +360,18 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                         Some((hostname, "127.0.0.1".to_string()))
                     })
                     .collect();
-                // Dedup by hostname
+                // Dedup by hostnamesetup_traefik
                 hosts_entries.sort_by(|a, b| a.0.cmp(&b.0));
                 hosts_entries.dedup_by(|a, b| a.0 == b.0);
-                println!("Updating /etc/hosts on node {}...", node.host);
-                update_hosts(&*interactor, &hosts_entries)?;
+
+                println!("\tUpdating /etc/hosts on node {}...", node.host);
+                update_hosts(&*node_interactor, &hosts_entries)?;
 
                 // 6. Prune old releases
                 let retain = app.retain_releases.unwrap_or(3) as usize;
                 let releases_dir = format!("/opt/{}/releases", app.name);
-                if let Ok(list_output) = interactor.cmd(&format!("ls -1d {}/*", releases_dir)) {
+                if let Ok(list_output) = node_interactor.cmd(&format!("ls -1d {}/*", releases_dir))
+                {
                     let mut dirs: Vec<String> = list_output
                         .stdout
                         .lines()
@@ -480,30 +383,146 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                         let to_remove = dirs.len() - retain;
                         for dir in dirs.iter().take(to_remove) {
                             println!("Pruning old release: {}", dir);
-                            let _ = interactor.cmd(&format!("sudo rm -rf '{}'", dir));
+                            let _ = node_interactor.cmd(&format!("sudo rm -rf '{}'", dir));
                         }
                     }
                 }
+
+                // Reload traefik after all services are deployed on this node
+                crate::traefik_unit::setup::reload_traefik(&*node_interactor)?;
             }
 
             // Clean up local temporary zip file
             let _ = std::fs::remove_file(&zip_path);
 
-            Ok(())
-        });
+            // Ok(())
+        }
 
-        handles.push(handle);
+        // handles.push(handle);
     }
 
-    for handle in handles {
-        handle
-            .join()
-            .map_err(|e| anyhow::anyhow!("Thread panicked: {:?}", e))??;
-    }
+    // for handle in handles {
+    //     handle
+    //         .join()
+    //         .map_err(|e| anyhow::anyhow!("Thread panicked: {:?}", e))??;
+    // }
 
     println!("\n\nDEPLOY COMPLETE\n\n");
 
     Ok(())
+}
+
+fn setup_users(
+    app: &config::AppConfig,
+    config: &config::Config,
+    node_interactor: &Box<dyn ServerInteractor>,
+) -> anyhow::Result<()> {
+    if let Some(ref users) = config.users {
+        if let Some(user_config) = users.iter().find(|u| u.name == app.deploy_user) {
+            let mut authorized_keys = Vec::new();
+            for key in &user_config.ssh_authorized_keys {
+                let expanded_path = if key.starts_with('~') {
+                    if let Some(home) = std::env::var_os("HOME") {
+                        Path::new(&home)
+                            .join(key.strip_prefix("~").unwrap().trim_start_matches('/'))
+                    } else {
+                        std::path::PathBuf::from(key)
+                    }
+                } else {
+                    std::path::PathBuf::from(key)
+                };
+
+                let mut key_content = None;
+                if let Ok(content) = std::fs::read_to_string(&expanded_path) {
+                    key_content = Some(content);
+                } else if key.contains("id_rsa.pub") {
+                    let fallback_path = expanded_path.with_file_name("id_ed25519.pub");
+                    if let Ok(content) = std::fs::read_to_string(fallback_path) {
+                        key_content = Some(content);
+                    }
+                }
+
+                if let Some(content) = key_content {
+                    authorized_keys.push(content.trim().to_string());
+                } else {
+                    authorized_keys.push(key.clone());
+                }
+            }
+
+            let register = crate::server_interactor::server_interactor_trait::UserRegister::new(
+                user_config.name.clone(),
+                user_config.groups.clone(),
+                authorized_keys,
+            );
+
+            node_interactor.create_user(register)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn zip_app(
+    app: &config::AppConfig,
+    datetime: &String,
+    dir_to_deploy: std::path::PathBuf,
+) -> Result<std::path::PathBuf, anyhow::Error> {
+    let zip_path =
+        std::env::temp_dir().join(format!("crane-deploy-{}-{}.zip", app.name, *datetime));
+    let craneignore_path = dir_to_deploy.join(".craneignore");
+    let mut ignores = vec![];
+    if craneignore_path.exists() {
+        if let Ok(content) = std::fs::read_to_string(&craneignore_path) {
+            for line in content.lines() {
+                let trimmed = line.trim();
+                if !trimmed.is_empty() && !trimmed.starts_with('#') {
+                    ignores.push(trimmed.to_string());
+                }
+            }
+        }
+    }
+    ignores.push(".git".to_string());
+
+    let python_code = r#"
+import os, sys, zipfile
+zip_path = sys.argv[1]
+deploy_dir = sys.argv[2]
+ignores = sys.argv[3:]
+with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+    for root, dirs, files in os.walk(deploy_dir):
+        dirs[:] = [d for d in dirs if d not in ignores and not d.startswith('.')]
+        for file in files:
+            if file.startswith('.'):
+                continue
+            file_path = os.path.join(root, file)
+            rel_path = os.path.relpath(file_path, deploy_dir)
+            is_ignored = False
+            for ig in ignores:
+                if rel_path == ig or rel_path.startswith(ig + os.sep) or os.path.basename(rel_path) == ig:
+                    is_ignored = True
+                    break
+            if not is_ignored:
+                zipf.write(file_path, rel_path)
+"#;
+
+    let python_script_path =
+        std::env::temp_dir().join(format!("crane-zip-helper-{}.py", *datetime));
+    std::fs::write(&python_script_path, python_code)?;
+    let mut zip_cmd = std::process::Command::new("python3");
+    zip_cmd
+        .arg(&python_script_path)
+        .arg(&zip_path)
+        .arg(&dir_to_deploy);
+    for ignore in ignores {
+        zip_cmd.arg(ignore);
+    }
+    let status = zip_cmd.status()?;
+    let _ = std::fs::remove_file(&python_script_path);
+    if !status.success() {
+        anyhow::bail!("Failed to create zip archive of {:?}", dir_to_deploy);
+    }
+
+    Ok(zip_path)
 }
 
 /// Idempotently add/update `/etc/hosts` entries on the remote server.
@@ -513,7 +532,7 @@ fn update_hosts(
     entries: &[(String, String)], // (hostname, ip)
 ) -> anyhow::Result<()> {
     for (hostname, ip) in entries {
-        println!("  /etc/hosts: {} -> {}", hostname, ip);
+        println!("\t\t/etc/hosts: {} -> {}", hostname, ip);
         // Remove old entry for this hostname, then append the new one.
         // We use a temp file approach to avoid sed -i portability issues.
         let cmd = format!(

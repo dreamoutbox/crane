@@ -7,6 +7,7 @@ pub fn setup_traefik(
     port_start: u16,
     port_end: u16,
     health_check_path: &str,
+    reload_service: bool,
 ) -> anyhow::Result<()> {
     // 2. Generate and write the dynamic configuration
     let mut traefik_config = format!(
@@ -75,7 +76,15 @@ timeout = "1s"
 
     println!("\tUpdated traefik config at {}", dest_traefik_path);
 
-    println!("\tReloading traefik");
+    if reload_service {
+        reload_traefik(interactor)?;
+    }
+
+    Ok(())
+}
+
+pub fn reload_traefik(interactor: &dyn ServerInteractor) -> anyhow::Result<()> {
+    println!("Reloading traefik");
     if let Err(e) = interactor.cmd("sudo systemctl reload traefik") {
         println!(
             "Warning: failed to reload traefik (it might not be running yet): {}",
@@ -85,8 +94,6 @@ timeout = "1s"
         let traefik_start_output = interactor.cmd("sudo systemctl start traefik")?;
         println!("traefik_start_output: {}", traefik_start_output.stdout);
     }
-
-    println!("\n\tTraefik reloaded successfully\n\n");
-
+    println!("Traefik reloaded successfully\n");
     Ok(())
 }

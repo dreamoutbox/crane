@@ -265,7 +265,10 @@ pub fn setup_postgres_primary(
     db_configs: &[PostgresDbConfig],
 ) -> anyhow::Result<()> {
     println!("\tSetting up PostgreSQL primary node...");
-    install_postgres_repo_and_pkg(interactor, version)?;
+    install_postgres(interactor, version)?;
+
+    // Verify postgres is running. if not try start it. if can't start then print error and exit.
+    crate::postgres_unit::helper::ensure_postgres_running(interactor, version);
 
     println!("\tConfiguring primary replication and local trust rules...");
     configure_postgres_primary_rules(
@@ -325,7 +328,10 @@ pub fn setup_postgres_follower(
         "Setting up PostgreSQL follower node replicating from {}...",
         primary_ip
     );
-    install_postgres_repo_and_pkg(interactor, version)?;
+    install_postgres(interactor, version)?;
+
+    // Verify postgres is running. if not try start it. if can't start then print error and exit.
+    crate::postgres_unit::helper::ensure_postgres_running(interactor, version);
 
     println!("\tStopping PostgreSQL cluster on follower...");
     let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", version);
@@ -346,8 +352,11 @@ pub fn setup_postgres_follower(
     interactor.cmd(&backup_cmd)?;
 
     // Configure local trust on the follower node pg_hba.conf
-    println!("\tConfiguring local trust on follower pg_hba.conf...");
     let pg_hba_path = format!("/etc/postgresql/{}/main/pg_hba.conf", version);
+    println!(
+        "\tConfiguring local trust on follower pg_hba.conf... (file: {})",
+        pg_hba_path
+    );
     if let Ok(existing_hba) = interactor.cmd(&format!("sudo cat '{}'", pg_hba_path)) {
         let mut updated_hba = existing_hba.stdout.clone();
         updated_hba = updated_hba.replace(
@@ -381,6 +390,9 @@ pub fn setup_postgres_follower(
         pg_ctl, version, version
     );
     interactor.cmd(&start_cmd)?;
+
+    // Verify postgres is running. if not try start it. if can't start then print error and exit.
+    crate::postgres_unit::helper::ensure_postgres_running(interactor, version);
 
     Ok(())
 }
