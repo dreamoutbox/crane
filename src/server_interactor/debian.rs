@@ -49,6 +49,8 @@ impl ServerInteractor for DebianInteractor {
     }
 
     fn create_file(&self, path: &str, content: &str) -> anyhow::Result<()> {
+        println!("Writing file {}", path);
+
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_nanos())
@@ -58,6 +60,7 @@ impl ServerInteractor for DebianInteractor {
 
         let upload_res = self.upload(&local_path, path);
         let _ = std::fs::remove_file(&local_path);
+
         upload_res
     }
 
