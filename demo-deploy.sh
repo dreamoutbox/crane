@@ -1,3 +1,3 @@
 #!/bin/sh
 
-cargo run -- deploy -f demo/crane.toml
+cargo run -- -f demo/crane.toml deploy

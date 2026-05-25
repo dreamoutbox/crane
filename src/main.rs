@@ -6,31 +6,21 @@ fn main() {
         .about("crane — CLI Deployment Tool")
         .subcommand_required(true)
         .arg_required_else_help(true)
-        .subcommand(
-            Command::new("deploy")
-                .about("Deploy apps to VPS nodes")
-                .arg(
-                    Arg::new("config")
-                        .short('f')
-                        .long("config")
-                        .value_name("FILE")
-                        .help("Sets a custom config file")
-                        .default_value("crane.toml"),
-                ),
+        .arg(
+            Arg::new("config")
+                .short('f')
+                .long("config")
+                .value_name("FILE")
+                .help("Sets a custom config file")
+                .default_value("crane.toml")
+                .global(true),
         )
+        .subcommand(Command::new("deploy").about("Deploy apps to VPS nodes"))
         .subcommand(
             Command::new("postgres")
                 .about("Manage PostgreSQL cluster topology")
                 .subcommand_required(true)
                 .arg_required_else_help(true)
-                .arg(
-                    Arg::new("config")
-                        .short('f')
-                        .long("config")
-                        .value_name("FILE")
-                        .help("Sets a custom config file")
-                        .default_value("crane.toml"),
-                )
                 .subcommand(
                     Command::new("promote")
                         .about("Promote a node to PostgreSQL leader")
@@ -74,11 +64,11 @@ fn main() {
         )
         .get_matches();
 
-    match matches.subcommand() {
-        Some(("deploy", sub_m)) => {
-            let config_file = sub_m.get_one::<String>("config").unwrap();
-            let config_path = std::path::Path::new(config_file);
+    let config_file = matches.get_one::<String>("config").unwrap();
+    let config_path = std::path::Path::new(config_file);
 
+    match matches.subcommand() {
+        Some(("deploy", _sub_m)) => {
             if let Err(e) =
                 crane::commands::deploy::run(config_path, crane::server_interactor::get_interactor)
             {
@@ -88,9 +78,6 @@ fn main() {
         }
 
         Some(("postgres", sub_m)) => {
-            let config_file = sub_m.get_one::<String>("config").unwrap();
-            let config_path = std::path::Path::new(config_file);
-
             match sub_m.subcommand() {
                 Some(("promote", sub_sub_m)) => {
                     let target_node = sub_sub_m.get_one::<String>("node").unwrap();
