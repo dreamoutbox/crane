@@ -13,3 +13,4 @@ rust-s3 = { version = "0.37.2", default-features = false, features = [
     "blocking",
     "sync-rustls-tls",
 ] }
+tokio = { version = "1", default-features = false, features = ["full"] }

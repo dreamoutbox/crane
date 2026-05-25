@@ -1,4 +1,6 @@
 use crate::config;
+use crate::deployer::helper::{deploy_update_etc_hosts, deploy_zip_app};
+use crate::deployer::users::deploy_setup_users;
 use crate::helper::keys::{find_private_key_for_user, get_any_private_key};
 use crate::postgres_unit::setup::postgres_setup_wrapper;
 use crate::server_interactor::server_interactor_trait::ServerInteractor;
@@ -116,7 +118,7 @@ pub fn run(
             // Canonicalize to absolute path so python script works regardless of CWD
             let dir_to_deploy = deploy_dir_candidate.canonicalize()?;
 
-            let zip_path = zip_app(&app, &datetime, dir_to_deploy)?;
+            let zip_path = deploy_zip_app(&app, &datetime, dir_to_deploy)?;
 
             // Merge environment
             let mut merged_env = std::collections::HashMap::new();
@@ -168,7 +170,7 @@ pub fn run(
                     crate::server_interactor::get_interactor_for_distro(ssh, &node_distro)?;
 
                 // 1. Setup user if specified
-                setup_users(&app, &config, &node_interactor)?;
+                deploy_setup_users(&app, &config, &node_interactor)?;
 
                 // 3. Prepare target directories (admin) and chown to deploy_user
                 node_interactor.cmd(&format!("sudo mkdir -p '/opt/{}'", app.name))?;
@@ -365,7 +367,7 @@ pub fn run(
                 hosts_entries.dedup_by(|a, b| a.0 == b.0);
 
                 println!("\tUpdating /etc/hosts on node {}...", node.name);
-                update_hosts(&*node_interactor, &hosts_entries)?;
+                deploy_update_etc_hosts(&*node_interactor, &hosts_entries)?;
 
                 // 6. Prune old releases
                 let retain = app.retain_releases.unwrap_or(3) as usize;
@@ -409,139 +411,5 @@ pub fn run(
 
     println!("\n\nDEPLOY COMPLETE\n\n");
 
-    Ok(())
-}
-
-fn setup_users(
-    app: &config::AppConfig,
-    config: &config::Config,
-    node_interactor: &Box<dyn ServerInteractor>,
-) -> anyhow::Result<()> {
-    if let Some(ref users) = config.users {
-        if let Some(user_config) = users.iter().find(|u| u.name == app.deploy_user) {
-            let mut authorized_keys = Vec::new();
-            for key in &user_config.ssh_authorized_keys {
-                let expanded_path = if key.starts_with('~') {
-                    if let Some(home) = std::env::var_os("HOME") {
-                        Path::new(&home)
-                            .join(key.strip_prefix("~").unwrap().trim_start_matches('/'))
-                    } else {
-                        std::path::PathBuf::from(key)
-                    }
-                } else {
-                    std::path::PathBuf::from(key)
-                };
-
-                let mut key_content = None;
-                if let Ok(content) = std::fs::read_to_string(&expanded_path) {
-                    key_content = Some(content);
-                } else if key.contains("id_rsa.pub") {
-                    let fallback_path = expanded_path.with_file_name("id_ed25519.pub");
-                    if let Ok(content) = std::fs::read_to_string(fallback_path) {
-                        key_content = Some(content);
-                    }
-                }
-
-                if let Some(content) = key_content {
-                    authorized_keys.push(content.trim().to_string());
-                } else {
-                    authorized_keys.push(key.clone());
-                }
-            }
-
-            let register = crate::server_interactor::server_interactor_trait::UserRegister::new(
-                user_config.name.clone(),
-                user_config.groups.clone(),
-                authorized_keys,
-            );
-
-            node_interactor.create_user(register)?;
-        }
-    }
-
-    Ok(())
-}
-
-fn zip_app(
-    app: &config::AppConfig,
-    datetime: &String,
-    dir_to_deploy: std::path::PathBuf,
-) -> Result<std::path::PathBuf, anyhow::Error> {
-    let zip_path =
-        std::env::temp_dir().join(format!("crane-deploy-{}-{}.zip", app.name, *datetime));
-    let craneignore_path = dir_to_deploy.join(".craneignore");
-    let mut ignores = vec![];
-    if craneignore_path.exists() {
-        if let Ok(content) = std::fs::read_to_string(&craneignore_path) {
-            for line in content.lines() {
-                let trimmed = line.trim();
-                if !trimmed.is_empty() && !trimmed.starts_with('#') {
-                    ignores.push(trimmed.to_string());
-                }
-            }
-        }
-    }
-    ignores.push(".git".to_string());
-
-    let python_code = r#"
-import os, sys, zipfile
-zip_path = sys.argv[1]
-deploy_dir = sys.argv[2]
-ignores = sys.argv[3:]
-with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-    for root, dirs, files in os.walk(deploy_dir):
-        dirs[:] = [d for d in dirs if d not in ignores and not d.startswith('.')]
-        for file in files:
-            if file.startswith('.'):
-                continue
-            file_path = os.path.join(root, file)
-            rel_path = os.path.relpath(file_path, deploy_dir)
-            is_ignored = False
-            for ig in ignores:
-                if rel_path == ig or rel_path.startswith(ig + os.sep) or os.path.basename(rel_path) == ig:
-                    is_ignored = True
-                    break
-            if not is_ignored:
-                zipf.write(file_path, rel_path)
-"#;
-
-    let python_script_path =
-        std::env::temp_dir().join(format!("crane-zip-helper-{}.py", *datetime));
-    std::fs::write(&python_script_path, python_code)?;
-    let mut zip_cmd = std::process::Command::new("python3");
-    zip_cmd
-        .arg(&python_script_path)
-        .arg(&zip_path)
-        .arg(&dir_to_deploy);
-    for ignore in ignores {
-        zip_cmd.arg(ignore);
-    }
-    let status = zip_cmd.status()?;
-    let _ = std::fs::remove_file(&python_script_path);
-    if !status.success() {
-        anyhow::bail!("Failed to create zip archive of {:?}", dir_to_deploy);
-    }
-
-    Ok(zip_path)
-}
-
-/// Idempotently add/update `/etc/hosts` entries on the remote server.
-/// For each (hostname, ip) pair: replace existing line if present, else append.
-fn update_hosts(
-    interactor: &dyn ServerInteractor,
-    entries: &[(String, String)], // (hostname, ip)
-) -> anyhow::Result<()> {
-    for (hostname, ip) in entries {
-        println!("\t- pointing {} -> {}", hostname, ip);
-
-        // Remove old entry for this hostname, then append the new one.
-        // We use a temp file approach to avoid sed -i portability issues.
-        let cmd = format!(
-            r#"sudo sh -c 'grep -v " {hostname}" /etc/hosts > /tmp/hosts.tmp && echo "{ip} {hostname}" >> /tmp/hosts.tmp && cp /tmp/hosts.tmp /etc/hosts && rm /tmp/hosts.tmp'"#,
-            hostname = hostname,
-            ip = ip,
-        );
-        interactor.cmd(&cmd)?;
-    }
     Ok(())
 }
