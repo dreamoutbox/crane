@@ -67,8 +67,38 @@ fn test_deploy() {
         stdout_myapp2
     );
 
-    // To allow connection from the host machine (IP 10.0.0.1 on docker bridge network 10.0.0.0/24),
-    // we need to temporarily add a pg_hba.conf entry to the deployed primary postgres database and reload.
+    // ASSERT we can curl to myapp.localhost/pg and get a 200 status
+    let curl_pg = Command::new("curl")
+        .args([
+            "-w",
+            "\\n%{http_code}",
+            "-L",
+            "-k",
+            "-s",
+            "--resolve",
+            "myapp.localhost:80:127.0.0.1",
+            "http://myapp.localhost/pg",
+        ])
+        .output()
+        .expect("failed to execute curl myapp.localhost/pg");
+    let stdout_pg = String::from_utf8_lossy(&curl_pg.stdout);
+    let stderr_pg = String::from_utf8_lossy(&curl_pg.stderr);
+    let status_str = stdout_pg.lines().last().unwrap_or("").trim();
+    if status_str != "200" {
+        panic!(
+            "\n================== CURL /pg FAILED ==================\n\
+             HTTP Status: {}\n\
+             STDOUT:\n{}\n\
+             STDERR:\n{}\n\
+             =====================================================\n",
+            status_str, stdout_pg, stderr_pg
+        );
+    }
+
+    // To allow connection from the host machine
+    //(IP 10.0.0.1 on docker bridge network 10.0.0.0/24),
+    // we need to temporarily add a pg_hba.conf entry
+    // to the deployed primary postgres database and reload.
     let config = crane::config::load_config(config_path).expect("Failed to load crane.toml");
 
     let primary_node = crane::postgres_unit::tasks::postgres_get_leader(
@@ -147,5 +177,46 @@ fn test_deploy() {
     assert!(
         stdout_u2.contains('1'),
         "expected '1' in psql response for user u2"
+    );
+
+    // Verify injected env variables in app .env
+    let env_file_content = interactor
+        .cmd("sudo cat /etc/crane/myapp/.env")
+        .expect("failed to read /etc/crane/myapp/.env")
+        .stdout;
+
+    assert!(
+        env_file_content.contains("POSTGRES_MYDB_LEADER=postgresql://u2:u2@127.0.0.1:5000/mydb"),
+        "Expected POSTGRES_MYDB_LEADER in env file, got: {}",
+        env_file_content
+    );
+    assert!(
+        env_file_content.contains("POSTGRES_MYDB_URI=postgresql://u2:u2@127.0.0.1:5000/mydb"),
+        "Expected POSTGRES_MYDB_URI in env file, got: {}",
+        env_file_content
+    );
+    assert!(
+        env_file_content.contains("POSTGRES_MYDB_FOLLOWER=postgresql://u2:u2@127.0.0.1:5001/mydb"),
+        "Expected POSTGRES_MYDB_FOLLOWER in env file, got: {}",
+        env_file_content
+    );
+
+    // Verify HAProxy is listening and healthy on ports 5000 and 5001
+    let haproxy_5000 = interactor
+        .cmd("pg_isready -h 127.0.0.1 -p 5000")
+        .expect("failed to query pg_isready on port 5000");
+    assert_eq!(
+        haproxy_5000.exit_code, 0,
+        "HAProxy on port 5000 is not accepting connections: {}",
+        haproxy_5000.stderr
+    );
+
+    let haproxy_5001 = interactor
+        .cmd("pg_isready -h 127.0.0.1 -p 5001")
+        .expect("failed to query pg_isready on port 5001");
+    assert_eq!(
+        haproxy_5001.exit_code, 0,
+        "HAProxy on port 5001 is not accepting connections: {}",
+        haproxy_5001.stderr
     );
 }

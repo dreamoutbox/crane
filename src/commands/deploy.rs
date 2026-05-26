@@ -132,6 +132,41 @@ pub fn run(
                 merged_env.insert(k.clone(), v.clone());
             }
 
+            if let Some(ref app_db_deps) = app.database {
+                let (db_configs, user_configs) = crate::postgres_unit::setup::get_postgres_configs(&config);
+                for db_dep in app_db_deps {
+                    let user_name = &db_dep.user;
+                    let user_pass = user_configs
+                        .iter()
+                        .find(|u| &u.user == user_name)
+                        .and_then(|u| u.password.clone())
+                        .unwrap_or_default();
+
+                    let db_name = db_configs
+                        .iter()
+                        .find(|d| d.name == db_dep.databases || d.db_name == db_dep.databases)
+                        .map(|d| d.db_name.as_str())
+                        .unwrap_or(&db_dep.databases);
+
+                    let db_env_key = db_name.to_uppercase().replace(|c: char| !c.is_alphanumeric(), "_");
+
+                    let build_uri = |port: u16| {
+                        if !user_pass.is_empty() {
+                            format!("postgresql://{}:{}@127.0.0.1:{}/{}", user_name, user_pass, port, db_name)
+                        } else {
+                            format!("postgresql://{}@127.0.0.1:{}/{}", user_name, port, db_name)
+                        }
+                    };
+
+                    let leader_uri = build_uri(5000);
+                    let follower_uri = build_uri(5001);
+
+                    merged_env.insert(format!("POSTGRES_{}_LEADER", db_env_key), leader_uri.clone());
+                    merged_env.insert(format!("POSTGRES_{}_URI", db_env_key), leader_uri);
+                    merged_env.insert(format!("POSTGRES_{}_FOLLOWER", db_env_key), follower_uri);
+                }
+            }
+
             let mut env_content = String::new();
             for (k, v) in &merged_env {
                 env_content.push_str(&format!("{}={}\n", k, v));

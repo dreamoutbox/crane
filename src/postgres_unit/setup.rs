@@ -106,6 +106,7 @@ pub fn postgres_setup_wrapper(
                 &primary_node.internal_ip,
                 "replicator",
                 &replica_pass,
+                &app_node_ips,
             )?;
         }
 
@@ -506,6 +507,7 @@ pub fn setup_postgres_follower(
     primary_ip: &str,
     replica_user: &str,
     replica_pass: &str,
+    app_node_ips: &[String],
 ) -> anyhow::Result<()> {
     println!(
         "Setting up PostgreSQL follower node replicating from {}...",
@@ -558,6 +560,23 @@ pub fn setup_postgres_follower(
             "host    all             all             ::1/128                 scram-sha-256",
             "host    all             all             ::1/128                 trust",
         );
+
+        let mut new_rules = String::new();
+        for app_ip in app_node_ips {
+            let rule = format!("host all all {}/32 scram-sha-256", app_ip);
+            if !updated_hba.contains(&rule) {
+                new_rules.push_str(&format!("{}\n", rule));
+            }
+        }
+
+        if !new_rules.is_empty() {
+            if !updated_hba.ends_with('\n') {
+                updated_hba.push('\n');
+            }
+            updated_hba.push_str("\n# Crane replication & client connections\n");
+            updated_hba.push_str(&new_rules);
+        }
+
         if updated_hba != existing_hba.stdout {
             interactor.create_file("/tmp/pg_hba.conf.tmp", &updated_hba)?;
             interactor.cmd(&format!("sudo mv /tmp/pg_hba.conf.tmp '{}'", pg_hba_path))?;

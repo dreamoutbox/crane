@@ -53,6 +53,30 @@ backend postgres_back
         ));
     }
 
+    haproxy_cfg.push_str("\nfrontend postgres_follower_front\n");
+    haproxy_cfg.push_str("    bind *:5001\n");
+    haproxy_cfg.push_str("    mode tcp\n");
+    haproxy_cfg.push_str("    default_backend postgres_follower_back\n\n");
+    haproxy_cfg.push_str("backend postgres_follower_back\n");
+    haproxy_cfg.push_str("    mode tcp\n");
+    haproxy_cfg.push_str("    balance roundrobin\n");
+    haproxy_cfg.push_str("    option tcp-check\n");
+
+    if follower_ips.is_empty() {
+        haproxy_cfg.push_str(&format!(
+            "    server postgres-primary {}:5432 check\n",
+            primary_ip
+        ));
+    } else {
+        for (idx, follower) in follower_ips.iter().enumerate() {
+            haproxy_cfg.push_str(&format!(
+                "    server postgres-follower-{} {}:5432 check\n",
+                idx + 1,
+                follower
+            ));
+        }
+    }
+
     println!("\tWriting HAProxy configuration...");
     interactor.create_file("/tmp/haproxy.cfg.tmp", &haproxy_cfg)?;
     interactor.cmd("sudo mv /tmp/haproxy.cfg.tmp /etc/haproxy/haproxy.cfg")?;

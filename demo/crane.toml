@@ -9,15 +9,14 @@ port = 2221
 user = "admin"
 roles = ["app", "traefik", "postgres", "redis"]
 
-# [[nodes]]
-# name = "vps2"
-# host = "localhost"
-# public_ip = "localhost"
-# internal_ip = "10.0.0.12"
-# port = 2222
-# user = "admin"
-# roles = ["app", "traefik", "postgres", "redis"]
-
+[[nodes]]
+name = "vps2"
+host = "localhost"
+public_ip = "localhost"
+internal_ip = "10.0.0.12"
+port = 2222
+user = "admin"
+roles = ["app", "traefik", "postgres", "redis"]
 
 # [[nodes]]
 # name = "vps3"
@@ -56,11 +55,21 @@ retain_releases = 3
 # Replicas
 min_replicas = 1
 max_replicas = 3
+
 # ENV for application
 [app.myapp.env]
 APP_ENV = "simulation"
 LOG_LEVEL = "debug"
 APP_NAME = "myapp"
+
+# Databases
+[[app.myapp.database]]
+databases = "mydb"
+user = "u2"
+[[app.myapp.database]]
+databases = "mydb"
+user = "u1"
+
 
 [app.myapp2]
 name = "myapp2"
@@ -83,16 +92,21 @@ retain_releases = 3
 # Replicas
 min_replicas = 1
 max_replicas = 3
+
 # ENV for application
 [app.myapp2.env]
 APP_ENV = "simulation"
 LOG_LEVEL = "debug"
 APP_NAME = "myapp2"
 
-[domain]
-provider = "cloudflare"
-name = "localhost"
-tls_email = "dev@example.com"
+
+# Databases
+[[app.myapp2.database]]
+databases = "mydb"
+user = "u2"
+[[app.myapp2.database]]
+databases = "mydb"
+user = "u1"
 
 
 [db.postgres]
@@ -105,17 +119,17 @@ incremental_backup_every = "1h"
 
 
 [[db.postgres.users]]
-user = "app1"
-password = "app1"
-databases = ["myapp"]
+user = "u1"
+password = "u1"
+databases = ["mydb"]
 
 [[db.postgres.users]]
 user = "u2"
 password = "u2"
-databases = ["myapp"]
+databases = ["mydb"]
 
-[db.postgres.myapp]
-db_name = "myapp"
+[db.postgres.mydb]
+db_name = "mydb"
 
 
 #TODO: implement redis cluster deploy later
@@ -133,6 +147,12 @@ endpoint = "http://s3:9000" # omit for AWS S3
 # or specify here if not using .env
 access_key_id = "miniominio"
 secret_access_key = "miniominio"
+
+
+[domain]
+provider = "cloudflare"
+name = "localhost"
+tls_email = "dev@example.com"
 
 
 [monitor]

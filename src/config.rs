@@ -49,6 +49,13 @@ pub struct AppConfig {
     pub env: Option<HashMap<String, String>>,
     pub min_replicas: Option<u32>,
     pub max_replicas: Option<u32>,
+    pub database: Option<Vec<AppDatabaseConfig>>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct AppDatabaseConfig {
+    pub databases: String,
+    pub user: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
