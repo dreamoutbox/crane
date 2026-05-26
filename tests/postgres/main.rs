@@ -15,4 +15,5 @@ mod postgres {
     include!("backup_test.rs");
     include!("restore_test.rs");
     include!("config_test.rs");
+    include!("logs_test.rs");
 }

@@ -244,6 +244,11 @@ pub fn configure_postgres_primary_rules(
     interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET wal_level = 'replica';\"")?;
     interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET max_wal_senders = 10;\"")?;
     interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET hot_standby = 'on';\"")?;
+    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET log_statement = 'mod';\"")?;
+    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET log_min_duration_statement = 0;\"")?;
+    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET log_line_prefix = '%t [%p]: user=%u db=%d app=%a client=%h ';\"")?;
+    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET log_destination = 'csvlog';\"")?;
+    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET logging_collector = 'on';\"")?;
     if version.parse::<i32>().unwrap_or(0) >= 17 {
         interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET summarize_wal = 'on';\"")?;
     }
