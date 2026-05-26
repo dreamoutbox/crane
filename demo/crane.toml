@@ -96,7 +96,7 @@ tls_email = "dev@example.com"
 
 
 [db.postgres]
-enabled = false
+enabled = true
 version = "17"
 
 [db.postgres.backup]

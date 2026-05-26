@@ -59,7 +59,7 @@ impl ServerInteractor for DebianInteractor {
         let upload_res = self.upload(&local_path, path);
         let _ = std::fs::remove_file(&local_path);
 
-        println!("Writing file {}", path);
+        // println!("Writing file {}", path);
 
         upload_res
     }

@@ -85,6 +85,7 @@ pub fn run(
         }
     }
 
+
     // Helper to build journalctl command string
     let build_cmd = |port: u16| -> String {
         let mut cmd = format!(

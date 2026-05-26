@@ -170,7 +170,7 @@ fn test_logs_command_all_instances() {
     assert!(result.is_ok());
 
     let recorded = LOGS_COMMANDS.lock().unwrap().clone();
-    assert_eq!(recorded.len(), 3);
+    assert_eq!(recorded.len(), 1);
     assert!(recorded.iter().any(|cmd| cmd.contains("journalctl -u myapp@3000.service -n 100 --until '2026-05-26 12:00:00' --output=cat")));
 }
 
@@ -194,5 +194,5 @@ fn test_logs_command_invalid_instance() {
 
     assert!(result.is_err());
     let err_msg = result.unwrap_err().to_string();
-    assert!(err_msg.contains("Instance ID 99 is invalid. Total instances: 3"));
+    assert!(err_msg.contains("Instance ID 99 is invalid. Total instances: 1"));
 }

@@ -68,6 +68,36 @@ fn main() {
                             Arg::new("node")
                                 .required(true)
                                 .help("The host/IP or name of the node to get logs from"),
+                        )
+                        .arg(
+                            Arg::new("since")
+                                .long("since")
+                                .value_name("TIME")
+                                .help("Filter logs starting from a specific time (YYYY-MM-DD HH:MM:SS)"),
+                        )
+                        .arg(
+                            Arg::new("until")
+                                .long("until")
+                                .value_name("TIME")
+                                .help("Filter logs ending at a specific time (YYYY-MM-DD HH:MM:SS)"),
+                        )
+                        .arg(
+                            Arg::new("user")
+                                .long("user")
+                                .value_name("USER")
+                                .help("Filter logs by database user"),
+                        )
+                        .arg(
+                            Arg::new("db")
+                                .long("db")
+                                .value_name("DB")
+                                .help("Filter logs by database name"),
+                        )
+                        .arg(
+                            Arg::new("sql")
+                                .long("sql")
+                                .value_name("SQL")
+                                .help("Filter logs by executed SQL statement pattern"),
                         ),
                 ),
         )
@@ -224,9 +254,20 @@ fn main() {
 
                 Some(("logs", sub_sub_m)) => {
                     let target_node = sub_sub_m.get_one::<String>("node").unwrap();
+                    let since = sub_sub_m.get_one::<String>("since").map(|s| s.as_str());
+                    let until = sub_sub_m.get_one::<String>("until").map(|s| s.as_str());
+                    let user = sub_sub_m.get_one::<String>("user").map(|s| s.as_str());
+                    let db = sub_sub_m.get_one::<String>("db").map(|s| s.as_str());
+                    let sql = sub_sub_m.get_one::<String>("sql").map(|s| s.as_str());
+
                     if let Err(e) = crane::commands::postgres::logs(
                         config_path,
                         target_node,
+                        since,
+                        until,
+                        user,
+                        db,
+                        sql,
                         crane::server_interactor::get_interactor,
                     ) {
                         eprintln!("Logs failed: {}", e);

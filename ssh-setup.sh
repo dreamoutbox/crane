@@ -29,6 +29,11 @@ if ! grep -q "$MARKER" "$SSH_CONFIG" 2>/dev/null; then
   cat >> "$SSH_CONFIG" <<EOF
 
 $MARKER
+
+Host *
+  StrictHostKeyChecking no
+  LogLevel ERROR
+
 Host vps1
   HostName localhost
   Port 2221
