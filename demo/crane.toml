@@ -35,7 +35,7 @@ groups = ["www"]
 ssh_authorized_keys = ["~/.ssh/id_rsa.pub"]
 
 
-[app.myapp1]
+[app.myapp]
 name = "myapp"
 # Deploy Info
 deploy_dir = "./demo"
@@ -57,7 +57,7 @@ retain_releases = 3
 min_replicas = 1
 max_replicas = 3
 # ENV for application
-[app.myapp1.env]
+[app.myapp.env]
 APP_ENV = "simulation"
 LOG_LEVEL = "debug"
 

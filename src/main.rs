@@ -71,6 +71,15 @@ fn main() {
                         ),
                 ),
         )
+        .subcommand(
+            Command::new("status")
+                .about("Get the status of an application")
+                .arg(
+                    Arg::new("app")
+                        .required(true)
+                        .help("The name of the application to check"),
+                ),
+        )
         .get_matches();
 
     let config_file = matches.get_one::<String>("config").unwrap();
@@ -176,6 +185,18 @@ fn main() {
                 }
 
                 _ => unreachable!(),
+            }
+        }
+
+        Some(("status", sub_m)) => {
+            let app_name = sub_m.get_one::<String>("app").unwrap();
+            if let Err(e) = crane::commands::status::run(
+                config_path,
+                app_name,
+                crane::server_interactor::get_interactor,
+            ) {
+                eprintln!("Status check failed: {}", e);
+                std::process::exit(1);
             }
         }
 
