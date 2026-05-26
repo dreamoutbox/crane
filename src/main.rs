@@ -1,178 +1,171 @@
 use clap::{Arg, Command};
 
 fn main() {
-    let matches = Command::new("crane")
-        .version("0.1.0")
-        .about("crane — CLI Deployment Tool")
-        .subcommand_required(true)
-        .arg_required_else_help(true)
-        .arg(
-            Arg::new("config")
-                .short('f')
-                .long("config")
-                .value_name("FILE")
-                .help("Sets a custom config file")
-                .default_value("crane.toml")
-                .global(true),
-        )
-        .subcommand(Command::new("deploy").about("Deploy apps to VPS nodes"))
-        .subcommand(
-            Command::new("postgres")
-                .about("Manage PostgreSQL cluster topology")
-                .subcommand_required(true)
-                .arg_required_else_help(true)
-                .subcommand(
-                    Command::new("promote")
-                        .about("Promote a node to PostgreSQL leader")
-                        .arg(
-                            Arg::new("node")
-                                .required(true)
-                                .help("The host/IP of the node to promote"),
-                        ),
-                )
-                .subcommand(
-                    Command::new("demote")
-                        .about("Demote a node to PostgreSQL follower")
-                        .arg(
-                            Arg::new("node")
-                                .required(true)
-                                .help("The host/IP of the node to demote"),
-                        ),
-                )
-                .subcommand(
-                    Command::new("status").about("Get the status of the PostgreSQL cluster"),
-                )
-                .subcommand(
-                    Command::new("backup")
-                        .about("Backup PostgreSQL cluster in full or incremental mode")
-                        .arg(
-                            Arg::new("type")
-                                .required(true)
-                                .help("Backup type: 'full' or 'incr'"),
-                        ),
-                )
-                .subcommand(Command::new("list").about("List available backups in the cluster"))
-                .subcommand(
-                    Command::new("restore")
-                        .about("Restore PostgreSQL from a backup ID")
-                        .arg(
-                            Arg::new("id")
-                                .required(true)
-                                .help("The ID of the backup to restore"),
-                        )
-                        .arg(
-                            Arg::new("base")
-                                .long("base")
-                                .value_name("BASE_ID")
-                                .help("Override root of the restore chain for incremental backups"),
-                        )
-                        .arg(
-                            Arg::new("pitr")
-                                .long("pitr")
-                                .value_name("TIME")
-                                .help("Point-in-time recovery target (YYYY-MM-DD HH:MM:SS, UTC)"),
-                        ),
-                )
-                .subcommand(
-                    Command::new("logs")
-                        .about("Get the logs of PostgreSQL from a node")
-                        .arg(
-                            Arg::new("node")
-                                .required(true)
-                                .help("The host/IP or name of the node to get logs from"),
-                        )
-                        .arg(
-                            Arg::new("since")
-                                .long("since")
-                                .value_name("TIME")
-                                .help("Filter logs starting from a specific time (YYYY-MM-DD HH:MM:SS)"),
-                        )
-                        .arg(
-                            Arg::new("until")
-                                .long("until")
-                                .value_name("TIME")
-                                .help("Filter logs ending at a specific time (YYYY-MM-DD HH:MM:SS)"),
-                        )
-                        .arg(
-                            Arg::new("user")
-                                .long("user")
-                                .value_name("USER")
-                                .help("Filter logs by database user"),
-                        )
-                        .arg(
-                            Arg::new("db")
-                                .long("db")
-                                .value_name("DB")
-                                .help("Filter logs by database name"),
-                        )
-                        .arg(
-                            Arg::new("sql")
-                                .long("sql")
-                                .value_name("SQL")
-                                .help("Filter logs by executed SQL statement pattern"),
-                        ),
-                ),
-        )
-        .subcommand(
-            Command::new("status")
-                .about("Get the status of an application")
-                .arg(
-                    Arg::new("app")
-                        .required(true)
-                        .help("The name of the application to check"),
-                ),
-        )
-        .subcommand(
-            Command::new("logs")
-                .about("Get logs of an application")
-                .arg(
-                    Arg::new("app")
-                        .required(true)
-                        .help("The name of the application or app@instance_id"),
-                )
-                .arg(
-                    Arg::new("lines")
-                        .short('l')
-                        .long("lines")
-                        .value_name("LINES")
-                        .help("Number of lines to show")
-                        .default_value("100")
-                        .value_parser(clap::value_parser!(u32)),
-                )
-                .arg(
-                    Arg::new("since")
-                        .long("since")
-                        .value_name("TIME")
-                        .help("Show logs since a relative or absolute time"),
-                )
-                .arg(
-                    Arg::new("until")
-                        .long("until")
-                        .value_name("TIME")
-                        .help("Show logs until a relative or absolute time"),
-                )
-                .arg(
-                    Arg::new("timestamps")
-                        .short('t')
-                        .long("timestamps")
-                        .action(clap::ArgAction::SetTrue)
-                        .help("Show timestamps"),
-                )
-                .arg(
-                    Arg::new("follow")
-                        // .short('fl')
-                        .long("follow")
-                        .action(clap::ArgAction::SetTrue)
-                        .help("Follow the logs"),
-                )
-                .arg(
-                    Arg::new("no-app-instance-id")
-                        .long("no-app-instance-id")
-                        .action(clap::ArgAction::SetTrue)
-                        .help("Hide the [app@instance_id] prefix on log lines"),
-                ),
-        )
-        .get_matches();
+    let matches =
+        Command::new("crane")
+            .version("0.1.0")
+            .about("crane — CLI Deployment Tool")
+            .subcommand_required(true)
+            .arg_required_else_help(true)
+            .arg(
+                Arg::new("config")
+                    .short('f')
+                    .long("config")
+                    .value_name("FILE")
+                    .help("Sets a custom config file")
+                    .default_value("crane.toml")
+                    .global(true),
+            )
+            .subcommand(Command::new("deploy").about("Deploy apps to VPS nodes"))
+            .subcommand(
+                Command::new("postgres")
+                    .about("Manage PostgreSQL cluster topology")
+                    .subcommand_required(true)
+                    .arg_required_else_help(true)
+                    .subcommand(
+                        Command::new("promote")
+                            .about("Promote a node to PostgreSQL leader")
+                            .arg(
+                                Arg::new("node")
+                                    .required(true)
+                                    .help("The host/IP of the node to promote"),
+                            ),
+                    )
+                    .subcommand(
+                        Command::new("demote")
+                            .about("Demote a node to PostgreSQL follower")
+                            .arg(
+                                Arg::new("node")
+                                    .required(true)
+                                    .help("The host/IP of the node to demote"),
+                            ),
+                    )
+                    .subcommand(
+                        Command::new("status").about("Get the status of the PostgreSQL cluster"),
+                    )
+                    .subcommand(
+                        Command::new("backup")
+                            .about("Backup PostgreSQL cluster in full or incremental mode")
+                            .arg(
+                                Arg::new("type")
+                                    .required(true)
+                                    .help("Backup type: 'full' or 'incr'"),
+                            ),
+                    )
+                    .subcommand(Command::new("list").about("List available backups in the cluster"))
+                    .subcommand(
+                        Command::new("restore")
+                            .about("Restore PostgreSQL from a backup ID")
+                            .arg(
+                                Arg::new("id")
+                                    .required(true)
+                                    .help("The ID of the backup to restore"),
+                            )
+                            .arg(
+                                Arg::new("base").long("base").value_name("BASE_ID").help(
+                                    "Override root of the restore chain for incremental backups",
+                                ),
+                            )
+                            .arg(
+                                Arg::new("pitr").long("pitr").value_name("TIME").help(
+                                    "Point-in-time recovery target (YYYY-MM-DD HH:MM:SS, UTC)",
+                                ),
+                            ),
+                    )
+                    .subcommand(
+                        Command::new("logs")
+                            .about("Get the logs of PostgreSQL from a node")
+                            .arg(
+                                Arg::new("node")
+                                    .required(true)
+                                    .help("The host/IP or name of the node to get logs from"),
+                            )
+                            .arg(Arg::new("since").long("since").value_name("TIME").help(
+                                "Filter logs starting from a specific time (YYYY-MM-DD HH:MM:SS)",
+                            ))
+                            .arg(Arg::new("until").long("until").value_name("TIME").help(
+                                "Filter logs ending at a specific time (YYYY-MM-DD HH:MM:SS)",
+                            ))
+                            .arg(
+                                Arg::new("user")
+                                    .long("user")
+                                    .value_name("USER")
+                                    .help("Filter logs by database user"),
+                            )
+                            .arg(
+                                Arg::new("db")
+                                    .long("db")
+                                    .value_name("DB")
+                                    .help("Filter logs by database name"),
+                            )
+                            .arg(
+                                Arg::new("sql")
+                                    .long("sql")
+                                    .value_name("SQL")
+                                    .help("Filter logs by executed SQL statement pattern"),
+                            ),
+                    ),
+            )
+            .subcommand(
+                Command::new("status")
+                    .about("Get the status of an application")
+                    .arg(
+                        Arg::new("app")
+                            .required(true)
+                            .help("The name of the application to check"),
+                    ),
+            )
+            .subcommand(
+                Command::new("logs")
+                    .about("Get logs of an application")
+                    .arg(
+                        Arg::new("app")
+                            .required(true)
+                            .help("The name of the application or app@instance_id"),
+                    )
+                    .arg(
+                        Arg::new("lines")
+                            .short('l')
+                            .long("lines")
+                            .value_name("LINES")
+                            .help("Number of lines to show")
+                            .default_value("100")
+                            .value_parser(clap::value_parser!(u32)),
+                    )
+                    .arg(
+                        Arg::new("since")
+                            .long("since")
+                            .value_name("TIME")
+                            .help("Show logs since a relative or absolute time"),
+                    )
+                    .arg(
+                        Arg::new("until")
+                            .long("until")
+                            .value_name("TIME")
+                            .help("Show logs until a relative or absolute time"),
+                    )
+                    .arg(
+                        Arg::new("timestamps")
+                            .short('t')
+                            .long("timestamps")
+                            .action(clap::ArgAction::SetTrue)
+                            .help("Show timestamps"),
+                    )
+                    .arg(
+                        Arg::new("follow")
+                            // .short('fl')
+                            .long("follow")
+                            .action(clap::ArgAction::SetTrue)
+                            .help("Follow the logs"),
+                    )
+                    .arg(
+                        Arg::new("no-app-instance-id")
+                            .long("no-app-instance-id")
+                            .action(clap::ArgAction::SetTrue)
+                            .help("Hide the [app@instance_id] prefix on log lines"),
+                    ),
+            )
+            .get_matches();
 
     let config_file = matches.get_one::<String>("config").unwrap();
     let config_path = std::path::Path::new(config_file);

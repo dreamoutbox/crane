@@ -1,8 +1,45 @@
 use crate::{
     postgres_unit::entity::{BackupMetadata, BackupRegistry},
+    postgres_unit::helper::is_postgres_running,
     s3::s3_client::S3Client,
     server_interactor::server_interactor_trait::ServerInteractor,
 };
+
+/// Encode a string as URL-safe base64 (no line wrapping) for safe shell transfer.
+fn base64_encode(s: &str) -> String {
+    use std::fmt::Write as _;
+    let bytes = s.as_bytes();
+    let mut out = String::new();
+    // simple base64 alphabet
+    const ALPHA: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    for chunk in bytes.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
+        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
+        let n = (b0 << 16) | (b1 << 8) | b2;
+        let _ = write!(out, "{}", ALPHA[((n >> 18) & 0x3F) as usize] as char);
+        let _ = write!(out, "{}", ALPHA[((n >> 12) & 0x3F) as usize] as char);
+        let _ = write!(
+            out,
+            "{}",
+            if chunk.len() > 1 {
+                ALPHA[((n >> 6) & 0x3F) as usize] as char
+            } else {
+                '='
+            }
+        );
+        let _ = write!(
+            out,
+            "{}",
+            if chunk.len() > 2 {
+                ALPHA[(n & 0x3F) as usize] as char
+            } else {
+                '='
+            }
+        );
+    }
+    out
+}
 
 fn run_cmd(
     interactor: &dyn ServerInteractor,
@@ -10,6 +47,8 @@ fn run_cmd(
 ) -> anyhow::Result<crate::ssh::CmdOutput> {
     let out = interactor.cmd(command)?;
     if out.exit_code != 0 {
+        println!("Command {}\nSTDERR:\n{}\n\n", command, out.stderr.trim());
+
         anyhow::bail!(
             "Command '{}' failed with exit code {}: {}",
             command,
@@ -406,6 +445,7 @@ pub fn run_restore(
                 interactor,
                 &format!("sudo -u postgres mkdir -p {}/pg_wal", pgdata_dir),
             )?;
+
             run_cmd(
                 interactor,
                 &format!(
@@ -511,23 +551,86 @@ pub fn run_restore(
     run_cmd(interactor, &format!("sudo chmod 700 {}", pgdata_dir))?;
 
     if let Some(target_time) = pitr_time {
+        // Write PITR settings to postgresql.auto.conf in pgdata_dir to avoid quoting issues
+        let pitr_conf_path = format!("{}/postgresql.auto.conf", pgdata_dir);
+        let pitr_conf_content = format!(
+            "restore_command = 'cp /var/lib/postgresql/wal_archive/%f %p'\nrecovery_target_time = '{}'\nrecovery_target_action = promote\nrecovery_target_inclusive = on\nrecovery_target_timeline = 'current'\n",
+            target_time
+        );
+        // Write via base64 to avoid any shell quoting issues with single quotes
+        println!("writing PITR config at: {}", pitr_conf_path);
+        let b64 = base64_encode(&pitr_conf_content);
+        run_cmd(
+            interactor,
+            &format!(
+                "echo {} | base64 -d | sudo -u postgres tee -a {} > /dev/null",
+                b64, pitr_conf_path
+            ),
+        )?;
+
         // Create recovery.signal (PG12+ triggers archive recovery mode)
+        println!("writing recovery signal at: {}", pgdata_dir);
         run_cmd(
             interactor,
             &format!("sudo -u postgres touch {}/recovery.signal", pgdata_dir),
         )?;
-        // Start without restore_command=false override so PITR WAL replay can proceed
+
+        // Start postgres; log to file so we can read errors
+        let log_file = "/tmp/crane-pitr-pg-start.log";
         let start_cmd = format!(
-            "sudo -u postgres {} -D {} -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf -c restore_command='cp /var/lib/postgresql/wal_archive/%f %p' -c recovery_target_time='{}' -c recovery_target_action=promote -c recovery_target_inclusive=on\" start > /dev/null 2>&1 < /dev/null",
-            pg_ctl, pgdata_dir, pg_version, target_time
+            "sudo -u postgres {} -D {} -l {} -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf\" start",
+            pg_ctl, pgdata_dir, log_file, pg_version
         );
+
         let out = interactor.cmd(&start_cmd)?;
+
         if out.exit_code != 0 {
+            // Capture pg log for diagnosis
+            let log = interactor
+                .cmd(&format!("sudo cat {} 2>/dev/null || true", log_file))
+                .map(|o| o.stdout)
+                .unwrap_or_default();
+
+            // Clean up: try to restore/clean postgresql.auto.conf
+            let _ = interactor.cmd(&format!(
+                "sudo -u postgres sed -i '/restore_command/d;/recovery_target/d' {}",
+                pitr_conf_path
+            ));
+
+            println!("start command: {}\n", start_cmd);
+            println!("stdout: {}\n", out.stdout);
+            println!("stderr: {}\n", out.stderr);
+            //TODO: use server interactor to get last logs at /var/lib/postgresql/17/main/log/ (both .log & .csv)
+
             anyhow::bail!(
-                "Failed to start PostgreSQL with PITR (exit code {}): {}",
+                "Failed to start PostgreSQL with PITR (exit code {}):\n{}",
                 out.exit_code,
-                out.stderr
+                log
             );
+        }
+
+        // Wait for recovery to complete (postgres promotes itself)
+        let mut ready = false;
+        for _ in 0..30 {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            if is_postgres_running(interactor, pg_version) {
+                ready = true;
+                break;
+            }
+        }
+        // Clean up PITR settings from postgresql.auto.conf
+        let _ = interactor.cmd(&format!(
+            "sudo -u postgres sed -i '/restore_command/d;/recovery_target/d' {}",
+            pitr_conf_path
+        ));
+
+        if !ready {
+            let log = interactor
+                .cmd(&format!("sudo cat {} 2>/dev/null || true", log_file))
+                .map(|o| o.stdout)
+                .unwrap_or_default();
+
+            anyhow::bail!("PostgreSQL did not become ready after PITR:\n{}", log);
         }
     } else {
         // Regular restore: suppress archive recovery with restore_command=false
