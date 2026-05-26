@@ -2,7 +2,10 @@ use crate::{
     server_interactor::server_interactor_trait::ServerInteractor,
     ssh::{CmdOutput, SSHSession},
 };
+use std::sync::Once;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+static APT_UPDATE: Once = Once::new();
 
 pub struct DebianInteractor {
     ssh: SSHSession,
@@ -193,10 +196,13 @@ impl ServerInteractor for DebianInteractor {
         }
         let packages = dependencies.join(" ");
 
-        self.run_checked(&format!(
-            "sudo apt-get update && sudo apt-get install -y {}",
-            packages
-        ))?;
+        let mut update_res = Ok(());
+        APT_UPDATE.call_once(|| {
+            update_res = self.run_checked("sudo apt-get update").map(|_| ());
+        });
+        update_res?;
+
+        self.run_checked(&format!("sudo apt-get install -y {}", packages))?;
 
         Ok(())
     }
