@@ -96,7 +96,7 @@ pub fn run(
 
     // Spawn status gathering in parallel threads
     let mut handles = vec![];
-    for node in app_nodes {
+    for node in &app_nodes {
         let node_clone = node.clone();
         let config_clone = config.clone();
         let app_name_clone = app.name.clone();
@@ -483,6 +483,11 @@ pub fn run(
 
     // Print Node Statuses
     for node_res in nodes_results {
+        let node_index = app_nodes
+            .iter()
+            .position(|n| n.name == node_res.node_name)
+            .unwrap_or(0);
+
         println!(
             "\x1b[1;35mNode: {} ({})\x1b[0m",
             node_res.node_name, node_res.node_host
@@ -561,9 +566,12 @@ pub fn run(
                             "\x1b[31m✘\x1b[0m"
                         };
 
+                        let port_index = (inst.port - app.port_start) as usize;
+                        let instance_id = node_index * (app.instances as usize) + port_index + 1;
+
                         println!(
-                            "    {} Port {}: {} | {}",
-                            bullet, inst.port, sys_status, http_status
+                            "    {} {}@{} (Port {}): {} | {}",
+                            bullet, app.name, instance_id, inst.port, sys_status, http_status
                         );
                     }
                 }

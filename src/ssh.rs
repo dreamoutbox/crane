@@ -52,6 +52,35 @@ impl SSHSession {
         })
     }
 
+    pub fn spawn_cmd(&self, cmd: &str) -> anyhow::Result<std::process::Child> {
+        let mut command = std::process::Command::new("ssh");
+        command.arg("-o").arg("StrictHostKeyChecking=no");
+        command.arg("-o").arg("UserKnownHostsFile=/dev/null");
+
+        if let Some(port) = self.port {
+            command.arg("-p").arg(port.to_string());
+        }
+
+        if !self.private_key_path.is_empty() {
+            command.arg("-i").arg(&self.private_key_path);
+        }
+
+        let destination = if !self.username.is_empty() {
+            format!("{}@{}", self.username, self.host)
+        } else {
+            self.host.clone()
+        };
+        command.arg(destination);
+        command.arg(cmd);
+
+        command.stdout(std::process::Stdio::piped());
+        command.stderr(std::process::Stdio::inherit());
+
+        let child = command.spawn()?;
+        Ok(child)
+    }
+
+
     pub fn upload(&self, local_path: &str, remote_path: &str) -> anyhow::Result<()> {
         let mut command = std::process::Command::new("scp");
 

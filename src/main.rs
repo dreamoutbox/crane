@@ -80,6 +80,56 @@ fn main() {
                         .help("The name of the application to check"),
                 ),
         )
+        .subcommand(
+            Command::new("logs")
+                .about("Get logs of an application")
+                .arg(
+                    Arg::new("app")
+                        .required(true)
+                        .help("The name of the application or app@instance_id"),
+                )
+                .arg(
+                    Arg::new("lines")
+                        .short('l')
+                        .long("lines")
+                        .value_name("LINES")
+                        .help("Number of lines to show")
+                        .default_value("100")
+                        .value_parser(clap::value_parser!(u32)),
+                )
+                .arg(
+                    Arg::new("since")
+                        .long("since")
+                        .value_name("TIME")
+                        .help("Show logs since a relative or absolute time"),
+                )
+                .arg(
+                    Arg::new("until")
+                        .long("until")
+                        .value_name("TIME")
+                        .help("Show logs until a relative or absolute time"),
+                )
+                .arg(
+                    Arg::new("timestamps")
+                        .short('t')
+                        .long("timestamps")
+                        .action(clap::ArgAction::SetTrue)
+                        .help("Show timestamps"),
+                )
+                .arg(
+                    Arg::new("follow")
+                        // .short('fl')
+                        .long("follow")
+                        .action(clap::ArgAction::SetTrue)
+                        .help("Follow the logs"),
+                )
+                .arg(
+                    Arg::new("no-app-instance-id")
+                        .long("no-app-instance-id")
+                        .action(clap::ArgAction::SetTrue)
+                        .help("Hide the [app@instance_id] prefix on log lines"),
+                ),
+        )
         .get_matches();
 
     let config_file = matches.get_one::<String>("config").unwrap();
@@ -196,6 +246,31 @@ fn main() {
                 crane::server_interactor::get_interactor,
             ) {
                 eprintln!("Status check failed: {}", e);
+                std::process::exit(1);
+            }
+        }
+
+        Some(("logs", sub_m)) => {
+            let app_target = sub_m.get_one::<String>("app").unwrap();
+            let lines = *sub_m.get_one::<u32>("lines").unwrap();
+            let since = sub_m.get_one::<String>("since").map(|s| s.as_str());
+            let until = sub_m.get_one::<String>("until").map(|s| s.as_str());
+            let show_timestamps = sub_m.get_flag("timestamps");
+            let follow = sub_m.get_flag("follow");
+            let no_app_instance_id = sub_m.get_flag("no-app-instance-id");
+
+            if let Err(e) = crane::commands::logs::run(
+                config_path,
+                app_target,
+                lines,
+                since,
+                until,
+                show_timestamps,
+                follow,
+                no_app_instance_id,
+                crane::server_interactor::get_interactor,
+            ) {
+                eprintln!("Failed to get logs: {}", e);
                 std::process::exit(1);
             }
         }
