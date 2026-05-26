@@ -86,11 +86,39 @@ fn test_deploy() {
     let status_str = stdout_pg.lines().last().unwrap_or("").trim();
     if status_str != "200" {
         panic!(
-            "\n================== CURL /pg FAILED ==================\n\
+            "\n================== CURL myapp.localhost/pg FAILED ==================\n\
              HTTP Status: {}\n\
              STDOUT:\n{}\n\
              STDERR:\n{}\n\
-             =====================================================\n",
+             =======================================================================\n",
+            status_str, stdout_pg, stderr_pg
+        );
+    }
+
+    // ASSERT we can curl to myapp2.localhost/pg and get a 200 status
+    let curl_pg = Command::new("curl")
+        .args([
+            "-w",
+            "\\n%{http_code}",
+            "-L",
+            "-k",
+            "-s",
+            "--resolve",
+            "myapp2.localhost:80:127.0.0.1",
+            "http://myapp2.localhost/pg",
+        ])
+        .output()
+        .expect("failed to execute curl myapp2.localhost/pg");
+    let stdout_pg = String::from_utf8_lossy(&curl_pg.stdout);
+    let stderr_pg = String::from_utf8_lossy(&curl_pg.stderr);
+    let status_str = stdout_pg.lines().last().unwrap_or("").trim();
+    if status_str != "200" {
+        panic!(
+            "\n================== CURL myapp2.localhost/pg FAILED ==================\n\
+             HTTP Status: {}\n\
+             STDOUT:\n{}\n\
+             STDERR:\n{}\n\
+             ========================================================================\n",
             status_str, stdout_pg, stderr_pg
         );
     }
@@ -127,7 +155,7 @@ fn test_deploy() {
         .cmd("sudo -u postgres psql -c 'SELECT pg_reload_conf();'")
         .expect("failed to reload pg config");
 
-    // ASSERT this machine can psql with user="app1" password="app1" database="myapp"
+    // ASSERT this machine can psql with user="app1" password="app1" database="mydb"
     let psql_app1 = Command::new("psql")
         .env("PGPASSWORD", "app1")
         .args([
@@ -136,7 +164,7 @@ fn test_deploy() {
             "-U",
             "app1",
             "-d",
-            "myapp",
+            "mydb",
             "-c",
             "SELECT 1",
         ])
@@ -153,7 +181,7 @@ fn test_deploy() {
         "expected '1' in psql response for user app1"
     );
 
-    // ASSERT this machine can psql with user="u2" password="u2" database="myapp"
+    // ASSERT this machine can psql with user="u2" password="u2" database="mydb"
     let psql_u2 = Command::new("psql")
         .env("PGPASSWORD", "u2")
         .args([
@@ -162,7 +190,7 @@ fn test_deploy() {
             "-U",
             "u2",
             "-d",
-            "myapp",
+            "mydb",
             "-c",
             "SELECT 1",
         ])
@@ -186,17 +214,17 @@ fn test_deploy() {
         .stdout;
 
     assert!(
-        env_file_content.contains("POSTGRES_MYDB_LEADER=postgresql://u2:u2@127.0.0.1:5000/mydb"),
+        env_file_content.contains("POSTGRES_MYDB_LEADER=postgresql://u1:u1@127.0.0.1:5000/mydb"),
         "Expected POSTGRES_MYDB_LEADER in env file, got: {}",
         env_file_content
     );
     assert!(
-        env_file_content.contains("POSTGRES_MYDB_URI=postgresql://u2:u2@127.0.0.1:5000/mydb"),
+        env_file_content.contains("POSTGRES_MYDB_URI=postgresql://u1:u1@127.0.0.1:5000/mydb"),
         "Expected POSTGRES_MYDB_URI in env file, got: {}",
         env_file_content
     );
     assert!(
-        env_file_content.contains("POSTGRES_MYDB_FOLLOWER=postgresql://u2:u2@127.0.0.1:5001/mydb"),
+        env_file_content.contains("POSTGRES_MYDB_FOLLOWER=postgresql://u1:u1@127.0.0.1:5001/mydb"),
         "Expected POSTGRES_MYDB_FOLLOWER in env file, got: {}",
         env_file_content
     );

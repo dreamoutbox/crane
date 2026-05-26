@@ -36,14 +36,14 @@ ssh_authorized_keys = ["~/.ssh/id_rsa.pub"]
 
 [app.myapp]
 name = "myapp"
-# Deploy Info
+# Setup Info
+dependencies = ["libssl3", "ca-certificates"]
 deploy_dir = "./demo"
 entrypoint = "./myapp"
+# Deploy Info
 deploy_user = "deployman"
 port_start = 3000
 port_end = 3100
-instances = 1
-dependencies = ["libssl3", "ca-certificates"]
 # Health Check
 health_check_path = "/health"
 health_check_timeout = 30
@@ -53,6 +53,7 @@ domain = "myapp.localhost"
 # Keep old app versions
 retain_releases = 3
 # Replicas
+instances = 1
 min_replicas = 1
 max_replicas = 3
 
@@ -99,7 +100,6 @@ APP_ENV = "simulation"
 LOG_LEVEL = "debug"
 APP_NAME = "myapp2"
 
-
 # Databases
 [[app.myapp2.database]]
 databases = "mydb"
@@ -116,7 +116,6 @@ version = "17"
 [db.postgres.backup]
 full_backup_every = "1d"
 incremental_backup_every = "1h"
-
 
 [[db.postgres.users]]
 user = "u1"
