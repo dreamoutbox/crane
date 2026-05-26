@@ -84,7 +84,8 @@ timeout = "1s"
 }
 
 pub fn reload_traefik(interactor: &dyn ServerInteractor) -> anyhow::Result<()> {
-    println!("Reloading traefik");
+    println!("\n\tReloading traefik");
+
     if let Err(e) = interactor.cmd("sudo systemctl reload traefik") {
         println!(
             "Warning: failed to reload traefik (it might not be running yet): {}",
@@ -94,6 +95,8 @@ pub fn reload_traefik(interactor: &dyn ServerInteractor) -> anyhow::Result<()> {
         let traefik_start_output = interactor.cmd("sudo systemctl start traefik")?;
         println!("traefik_start_output: {}", traefik_start_output.stdout);
     }
-    println!("Traefik reloaded successfully\n");
+
+    println!("\tTraefik reloaded successfully\n");
+
     Ok(())
 }

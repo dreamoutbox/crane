@@ -615,15 +615,15 @@ pub fn run_restore(
         let out = interactor.cmd(&start_cmd)?;
         if out.exit_code != 0 {
             // Capture pg log for diagnosis
-            let mut log = interactor
-                .cmd(&format!("sudo cat {} 2>/dev/null || true", log_file))
-                .map(|o| o.stdout)
-                .unwrap_or_default();
+            // let mut log = interactor
+            //     .cmd(&format!("sudo cat {} 2>/dev/null || true", log_file))
+            //     .map(|o| o.stdout)
+            //     .unwrap_or_default();
 
-            let extra_logs = get_last_postgres_logs(interactor, pg_version);
-            if !extra_logs.is_empty() {
-                log.push_str(&extra_logs);
-            }
+            // let extra_logs = get_last_postgres_logs(interactor, pg_version);
+            // if !extra_logs.is_empty() {
+            //     log.push_str(&extra_logs);
+            // }
 
             // Clean up: try to restore/clean postgresql.auto.conf
             let _ = interactor.cmd(&format!(
@@ -631,21 +631,21 @@ pub fn run_restore(
                 pitr_conf_path
             ));
 
-            println!("start command: {}\n", start_cmd);
+            println!("\nstart command: {}\n", start_cmd);
             println!("stdout: {}\n", out.stdout);
-            println!("stderr: {}\n", out.stderr);
+            println!("stderr: {}\n\n", out.stderr);
 
             anyhow::bail!(
-                "Failed to start PostgreSQL with PITR (exit code {}):\n{}",
-                out.exit_code,
-                log
+                "Failed to start PostgreSQL with PITR (exit code {})",
+                out.exit_code
             );
         }
 
         // Wait for recovery to complete (postgres promotes itself)
         let mut ready = false;
         for _ in 0..30 {
-            std::thread::sleep(std::time::Duration::from_secs(1));
+            std::thread::sleep(std::time::Duration::from_millis(500));
+
             if is_postgres_running(interactor, pg_version) {
                 ready = true;
                 break;

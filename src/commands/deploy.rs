@@ -12,7 +12,7 @@ pub fn run(
     config_path: &Path,
     get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
 ) -> anyhow::Result<()> {
-    println!("Loading configuration from {:?}\n\n", config_path);
+    println!("Loading configuration from {:?}\n", config_path);
 
     let config = config::load_config(config_path)?;
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
@@ -88,7 +88,7 @@ pub fn run(
     // let mut handles = vec![];
 
     // Loop Apps in Config and deploy in parallel using threads
-    for (app_id, app) in config.app.clone() {
+    for (_app_id, app) in config.app.clone() {
         let config_dir = config_dir.to_path_buf();
         let dot_env = dot_env.clone();
         let config = config.clone();
@@ -97,10 +97,11 @@ pub fn run(
         // let handle = std::thread::spawn(move || -> anyhow::Result<()> , {});
 
         {
-            println!(
-                "\nStarting deployment for app '{}' (ID: {})...",
-                app.name, app_id
-            );
+            // println!(
+            //     "\nStarting deployment for app '{}' (ID: {})...",
+            //     app.name, app_id
+            // );
+            println!("");
 
             let deploy_dir_candidate = config_dir.join(&app.deploy_dir);
             let deploy_dir_candidate = if deploy_dir_candidate.exists() {
@@ -250,7 +251,10 @@ pub fn run(
 
                 let port_end = app.port_start + count as u16;
                 for port in app.port_start..port_end {
-                    println!("Deploying instance of '{}' on port {}...", app.name, port);
+                    println!(
+                        "\tDeploying instance of '{}' on port {} ...",
+                        app.name, port
+                    );
                     let service_instance = format!("{}@{}", app.name, port);
 
                     // Stop service if running (admin)
@@ -288,7 +292,6 @@ pub fn run(
                     // Health check loop
                     let health_path = app.health_check_path.as_deref().unwrap_or("/health");
                     let timeout_secs = app.health_check_timeout.unwrap_or(30);
-                    let interval_secs = app.health_check_interval.unwrap_or(1);
 
                     println!("\t[{}] polling health check on port {}...", app.name, port);
                     let mut healthy = false;
@@ -305,7 +308,8 @@ pub fn run(
                                 break;
                             }
                         }
-                        std::thread::sleep(std::time::Duration::from_secs(interval_secs));
+
+                        std::thread::sleep(std::time::Duration::from_millis(500));
                     }
 
                     if !healthy {

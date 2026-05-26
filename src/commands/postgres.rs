@@ -521,8 +521,13 @@ pub fn run_restore_cmd(
 
     // Validate --pitr is after the oldest backup in the chain (chain[0] after reverse)
     if let Some(pitr) = pitr_time {
-        let pitr_dt = chrono::NaiveDateTime::parse_from_str(pitr, "%Y-%m-%d %H:%M:%S")
-            .map_err(|_| anyhow::anyhow!("--pitr must be in 'YYYY-MM-DD HH:MM:SS' format"))?;
+        let pitr_dt =
+            chrono::NaiveDateTime::parse_from_str(pitr, "%Y-%m-%d %H:%M:%S").map_err(|_| {
+                anyhow::anyhow!(
+                    "--pitr must be in 'YYYY-MM-DD HH:MM:SS' format. got `{}`",
+                    pitr
+                )
+            })?;
 
         let base_backup = &chain[0];
         if let Some(ref taken_at) = base_backup.taken_at {

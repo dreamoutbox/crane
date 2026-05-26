@@ -111,13 +111,14 @@ pub fn postgres_setup_wrapper(
 
         // 3. Setup HAProxy on all vps nodes
         for app_node in &app_nodes {
-            println!("\tSetting up HAProxy on app node {}...", app_node.name);
+            println!("\n\tSetting up HAProxy on app node {}...", app_node.name);
             let private_key = find_private_key_for_user(&app_node.user, config);
             let private_key = if private_key.is_empty() {
                 get_any_private_key(config)
             } else {
                 private_key
             };
+
             let ssh = SSHSession::new(
                 app_node.host.clone(),
                 app_node.user.clone(),
@@ -431,7 +432,7 @@ fn configure_postgres_backup(
     dot_env: &std::collections::HashMap<String, String>,
 ) -> anyhow::Result<()> {
     if let Some(schedule) = get_postgres_backup_schedule(config) {
-        println!("\tSetting up automated cron backups...");
+        println!("\n\tSetting up automated cron backups...");
 
         // Resolve S3Config
         let s3_config = crate::s3::get_s3_config(config, dot_env)?;
