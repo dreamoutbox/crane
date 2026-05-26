@@ -397,8 +397,8 @@ pub fn backup(
         last_backup,
     )?;
 
-    println!("\nBackup successful!");
-    println!("{}", meta.id);
+    println!("\nBackup successful!\n");
+    println!("ID: {}", meta.id);
     println!("Date: {}", meta.date);
     println!("Time: {}", meta.time);
     println!("Type: {}", meta.backup_type);
@@ -442,7 +442,7 @@ pub fn list_backups(
             println!();
         }
 
-        println!("{}", backup.id);
+        println!("\nID: {}", backup.id);
         println!("Date: {}", backup.date);
         println!("Time: {}", backup.time);
         println!("Type: {}", backup.backup_type);
@@ -456,6 +456,8 @@ pub fn list_backups(
 pub fn restore(
     config_path: &Path,
     target_id: &str,
+    base_id: Option<&str>,   // --base: stop chain walk here (inclusive)
+    pitr_time: Option<&str>, // --pitr "YYYY-MM-DD HH:MM:SS" UTC
     get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
 ) -> anyhow::Result<()> {
     let config = config::load_config(config_path)?;
@@ -490,19 +492,33 @@ pub fn restore(
         .find(|b| b.id == target_id)
         .ok_or_else(|| anyhow::anyhow!("Backup ID '{}' not found in registry", target_id))?;
 
+    // Validate --base exists in registry if specified
+    if let Some(forced_base) = base_id {
+        if !registry.backups.iter().any(|b| b.id == forced_base) {
+            anyhow::bail!("Base backup ID '{}' not found in registry", forced_base);
+        }
+    }
+
+    // Build restore chain, stopping at base_id when specified
     let mut chain = Vec::new();
     let mut current = target_backup.clone();
     chain.push(current.clone());
 
-    while let Some(ref base_id) = current.base {
+    while let Some(ref next_base_id) = current.base {
+        // If the user specified --base, stop once we've included that backup
+        if let Some(forced_base) = base_id {
+            if current.id == forced_base {
+                break;
+            }
+        }
         let parent = registry
             .backups
             .iter()
-            .find(|b| &b.id == base_id)
+            .find(|b| &b.id == next_base_id)
             .ok_or_else(|| {
                 anyhow::anyhow!(
                     "Broken backup chain: parent backup ID '{}' not found in registry",
-                    base_id
+                    next_base_id
                 )
             })?;
         chain.push(parent.clone());
@@ -511,15 +527,40 @@ pub fn restore(
 
     chain.reverse();
 
+    // Validate --pitr is after the oldest backup in the chain (chain[0] after reverse)
+    if let Some(pitr) = pitr_time {
+        let pitr_dt = chrono::NaiveDateTime::parse_from_str(pitr, "%Y-%m-%d %H:%M:%S")
+            .map_err(|_| anyhow::anyhow!("--pitr must be in 'YYYY-MM-DD HH:MM:SS' format"))?;
+
+        let base_backup = &chain[0];
+        if let Some(ref taken_at) = base_backup.taken_at {
+            let base_dt = chrono::NaiveDateTime::parse_from_str(taken_at, "%Y-%m-%d %H:%M:%S")
+                .map_err(|_| anyhow::anyhow!("Base backup has invalid taken_at: '{}'", taken_at))?;
+
+            if pitr_dt <= base_dt {
+                anyhow::bail!(
+                    "--pitr time '{}' must be after the base backup time '{}' (backup ID: {})",
+                    pitr,
+                    taken_at,
+                    base_backup.id
+                );
+            }
+        }
+    }
+
     let interactor = connect_to_node(&primary_node, &config, get_interactor)?;
 
     println!("Restoring database to backup ID: {}...", target_id);
+    if let Some(t) = pitr_time {
+        println!("Point-in-time recovery target: {}", t);
+    }
     crate::postgres_unit::backup::run_restore(
         &*interactor,
         &s3_client,
         &pg_version,
         target_backup,
         &chain,
+        pitr_time,
     )?;
 
     println!("Restore complete! PostgreSQL is online.");
@@ -569,7 +610,9 @@ pub fn logs(
     }
     let log_file_path = log_path_output.stdout.trim();
     if log_file_path.is_empty() {
-        anyhow::bail!("PostgreSQL returned empty log path. Ensure logging_collector = on and log_destination = csvlog.");
+        anyhow::bail!(
+            "PostgreSQL returned empty log path. Ensure logging_collector = on and log_destination = csvlog."
+        );
     }
 
     // 2. Write the python parser script to the target node
@@ -647,7 +690,11 @@ with open(args.logfile, 'r', encoding='utf-8', errors='replace') as f:
     interactor.create_file(script_path, python_script)?;
 
     // 3. Construct and execute the Python command
-    let mut py_cmd = format!("sudo python3 {} '{}'", script_path, log_file_path.replace('\'', "'\\''"));
+    let mut py_cmd = format!(
+        "sudo python3 {} '{}'",
+        script_path,
+        log_file_path.replace('\'', "'\\''")
+    );
     if let Some(val) = since {
         py_cmd.push_str(&format!(" --since '{}'", val.replace('\'', "'\\''")));
     }

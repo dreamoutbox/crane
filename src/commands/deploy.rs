@@ -98,7 +98,7 @@ pub fn run(
 
         {
             println!(
-                "Starting deployment for app '{}' (ID: {})...",
+                "\nStarting deployment for app '{}' (ID: {})...",
                 app.name, app_id
             );
 
@@ -213,7 +213,7 @@ pub fn run(
                 ))?;
                 // Remove the remote zip file to clean up
                 deploy_interactor.cmd(&format!("rm -f '{}'", remote_zip_path))?;
-                println!("Extracted zip to {}\n", release_dir);
+                // println!("Extracted zip to {}\n", release_dir);
 
                 // 4. Rolling deploy across vps instances
                 let min_replicas = app

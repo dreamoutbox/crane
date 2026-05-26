@@ -245,10 +245,18 @@ pub fn configure_postgres_primary_rules(
     interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET max_wal_senders = 10;\"")?;
     interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET hot_standby = 'on';\"")?;
     interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET log_statement = 'mod';\"")?;
-    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET log_min_duration_statement = 0;\"")?;
+    interactor
+        .cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET log_min_duration_statement = 0;\"")?;
     interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET log_line_prefix = '%t [%p]: user=%u db=%d app=%a client=%h ';\"")?;
     interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET log_destination = 'csvlog';\"")?;
     interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET logging_collector = 'on';\"")?;
+    // WAL archiving for PITR support
+    interactor.cmd("sudo mkdir -p /var/lib/postgresql/wal_archive")?;
+    interactor.cmd("sudo chown postgres:postgres /var/lib/postgresql/wal_archive")?;
+    interactor.cmd("sudo chmod 700 /var/lib/postgresql/wal_archive")?;
+    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET archive_mode = 'on';\"")?;
+    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET archive_command = 'cp %p /var/lib/postgresql/wal_archive/%f';\"")?;
+
     if version.parse::<i32>().unwrap_or(0) >= 17 {
         interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET summarize_wal = 'on';\"")?;
     }
@@ -357,7 +365,7 @@ pub fn setup_postgres_primary(
 
     // 5. Idempotently create databases
     for db in db_configs {
-        println!("Setting up database '{}'...", db.db_name);
+        println!("\n\tSetting up database '{}'...", db.db_name);
         let check_db_sql = format!("SELECT 1 FROM pg_database WHERE datname = '{}'", db.db_name);
         let db_exists = interactor.cmd(&format!(
             "sudo -u postgres psql -t -A -c \"{}\"",
@@ -373,7 +381,7 @@ pub fn setup_postgres_primary(
 
     // 6. Idempotently create users and grant permissions
     for user in user_configs {
-        println!("Setting up user '{}'...", user.user);
+        println!("\tSetting up user '{}'...", user.user);
 
         let user_sql = format!(
             "DO \\$\\$ BEGIN IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{}') THEN CREATE ROLE {} WITH PASSWORD '{}' LOGIN; END IF; END \\$\\$;",
@@ -392,7 +400,7 @@ pub fn setup_postgres_primary(
                 .unwrap_or(db_ref);
 
             println!(
-                "Granting access for user '{}' to database '{}'...",
+                "\tGranting access for user '{}' to database '{}'...",
                 user.user, db_name
             );
 

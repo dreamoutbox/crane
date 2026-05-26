@@ -59,6 +59,18 @@ fn main() {
                             Arg::new("id")
                                 .required(true)
                                 .help("The ID of the backup to restore"),
+                        )
+                        .arg(
+                            Arg::new("base")
+                                .long("base")
+                                .value_name("BASE_ID")
+                                .help("Override root of the restore chain for incremental backups"),
+                        )
+                        .arg(
+                            Arg::new("pitr")
+                                .long("pitr")
+                                .value_name("TIME")
+                                .help("Point-in-time recovery target (YYYY-MM-DD HH:MM:SS, UTC)"),
                         ),
                 )
                 .subcommand(
@@ -242,9 +254,13 @@ fn main() {
 
                 Some(("restore", sub_sub_m)) => {
                     let target_id = sub_sub_m.get_one::<String>("id").unwrap();
+                    let base_id = sub_sub_m.get_one::<String>("base").map(|s| s.as_str());
+                    let pitr_time = sub_sub_m.get_one::<String>("pitr").map(|s| s.as_str());
                     if let Err(e) = crane::commands::postgres::restore(
                         config_path,
                         target_id,
+                        base_id,
+                        pitr_time,
                         crane::server_interactor::get_interactor,
                     ) {
                         eprintln!("Restore failed: {}", e);

@@ -3,7 +3,8 @@ pub struct BackupMetadata {
     pub id: String,
     pub date: String,
     pub time: String,
-    pub backup_type: String, // "FULL" or "INCR"
+    pub taken_at: Option<String>, // "YYYY-MM-DD HH:MM:SS" combined for PITR validation
+    pub backup_type: String,      // "FULL" or "INCR"
     pub base: Option<String>,
     pub local_path: String,
     pub s3_path: String,

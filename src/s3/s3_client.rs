@@ -72,6 +72,14 @@ impl S3Client for RealS3Client {
             .bucket
             .get_object(key)
             .map_err(|e| anyhow::anyhow!("S3 download failed: {}", e))?;
+
+        if data.status_code() != 200 {
+            anyhow::bail!(
+                "S3 download failed with status code: {}",
+                data.status_code()
+            );
+        }
+
         Ok(data.to_vec())
     }
 }

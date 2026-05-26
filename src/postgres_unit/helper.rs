@@ -157,11 +157,13 @@ pub fn get_postgres_backup_schedule(
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
                         .to_string();
+
                     let incremental = backup_table
                         .get("incremental_backup_every")
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
                         .to_string();
+
                     if !full.is_empty() && !incremental.is_empty() {
                         return Some(PostgresBackupSchedule {
                             full_backup_every: full,

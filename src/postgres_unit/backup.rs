@@ -159,8 +159,9 @@ pub fn run_backup(
     let s3_path = format!("{}/backups/{}", bucket_name, id);
     let meta = BackupMetadata {
         id: id.clone(),
-        date,
-        time,
+        date: date.clone(),
+        time: time.clone(),
+        taken_at: Some(format!("{} {}", date, time)),
         backup_type: if is_incr {
             "INCR".to_string()
         } else {
@@ -220,6 +221,7 @@ pub fn run_restore(
     pg_version: &str,
     backup: &BackupMetadata,
     chain: &[BackupMetadata],
+    pitr_time: Option<&str>, // "YYYY-MM-DD HH:MM:SS" UTC — None = regular restore
 ) -> anyhow::Result<()> {
     let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", pg_version);
     let pg_combinebackup = format!("/usr/lib/postgresql/{}/bin/pg_combinebackup", pg_version);
@@ -363,14 +365,37 @@ pub fn run_restore(
     interactor.cmd(&format!("sudo chown -R postgres:postgres {}", pgdata_dir))?;
     interactor.cmd(&format!("sudo chmod 700 {}", pgdata_dir))?;
 
-    // Restart postgres service using direct pg_ctl command (matching setup.rs follower setup)
-    // We add `-c restore_command=false` so PostgreSQL 12+ can perform archive recovery from
-    // the backup_label checkpoint without needing standby.signal or an actual archive connection.
-    let start_cmd = format!(
-        "sudo -u postgres {} -D {} -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf -c restore_command=false\" start > /dev/null 2>&1 < /dev/null",
-        pg_ctl, pgdata_dir, pg_version
-    );
-    interactor.cmd(&start_cmd)?;
+    if let Some(target_time) = pitr_time {
+        // PITR path: append recovery params to postgresql.conf in PGDATA and create recovery.signal
+        let recovery_block = format!(
+            "\n# PITR Recovery (added by crane)\nrestore_command = 'cp /var/lib/postgresql/wal_archive/%f %p'\nrecovery_target_time = '{}'\nrecovery_target_action = 'promote'\nrecovery_target_inclusive = on\n",
+            target_time
+        );
+        // Escape single quotes for the shell
+        let escaped = recovery_block.replace('\'', "'\\''");
+        interactor.cmd(&format!(
+            "sudo -u postgres sh -c 'printf \"%s\" \"{}\" >> {}/postgresql.conf'",
+            escaped, pgdata_dir
+        ))?;
+        // Create recovery.signal (PG12+ triggers archive recovery mode)
+        interactor.cmd(&format!(
+            "sudo -u postgres touch {}/recovery.signal",
+            pgdata_dir
+        ))?;
+        // Start without restore_command=false override so PITR WAL replay can proceed
+        let start_cmd = format!(
+            "sudo -u postgres {} -D {} -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf\" start > /dev/null 2>&1 < /dev/null",
+            pg_ctl, pgdata_dir, pg_version
+        );
+        interactor.cmd(&start_cmd)?;
+    } else {
+        // Regular restore: suppress archive recovery with restore_command=false
+        let start_cmd = format!(
+            "sudo -u postgres {} -D {} -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf -c restore_command=false\" start > /dev/null 2>&1 < /dev/null",
+            pg_ctl, pgdata_dir, pg_version
+        );
+        interactor.cmd(&start_cmd)?;
+    }
 
     Ok(())
 }
