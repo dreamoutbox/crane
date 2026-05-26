@@ -12,5 +12,4 @@ trigger: always_on
 
 - we use docker to simulate VPS setup.
 
-- please read `tests/README.md` about testing.
-
+- we use cargo nextest to run tests. please read `tests/README.md` about testing.

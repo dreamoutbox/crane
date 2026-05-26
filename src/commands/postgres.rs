@@ -1,4 +1,5 @@
 use crate::config;
+use crate::postgres_unit::entity::BackupMetadata;
 use crate::postgres_unit::entity::BackupRegistry;
 use crate::postgres_unit::entity::PostgresNode;
 use crate::postgres_unit::helper::connect_to_node;
@@ -6,7 +7,7 @@ use crate::postgres_unit::helper::find_node_config_with_fallback;
 use crate::postgres_unit::helper::{get_pg_version, get_replica_pass};
 use crate::postgres_unit::tasks::*;
 use crate::s3::get_s3_config;
-use crate::s3::s3_client::{RealS3Client, S3Client};
+use crate::s3::s3_client::RealS3Client;
 use crate::server_interactor::server_interactor_trait::ServerInteractor;
 use crate::ssh::SSHSession;
 use std::path::Path;
@@ -352,11 +353,11 @@ pub fn status(
     Ok(())
 }
 
-pub fn backup(
+pub fn run_backup_cmd(
     config_path: &Path,
     backup_type: &str,
     get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<BackupMetadata> {
     let config = config::load_config(config_path)?;
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
     let env_path = config_dir.join(".env");
@@ -372,22 +373,14 @@ pub fn backup(
     let s3_client = RealS3Client::new(&s3_config)?;
     let interactor = connect_to_node(&primary_node, &config, get_interactor)?;
 
-    let registry_key = "backups/registry.toml";
-    let registry = match s3_client.get_object(registry_key) {
-        Ok(data) => {
-            let content = String::from_utf8_lossy(&data).to_string();
-            toml::from_str::<BackupRegistry>(&content)
-                .expect("Failed to parse backups/registry.toml")
-        }
-        Err(_) => BackupRegistry::default(),
-    };
-    let last_backup = registry.backups.last();
+    let backups = crate::postgres_unit::backup::get_backups(&s3_client)?;
+    let last_backup = backups.last();
 
     println!(
         "Starting PostgreSQL {} backup...",
         backup_type.to_uppercase()
     );
-    let meta = crate::postgres_unit::backup::run_backup(
+    crate::postgres_unit::backup::run_backup(
         &*interactor,
         &s3_client,
         &pg_version,
@@ -395,7 +388,15 @@ pub fn backup(
         &replica_pass,
         &s3_config.bucket,
         last_backup,
-    )?;
+    )
+}
+
+pub fn backup(
+    config_path: &Path,
+    backup_type: &str,
+    get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
+) -> anyhow::Result<()> {
+    let meta = run_backup_cmd(config_path, backup_type, get_interactor)?;
 
     println!("\nBackup successful!\n");
     println!("ID: {}", meta.id);
@@ -420,24 +421,14 @@ pub fn list_backups(
     let s3_config = get_s3_config(&config, &dot_env)?;
     let s3_client = RealS3Client::new(&s3_config)?;
 
-    let registry_key = "backups/registry.toml";
-    let registry = match s3_client.get_object(registry_key) {
-        Ok(data) => {
-            let content = String::from_utf8_lossy(&data).to_string();
-            toml::from_str::<BackupRegistry>(&content).unwrap_or_default()
-        }
-        Err(_) => {
-            println!("No backups found in cluster.");
-            return Ok(());
-        }
-    };
+    let backups = crate::postgres_unit::backup::get_backups(&s3_client)?;
 
-    if registry.backups.is_empty() {
+    if backups.is_empty() {
         println!("No backups found in cluster.");
         return Ok(());
     }
 
-    for (idx, backup) in registry.backups.iter().enumerate() {
+    for (idx, backup) in backups.iter().enumerate() {
         if idx > 0 {
             println!();
         }
@@ -453,11 +444,11 @@ pub fn list_backups(
     Ok(())
 }
 
-pub fn restore(
+pub fn run_restore_cmd(
     config_path: &Path,
     target_id: &str,
-    base_id: Option<&str>,   // --base: stop chain walk here (inclusive)
-    pitr_time: Option<&str>, // --pitr "YYYY-MM-DD HH:MM:SS" UTC
+    base_id: Option<&str>,
+    pitr_time: Option<&str>,
     get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
 ) -> anyhow::Result<()> {
     let config = config::load_config(config_path)?;
@@ -479,12 +470,8 @@ pub fn restore(
     let pg_version = get_pg_version(&config);
     let s3_client = RealS3Client::new(&s3_config)?;
 
-    let registry_key = "backups/registry.toml";
-    let registry_data = s3_client
-        .get_object(registry_key)
-        .map_err(|e| anyhow::anyhow!("Failed to download backup registry from S3: {}", e))?;
-    let content = String::from_utf8_lossy(&registry_data).to_string();
-    let registry = toml::from_str::<BackupRegistry>(&content).unwrap_or_default();
+    let backups = crate::postgres_unit::backup::get_backups(&s3_client)?;
+    let registry = BackupRegistry { backups };
 
     let target_backup = registry
         .backups
@@ -527,7 +514,10 @@ pub fn restore(
 
     chain.reverse();
 
-    //TODO:PRINT CHAIN DATA HERE
+    println!("Backup chain to restore:");
+    for item in &chain {
+        println!(" - ID: {} ({})", item.id, item.backup_type);
+    }
 
     // Validate --pitr is after the oldest backup in the chain (chain[0] after reverse)
     if let Some(pitr) = pitr_time {
@@ -567,7 +557,18 @@ pub fn restore(
     )?;
 
     println!("Restore complete! PostgreSQL is online.");
+
     Ok(())
+}
+
+pub fn restore(
+    config_path: &Path,
+    target_id: &str,
+    base_id: Option<&str>,   // --base: stop chain walk here (inclusive)
+    pitr_time: Option<&str>, // --pitr "YYYY-MM-DD HH:MM:SS" UTC
+    get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
+) -> anyhow::Result<()> {
+    run_restore_cmd(config_path, target_id, base_id, pitr_time, get_interactor)
 }
 
 pub fn logs(

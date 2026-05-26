@@ -216,7 +216,7 @@ pub fn run_backup(
     )?;
 
     let verify_cmd = format!("sudo -u postgres {} {}", pg_verifybackup, verify_dir);
-    println!("\nRunning verifybackup command: {}", verify_cmd);
+    println!("\nRunning pg_verifybackup command: {}", verify_cmd);
     let verify_out = interactor.cmd(&verify_cmd)?;
 
     // Clean up verify directory
@@ -288,13 +288,8 @@ pub fn run_backup(
 
     // 10. Update backup registry on S3 and local
     let registry_key = "backups/registry.toml";
-    let mut registry = match s3_client.get_object(registry_key) {
-        Ok(data) => {
-            let content = String::from_utf8_lossy(&data).to_string();
-            toml::from_str::<BackupRegistry>(&content).unwrap_or_default()
-        }
-        Err(_) => BackupRegistry::default(),
-    };
+    let backups = get_backups(s3_client)?;
+    let mut registry = BackupRegistry { backups };
 
     registry.backups.push(meta.clone());
     let registry_toml = toml::to_string(&registry)?;
@@ -317,6 +312,8 @@ pub fn run_backup(
         interactor,
         "sudo chmod 644 /var/lib/postgresql/backups/registry.toml",
     )?;
+
+    println!("\nBACKUP {} {:?} completed\n", id, meta.taken_at);
 
     Ok(meta)
 }
@@ -737,4 +734,17 @@ fn get_last_postgres_logs(interactor: &dyn ServerInteractor, pg_version: &str) -
     }
 
     extra_logs
+}
+
+pub fn get_backups(s3_client: &dyn S3Client) -> anyhow::Result<Vec<BackupMetadata>> {
+    let registry_key = "backups/registry.toml";
+    match s3_client.get_object(registry_key) {
+        Ok(data) => {
+            let content = String::from_utf8_lossy(&data).to_string();
+            let registry: BackupRegistry = toml::from_str(&content)
+                .map_err(|e| anyhow::anyhow!("Failed to parse backups/registry.toml: {}", e))?;
+            Ok(registry.backups)
+        }
+        Err(_) => Ok(Vec::new()),
+    }
 }
