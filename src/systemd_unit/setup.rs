@@ -8,7 +8,7 @@ pub fn setup_systemd_template(
 ) -> anyhow::Result<()> {
     let clean_entrypoint = entrypoint.trim_start_matches("./");
 
-    println!("\tExecStart /opt/{app_name}/current/{entrypoint}");
+    println!("\t[{app_name}] systemd ExecStart=/opt/{app_name}/current/{entrypoint}");
 
     let systemd_template = format!(
         r#"[Unit]

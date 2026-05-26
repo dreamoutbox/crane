@@ -251,10 +251,7 @@ pub fn run(
 
                 let port_end = app.port_start + count as u16;
                 for port in app.port_start..port_end {
-                    println!(
-                        "\tDeploying instance of '{}' on port {} ...",
-                        app.name, port
-                    );
+                    println!("\t[{}] Deploying instance on port {} ...", app.name, port);
                     let service_instance = format!("{}@{}", app.name, port);
 
                     // Stop service if running (admin)
@@ -413,7 +410,7 @@ pub fn run(
     //         .map_err(|e| anyhow::anyhow!("Thread panicked: {:?}", e))??;
     // }
 
-    println!("\n\nDEPLOY COMPLETE\n\n");
+    println!("\nDEPLOY COMPLETE\n");
 
     Ok(())
 }
