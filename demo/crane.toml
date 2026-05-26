@@ -9,24 +9,24 @@ port = 2221
 user = "admin"
 roles = ["app", "traefik", "postgres", "redis"]
 
-[[nodes]]
-name = "vps2"
-host = "localhost"
-public_ip = "localhost"
-internal_ip = "10.0.0.12"
-port = 2222
-user = "admin"
-roles = ["app", "traefik", "postgres", "redis"]
+# [[nodes]]
+# name = "vps2"
+# host = "localhost"
+# public_ip = "localhost"
+# internal_ip = "10.0.0.12"
+# port = 2222
+# user = "admin"
+# roles = ["app", "traefik", "postgres", "redis"]
 
 
-[[nodes]]
-name = "vps3"
-host = "localhost"
-public_ip = "localhost"
-internal_ip = "10.0.0.13"
-port = 2223
-user = "admin"
-roles = ["app", "traefik", "postgres", "redis"]
+# [[nodes]]
+# name = "vps3"
+# host = "localhost"
+# public_ip = "localhost"
+# internal_ip = "10.0.0.13"
+# port = 2223
+# user = "admin"
+# roles = ["app", "traefik", "postgres", "redis"]
 
 
 [[users]]
@@ -60,7 +60,7 @@ max_replicas = 3
 [app.myapp.env]
 APP_ENV = "simulation"
 LOG_LEVEL = "debug"
-
+APP_NAME = "myapp"
 
 [app.myapp2]
 name = "myapp2"
@@ -87,7 +87,7 @@ max_replicas = 3
 [app.myapp2.env]
 APP_ENV = "simulation"
 LOG_LEVEL = "debug"
-
+APP_NAME = "myapp2"
 
 [domain]
 provider = "cloudflare"
@@ -96,7 +96,7 @@ tls_email = "dev@example.com"
 
 
 [db.postgres]
-enabled = true
+enabled = false
 version = "17"
 
 [db.postgres.backup]
@@ -118,10 +118,11 @@ databases = ["myapp"]
 db_name = "myapp"
 
 
-[db.redis]
-enabled = true
-version = "8"
-bind = "127.0.0.1"
+#TODO: implement redis cluster deploy later
+# [db.redis]
+# enabled = true
+# version = "8"
+# bind = "127.0.0.1"
 
 
 [backup.s3]

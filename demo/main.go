@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 
 	"github.com/gofiber/fiber/v3"
 )
@@ -16,7 +17,11 @@ func main() {
 	app := fiber.New()
 
 	app.Get("/", func(c fiber.Ctx) error {
-		return c.SendString("Hello, World!")
+		app_name := os.Getenv("APP_NAME")
+		if app_name == "" {
+			app_name = "World"
+		}
+		return c.SendString("Hello, " + app_name + "!")
 	})
 
 	app.Get("/health", func(c fiber.Ctx) error {

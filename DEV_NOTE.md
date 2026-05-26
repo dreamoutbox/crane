@@ -1,18 +1,13 @@
 # DEV NOTE
 
-# simulate a app instance down
-
-```sh
-docker exec vps1 systemctl stop myapp@3000.service
-```
-
-# list myapp services
+## list myapp services
 
 ```sh
 docker exec vps1 systemctl list-units | grep myapp
 ```
 
-# example list services output
+
+## example list services output
 
 ```log
 root@vps1:/# systemctl list-units | grep myapp
@@ -21,7 +16,13 @@ root@vps1:/# systemctl list-units | grep myapp
   system-myapp.slice                       loaded active     active    Slice /system/myapp
 ```
 
-# stop service
+## see myapp systemd unit file
+
+```sh
+docker exec vps1 cat /etc/systemd/system/myapp@.service
+```
+
+## stop service
 
 ```sh
 docker exec vps1 systemctl stop myapp@3000.service
