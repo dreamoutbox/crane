@@ -366,17 +366,6 @@ pub fn run_restore(
     interactor.cmd(&format!("sudo chmod 700 {}", pgdata_dir))?;
 
     if let Some(target_time) = pitr_time {
-        // PITR path: append recovery params to postgresql.conf in PGDATA and create recovery.signal
-        let recovery_block = format!(
-            "\n# PITR Recovery (added by crane)\nrestore_command = 'cp /var/lib/postgresql/wal_archive/%f %p'\nrecovery_target_time = '{}'\nrecovery_target_action = 'promote'\nrecovery_target_inclusive = on\n",
-            target_time
-        );
-        // Escape single quotes for the shell
-        let escaped = recovery_block.replace('\'', "'\\''");
-        interactor.cmd(&format!(
-            "sudo -u postgres sh -c 'printf \"%s\" \"{}\" >> {}/postgresql.conf'",
-            escaped, pgdata_dir
-        ))?;
         // Create recovery.signal (PG12+ triggers archive recovery mode)
         interactor.cmd(&format!(
             "sudo -u postgres touch {}/recovery.signal",
@@ -384,17 +373,31 @@ pub fn run_restore(
         ))?;
         // Start without restore_command=false override so PITR WAL replay can proceed
         let start_cmd = format!(
-            "sudo -u postgres {} -D {} -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf\" start > /dev/null 2>&1 < /dev/null",
-            pg_ctl, pgdata_dir, pg_version
+            "sudo -u postgres {} -D {} -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf -c restore_command='cp /var/lib/postgresql/wal_archive/%f %p' -c recovery_target_time='{}' -c recovery_target_action=promote -c recovery_target_inclusive=on\" start > /dev/null 2>&1 < /dev/null",
+            pg_ctl, pgdata_dir, pg_version, target_time
         );
-        interactor.cmd(&start_cmd)?;
+        let out = interactor.cmd(&start_cmd)?;
+        if out.exit_code != 0 {
+            anyhow::bail!(
+                "Failed to start PostgreSQL with PITR (exit code {}): {}",
+                out.exit_code,
+                out.stderr
+            );
+        }
     } else {
         // Regular restore: suppress archive recovery with restore_command=false
         let start_cmd = format!(
             "sudo -u postgres {} -D {} -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf -c restore_command=false\" start > /dev/null 2>&1 < /dev/null",
             pg_ctl, pgdata_dir, pg_version
         );
-        interactor.cmd(&start_cmd)?;
+        let out = interactor.cmd(&start_cmd)?;
+        if out.exit_code != 0 {
+            anyhow::bail!(
+                "Failed to start PostgreSQL (exit code {}): {}",
+                out.exit_code,
+                out.stderr
+            );
+        }
     }
 
     Ok(())

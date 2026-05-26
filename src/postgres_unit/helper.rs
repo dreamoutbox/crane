@@ -85,7 +85,10 @@ pub fn is_postgres_running(interactor: &dyn ServerInteractor, version: &str) -> 
         "sudo -u postgres {} -D /var/lib/postgresql/{}/main status",
         pg_ctl, version
     );
-    interactor.cmd(&status_cmd).is_ok()
+    interactor
+        .cmd(&status_cmd)
+        .map(|out| out.exit_code == 0)
+        .unwrap_or(false)
 }
 
 pub fn start_postgres(interactor: &dyn ServerInteractor, version: &str) -> anyhow::Result<()> {

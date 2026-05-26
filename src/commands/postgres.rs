@@ -442,7 +442,7 @@ pub fn list_backups(
             println!();
         }
 
-        println!("\nID: {}", backup.id);
+        println!("ID: {}", backup.id);
         println!("Date: {}", backup.date);
         println!("Time: {}", backup.time);
         println!("Type: {}", backup.backup_type);
@@ -554,6 +554,7 @@ pub fn restore(
     if let Some(t) = pitr_time {
         println!("Point-in-time recovery target: {}", t);
     }
+
     crate::postgres_unit::backup::run_restore(
         &*interactor,
         &s3_client,

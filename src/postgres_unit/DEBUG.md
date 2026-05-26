@@ -44,3 +44,19 @@ expected output:
 ```sh
 docker exec vps1 sudo -u postgres psql -t -A -c "show server_version;"
 ```
+
+
+### Postgres Logs
+
+/var/lib/postgresql/17/main/log
+
+### Config
+
+/var/lib/postgresql/17/main/postgresql.conf
+
+
+### Restore PITR test
+
+cargo run -- -f demo/crane.toml postgres restore --pitr "2026-05-26 03:26:00" 20260526032538830
+
+
