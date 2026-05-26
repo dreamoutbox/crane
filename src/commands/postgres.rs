@@ -527,6 +527,8 @@ pub fn restore(
 
     chain.reverse();
 
+    //TODO:PRINT CHAIN DATA HERE
+
     // Validate --pitr is after the oldest backup in the chain (chain[0] after reverse)
     if let Some(pitr) = pitr_time {
         let pitr_dt = chrono::NaiveDateTime::parse_from_str(pitr, "%Y-%m-%d %H:%M:%S")

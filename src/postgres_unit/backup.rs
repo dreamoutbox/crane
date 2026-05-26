@@ -329,6 +329,39 @@ pub fn run_restore(
     chain: &[BackupMetadata],
     pitr_time: Option<&str>, // "YYYY-MM-DD HH:MM:SS" UTC — None = regular restore
 ) -> anyhow::Result<()> {
+    let mut chain = chain.to_vec();
+    let mut backup = backup.clone();
+
+    if let Some(pitr) = pitr_time {
+        let pitr_dt = chrono::NaiveDateTime::parse_from_str(pitr, "%Y-%m-%d %H:%M:%S")
+            .map_err(|_| anyhow::anyhow!("--pitr must be in 'YYYY-MM-DD HH:MM:SS' format"))?;
+
+        let mut filtered_chain = Vec::new();
+        for item in &chain {
+            if let Some(ref taken_at) = item.taken_at {
+                let backup_dt =
+                    chrono::NaiveDateTime::parse_from_str(taken_at, "%Y-%m-%d %H:%M:%S").map_err(
+                        |_| anyhow::anyhow!("Backup has invalid taken_at: '{}'", taken_at),
+                    )?;
+                if backup_dt < pitr_dt {
+                    filtered_chain.push(item.clone());
+                }
+            } else {
+                filtered_chain.push(item.clone());
+            }
+        }
+
+        if filtered_chain.is_empty() {
+            anyhow::bail!(
+                "No backup in the chain starts before the PITR target time '{}'",
+                pitr
+            );
+        }
+
+        chain = filtered_chain;
+        backup = chain.last().unwrap().clone();
+    }
+
     let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", pg_version);
     let pg_combinebackup = format!("/usr/lib/postgresql/{}/bin/pg_combinebackup", pg_version);
     let pg_verifybackup = format!("/usr/lib/postgresql/{}/bin/pg_verifybackup", pg_version);
@@ -353,7 +386,7 @@ pub fn run_restore(
     )?;
     run_cmd(interactor, "sudo chmod 755 /var/lib/postgresql/backups")?;
 
-    for item in chain {
+    for item in &chain {
         let remote_dir = format!("/var/lib/postgresql/backups/{}", item.id);
         run_cmd(
             interactor,
@@ -456,7 +489,7 @@ pub fn run_restore(
         }
     } else {
         // 3. Extract all backups in the chain to separate folders
-        for item in chain {
+        for item in &chain {
             let extracted_dir = format!("/var/lib/postgresql/backups/{}_extracted", item.id);
             run_cmd(interactor, &format!("sudo rm -rf {}", extracted_dir))?;
             run_cmd(
@@ -497,7 +530,7 @@ pub fn run_restore(
         run_cmd(interactor, &format!("sudo rm -rf {}", combined_dir))?;
 
         let mut combine_cmd = format!("sudo -u postgres {} ", pg_combinebackup);
-        for item in chain {
+        for item in &chain {
             combine_cmd.push_str(&format!(
                 "/var/lib/postgresql/backups/{}_extracted ",
                 item.id
@@ -537,7 +570,7 @@ pub fn run_restore(
         )?;
 
         // Clean up extracted directories
-        for item in chain {
+        for item in &chain {
             let extracted_dir = format!("/var/lib/postgresql/backups/{}_extracted", item.id);
             let _ = interactor.cmd(&format!("sudo rm -rf {}", extracted_dir));
         }
@@ -583,13 +616,17 @@ pub fn run_restore(
         );
 
         let out = interactor.cmd(&start_cmd)?;
-
         if out.exit_code != 0 {
             // Capture pg log for diagnosis
-            let log = interactor
+            let mut log = interactor
                 .cmd(&format!("sudo cat {} 2>/dev/null || true", log_file))
                 .map(|o| o.stdout)
                 .unwrap_or_default();
+
+            let extra_logs = get_last_postgres_logs(interactor, pg_version);
+            if !extra_logs.is_empty() {
+                log.push_str(&extra_logs);
+            }
 
             // Clean up: try to restore/clean postgresql.auto.conf
             let _ = interactor.cmd(&format!(
@@ -600,7 +637,6 @@ pub fn run_restore(
             println!("start command: {}\n", start_cmd);
             println!("stdout: {}\n", out.stdout);
             println!("stderr: {}\n", out.stderr);
-            //TODO: use server interactor to get last logs at /var/lib/postgresql/17/main/log/ (both .log & .csv)
 
             anyhow::bail!(
                 "Failed to start PostgreSQL with PITR (exit code {}):\n{}",
@@ -625,10 +661,15 @@ pub fn run_restore(
         ));
 
         if !ready {
-            let log = interactor
+            let mut log = interactor
                 .cmd(&format!("sudo cat {} 2>/dev/null || true", log_file))
                 .map(|o| o.stdout)
                 .unwrap_or_default();
+
+            let extra_logs = get_last_postgres_logs(interactor, pg_version);
+            if !extra_logs.is_empty() {
+                log.push_str(&extra_logs);
+            }
 
             anyhow::bail!("PostgreSQL did not become ready after PITR:\n{}", log);
         }
@@ -639,6 +680,7 @@ pub fn run_restore(
             pg_ctl, pgdata_dir, pg_version
         );
         let out = interactor.cmd(&start_cmd)?;
+
         if out.exit_code != 0 {
             anyhow::bail!(
                 "Failed to start PostgreSQL (exit code {}): {}",
@@ -649,4 +691,50 @@ pub fn run_restore(
     }
 
     Ok(())
+}
+
+fn get_last_postgres_logs(interactor: &dyn ServerInteractor, pg_version: &str) -> String {
+    let log_dir = format!("/var/lib/postgresql/{}/main/log", pg_version);
+    let find_logs_cmd = format!(
+        "sudo find {} -maxdepth 1 -type f \\( -name \"*.log\" -o -name \"*.csv\" \\) -printf \"%T@ %p\\n\" 2>/dev/null | sort -n -r | head -n 5 | cut -d' ' -f2-",
+        log_dir
+    );
+
+    let mut extra_logs = String::new();
+    let mut file_paths = Vec::new();
+
+    if let Ok(find_out) = interactor.cmd(&find_logs_cmd) {
+        for line in find_out.stdout.lines() {
+            let p = line.trim();
+            if !p.is_empty() {
+                file_paths.push(p.to_string());
+            }
+        }
+    }
+
+    // Fallback if find output is empty
+    if file_paths.is_empty() {
+        let fallback_cmd = format!(
+            "sudo ls -t {}/*.log {}/*.csv 2>/dev/null | head -n 5",
+            log_dir, log_dir
+        );
+        if let Ok(fb_out) = interactor.cmd(&fallback_cmd) {
+            for line in fb_out.stdout.lines() {
+                let p = line.trim();
+                if !p.is_empty() {
+                    file_paths.push(p.to_string());
+                }
+            }
+        }
+    }
+
+    for file_path in file_paths {
+        extra_logs.push_str(&format!("\n--- Last 50 lines of {} ---\n", file_path));
+        let cat_cmd = format!("sudo tail -n 50 '{}'", file_path);
+        if let Ok(cat_out) = interactor.cmd(&cat_cmd) {
+            extra_logs.push_str(&cat_out.stdout);
+        }
+    }
+
+    extra_logs
 }

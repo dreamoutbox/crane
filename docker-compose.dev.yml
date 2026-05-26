@@ -92,8 +92,8 @@ services:
   # simulate external s3 service
   s3:
     image: minio/minio
-    container_name: minio
-    hostname: minio
+    container_name: s3
+    hostname: s3
     command: server /data --console-address ":9001"
     ports:
       - "9000:9000"

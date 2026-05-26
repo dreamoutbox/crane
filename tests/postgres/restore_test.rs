@@ -162,16 +162,26 @@ fn test_restore_pitr() {
     let cmds = interactor.commands.borrow();
     // Must create recovery.signal
     assert!(cmds.iter().any(|c| c.contains("recovery.signal")));
-    // Must append recovery_target_time to postgresql.conf
-    assert!(
-        cmds.iter()
-            .any(|c| c.contains("recovery_target_time") && c.contains(pitr))
-    );
-    // Must append restore_command to postgresql.conf
-    assert!(
-        cmds.iter()
-            .any(|c| c.contains("restore_command") && c.contains("wal_archive"))
-    );
+
+    // Extract base64 PITR config from the echo command and check it contains recovery_target_time and restore_command
+    let base64_cmd = cmds
+        .iter()
+        .find(|c| c.contains("base64 -d") && c.contains("postgresql.auto.conf"))
+        .expect("Should have run command to write PITR config");
+
+    let b64 = base64_cmd
+        .split_whitespace()
+        .nth(1)
+        .expect("Should extract base64 string");
+
+    let decoded_bytes = base64_decode(b64);
+    let decoded_str = String::from_utf8(decoded_bytes).expect("Should be valid UTF-8");
+
+    assert!(decoded_str.contains("recovery_target_time"));
+    assert!(decoded_str.contains(pitr));
+    assert!(decoded_str.contains("restore_command"));
+    assert!(decoded_str.contains("wal_archive"));
+
     // Start cmd must NOT have restore_command=false
     assert!(
         !cmds
@@ -273,4 +283,27 @@ fn test_restore_base_override() {
             .iter()
             .any(|c| c.contains("pg_combinebackup"))
     );
+}
+
+fn base64_decode(s: &str) -> Vec<u8> {
+    const ALPHA: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut map = [0u8; 256];
+    for (i, &c) in ALPHA.iter().enumerate() {
+        map[c as usize] = i as u8;
+    }
+    let mut out = Vec::new();
+    let mut buf = 0u32;
+    let mut bits = 0;
+    for &c in s.as_bytes() {
+        if c == b'=' {
+            break;
+        }
+        buf = (buf << 6) | map[c as usize] as u32;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buf >> bits) as u8);
+        }
+    }
+    out
 }
