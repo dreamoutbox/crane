@@ -280,6 +280,79 @@ pub fn debug_get_postgres_logs(interactor: &dyn ServerInteractor, pg_version: &s
     extra_logs
 }
 
+fn update_config_value(content: &str, key: &str, value: &str) -> String {
+    let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+    let mut found = false;
+
+    for line in &mut lines {
+        let trimmed = line.trim();
+        let mut key_part = trimmed;
+        if key_part.starts_with('#') {
+            key_part = key_part[1..].trim();
+        }
+        if key_part.starts_with(key) {
+            let rest = key_part[key.len()..].trim();
+            if rest.starts_with('=') {
+                *line = format!("{} = {}", key, value);
+                found = true;
+                break;
+            }
+        }
+    }
+
+    if !found {
+        lines.push(format!("{} = {}", key, value));
+    }
+
+    lines.join("\n") + "\n"
+}
+
+pub fn configure_postgresql_conf(
+    interactor: &dyn ServerInteractor,
+    version: &str,
+) -> anyhow::Result<()> {
+    let pg_conf_path = format!("/etc/postgresql/{}/main/postgresql.conf", version);
+    let existing_conf = interactor.cmd(&format!("sudo cat '{}'", pg_conf_path))?;
+    let mut updated_conf = existing_conf.stdout.clone();
+
+    updated_conf = update_config_value(&updated_conf, "listen_addresses", "'*'");
+    updated_conf = update_config_value(&updated_conf, "wal_level", "'replica'");
+    updated_conf = update_config_value(&updated_conf, "max_wal_senders", "10");
+    updated_conf = update_config_value(&updated_conf, "hot_standby", "'on'");
+    updated_conf = update_config_value(&updated_conf, "log_statement", "'mod'");
+    updated_conf = update_config_value(&updated_conf, "log_min_duration_statement", "0");
+    updated_conf = update_config_value(
+        &updated_conf,
+        "log_line_prefix",
+        "'%t [%p]: user=%u db=%d app=%a client=%h '",
+    );
+    updated_conf = update_config_value(&updated_conf, "log_destination", "'csvlog'");
+    updated_conf = update_config_value(&updated_conf, "logging_collector", "'on'");
+
+    // WAL archiving for PITR support
+    interactor.cmd("sudo mkdir -p /var/lib/postgresql/wal_archive")?;
+    interactor.cmd("sudo chown postgres:postgres /var/lib/postgresql/wal_archive")?;
+    interactor.cmd("sudo chmod 700 /var/lib/postgresql/wal_archive")?;
+    updated_conf = update_config_value(&updated_conf, "archive_mode", "'on'");
+    updated_conf = update_config_value(
+        &updated_conf,
+        "archive_command",
+        "'cp %p /var/lib/postgresql/wal_archive/%f'",
+    );
+
+    if version.parse::<i32>().unwrap_or(0) >= 17 {
+        updated_conf = update_config_value(&updated_conf, "summarize_wal", "'on'");
+    }
+
+    if updated_conf != existing_conf.stdout {
+        interactor.create_file(&pg_conf_path, &updated_conf)?;
+        interactor.cmd(&format!("sudo chown postgres:postgres '{}'", pg_conf_path))?;
+        interactor.cmd(&format!("sudo chmod 644 '{}'", pg_conf_path))?;
+    }
+
+    Ok(())
+}
+
 pub fn configure_postgres_primary_rules(
     interactor: &dyn ServerInteractor,
     version: &str,
@@ -287,27 +360,8 @@ pub fn configure_postgres_primary_rules(
     follower_ips: &[String],
     app_node_ips: &[String],
 ) -> anyhow::Result<()> {
-    // 1. Configure postgresql.conf parameters using ALTER SYSTEM
-    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET listen_addresses = '*';\"")?;
-    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET wal_level = 'replica';\"")?;
-    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET max_wal_senders = 10;\"")?;
-    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET hot_standby = 'on';\"")?;
-    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET log_statement = 'mod';\"")?;
-    interactor
-        .cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET log_min_duration_statement = 0;\"")?;
-    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET log_line_prefix = '%t [%p]: user=%u db=%d app=%a client=%h ';\"")?;
-    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET log_destination = 'csvlog';\"")?;
-    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET logging_collector = 'on';\"")?;
-    // WAL archiving for PITR support
-    interactor.cmd("sudo mkdir -p /var/lib/postgresql/wal_archive")?;
-    interactor.cmd("sudo chown postgres:postgres /var/lib/postgresql/wal_archive")?;
-    interactor.cmd("sudo chmod 700 /var/lib/postgresql/wal_archive")?;
-    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET archive_mode = 'on';\"")?;
-    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET archive_command = 'cp %p /var/lib/postgresql/wal_archive/%f';\"")?;
-
-    if version.parse::<i32>().unwrap_or(0) >= 17 {
-        interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET summarize_wal = 'on';\"")?;
-    }
+    // 1. Configure postgresql.conf parameters directly
+    configure_postgresql_conf(interactor, version)?;
 
     // 2. Configure pg_hba.conf
     let pg_hba_path = format!("/etc/postgresql/{}/main/pg_hba.conf", version);

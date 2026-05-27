@@ -302,6 +302,9 @@ pub fn setup_postgres_follower(
         }
     }
 
+    println!("\tConfiguring postgresql.conf on follower...");
+    crate::postgres_unit::helper::configure_postgresql_conf(interactor, version)?;
+
     println!("\tStarting PostgreSQL cluster on follower...");
     let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", version);
     let start_cmd = format!(
