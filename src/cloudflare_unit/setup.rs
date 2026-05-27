@@ -73,7 +73,7 @@ pub async fn update_dns(config: &Config, app_name: Option<&str>, is_deploy: bool
 
         let zone_name = get_zone_name(&app_domain, config);
         println!(
-            "Updating DNS for app '{}' ({}) using zone '{}'",
+            "\nUpdating DNS for app '{}' ({}) using zone '{}'",
             app.name, app_domain, zone_name
         );
 
@@ -101,7 +101,7 @@ pub async fn update_dns(config: &Config, app_name: Option<&str>, is_deploy: bool
         // Delete old records
         for r in records_to_delete {
             println!(
-                "Deleting old DNS record for {} (IP: {:?})",
+                "\tDeleting old DNS record for {} (IP: {:?})",
                 app_domain,
                 r.content.as_deref().unwrap_or("")
             );
@@ -111,20 +111,22 @@ pub async fn update_dns(config: &Config, app_name: Option<&str>, is_deploy: bool
         // Create new records for all app node public IPs
         for node in &app_nodes {
             println!(
-                "Creating DNS record pointing {} -> {} (comment: {})",
+                "\tCreating DNS record pointing {} -> {} (comment: {})",
                 app_domain, node.public_ip, comment_to_match
             );
+
             let record = CreateDnsRecord {
                 record_type: DnsRecordType::A,
                 name: app_domain.clone(),
                 content: Some(node.public_ip.clone()),
                 ttl: 3600,
-                proxied: Some(false),
+                proxied: Some(true),
                 priority: None,
                 comment: Some(comment_to_match.clone()),
                 tags: None,
                 data: None,
             };
+
             dns_client.create_record(record).await?;
         }
     }

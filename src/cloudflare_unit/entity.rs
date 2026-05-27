@@ -202,8 +202,8 @@ pub struct NaptrData {
 #[derive(Debug, Clone, Deserialize)]
 pub struct DnsRecord {
     pub id: String,
-    pub zone_id: String,
-    pub zone_name: String,
+    pub zone_id: Option<String>,
+    pub zone_name: Option<String>,
     pub name: String,
     #[serde(rename = "type")]
     pub record_type: DnsRecordType,
@@ -211,7 +211,8 @@ pub struct DnsRecord {
     pub proxiable: bool,
     pub proxied: bool,
     pub ttl: u32,
-    pub locked: bool,
+    pub locked: Option<bool>,
+    pub settings: Option<serde_json::Value>,
     pub meta: Option<serde_json::Value>,
     pub created_on: String,
     pub modified_on: String,

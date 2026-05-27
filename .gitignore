@@ -3,3 +3,5 @@ keys/
 
 demo/myapp
 *.CONTEXT.MD
+src/cloudflare_unit/response.json
+demo/crane.local.toml
