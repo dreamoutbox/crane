@@ -179,7 +179,7 @@ pub fn run(config_path: &Path) -> anyhow::Result<()> {
             for node in &app_nodes {
                 println!(
                     "\n[{}] Deploying to node {}: {}@{} (port: {})",
-                    app.name, node.user, node.name, node.host, node.port
+                    app.name, node.name, node.user, node.host, node.port
                 );
 
                 let private_key = find_private_key_for_user(&node.user, &config)?;

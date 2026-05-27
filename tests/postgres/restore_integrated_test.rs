@@ -233,7 +233,7 @@ fn test_restore_integrated_workflow() {
 }
 
 pub fn run_sql(interactor: &dyn ServerInteractor, sql: &str) -> String {
-    let cmd = format!("sudo -u postgres psql -d myapp -t -A -c {:?}", sql);
+    let cmd = format!("sudo -u postgres psql -d mydb -t -A -c {:?}", sql);
     let out = interactor.cmd(&cmd).expect("SQL execution failed");
     assert_eq!(out.exit_code, 0, "SQL failed: {}", out.stderr);
     out.stdout.trim().to_string()
