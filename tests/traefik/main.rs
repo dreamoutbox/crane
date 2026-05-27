@@ -17,8 +17,8 @@ fn test_traefik_install_config() {
 
     let files = interactor.files.borrow();
     let yml_content = files
-        .get("/tmp/traefik.yml")
-        .expect("traefik.yml should be written to /tmp");
+        .get("/etc/traefik/traefik.yml")
+        .expect("traefik.yml should be written to /etc/traefik");
 
     // Check for internal entrypoint
     assert!(yml_content.contains("internal:\n    address: \"127.0.0.1:8080\""));
@@ -42,8 +42,8 @@ fn test_traefik_setup_config() {
 
     let files = interactor.files.borrow();
     let config_content = files
-        .get("/tmp/myapp.toml")
-        .expect("myapp.toml should be written to /tmp");
+        .get("/etc/traefik/dynamic/myapp.toml")
+        .expect("myapp.toml should be written to /etc/traefik/dynamic");
 
     // Check external secure router
     assert!(config_content.contains("[http.routers.myapp-external]"));

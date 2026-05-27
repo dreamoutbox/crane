@@ -1,4 +1,4 @@
-use crane::postgres_unit::backup::{run_backup, run_restore};
+use crane::postgres_unit::backup::run_backup;
 use crane::postgres_unit::entity::BackupMetadata;
 use crane::s3::s3_client::S3Client;
 use crane::server_interactor::server_interactor_trait::ServerInteractor;

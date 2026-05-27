@@ -2,6 +2,7 @@
 fn test_backup_full() {
     let interactor = MockInteractor::new(vec!["20251211152749155 2025-12-11 15:27:49".to_string()]);
     let s3_client = MockS3Client::new();
+
     let result = run_backup(
         &interactor,
         &s3_client,
@@ -89,8 +90,6 @@ fn test_backup_incremental() {
     }));
 
     // Verify that since test -f returned 'no', it downloaded the parent manifest from S3 and uploaded it to VPS
-    assert!(cmds.iter().any(|c| {
-        c.contains("mv /tmp/manifest_20251211152949394")
-            && c.contains("/var/lib/postgresql/backups/20251211152949394/backup_manifest")
-    }));
+    let files = interactor.files.borrow();
+    assert!(files.contains_key("/var/lib/postgresql/backups/20251211152949394/backup_manifest"));
 }

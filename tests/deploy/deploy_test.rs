@@ -1,6 +1,8 @@
 use std::path::Path;
 use std::process::Command;
 
+use crane::postgres_unit::helper::postgres_get_leader;
+
 // RUN:
 // cargo nextest run --test deploy -- test_deploy --nocapture
 
@@ -20,8 +22,7 @@ fn test_deploy() {
 
     // 2. Deploy app configuration to VPS nodes
     let config_path = Path::new("demo/crane.toml");
-    crane::commands::deploy::run(config_path, crane::server_interactor::get_server_interactor)
-        .expect("deploy failed");
+    crane::commands::deploy::run(config_path).expect("deploy failed");
 
     // ASSERT this machine can curl at myapp.localhost
     let curl_myapp = Command::new("curl")
@@ -129,56 +130,49 @@ fn test_deploy() {
     // to the deployed primary postgres database and reload.
     let config = crane::config::load_config(config_path).expect("Failed to load crane.toml");
 
-    let primary_node = crane::postgres_unit::tasks::postgres_get_leader(
-        &config,
-        crane::server_interactor::get_server_interactor,
-    )
-    .expect("Failed to get leader node")
-    .expect("No active PostgreSQL leader found");
+    let primary_node = postgres_get_leader(&config)
+        .expect("Failed to get leader node")
+        .expect("No active PostgreSQL leader found");
 
-    let interactor = crane::postgres_unit::helper::connect_to_node(
-        &primary_node,
-        &config,
-        crane::server_interactor::get_server_interactor,
-    )
-    .expect("Failed to connect to primary node");
+    let primary_interactor = crane::postgres_unit::helper::connect_to_node(&primary_node, &config)
+        .expect("Failed to connect to primary node");
 
     let pg_hba_path = "/etc/postgresql/17/main/pg_hba.conf";
     let add_rule_cmd = format!(
         "echo 'host all all 10.0.0.0/24 scram-sha-256' | sudo tee -a {}",
         pg_hba_path
     );
-    interactor
+    primary_interactor
         .cmd(&add_rule_cmd)
         .expect("failed to add pg_hba rule");
-    interactor
+    primary_interactor
         .cmd("sudo -u postgres psql -c 'SELECT pg_reload_conf();'")
         .expect("failed to reload pg config");
 
-    // ASSERT this machine can psql with user="app1" password="app1" database="mydb"
-    let psql_app1 = Command::new("psql")
-        .env("PGPASSWORD", "app1")
+    // ASSERT this machine can psql with user="u1" password="u1" database="mydb"
+    let psql_u1 = Command::new("psql")
+        .env("PGPASSWORD", "u1")
         .args([
             "-h",
             "127.0.0.1",
             "-U",
-            "app1",
+            "u1",
             "-d",
             "mydb",
             "-c",
             "SELECT 1",
         ])
         .output()
-        .expect("failed to execute psql for user app1");
-    let stdout_app1 = String::from_utf8_lossy(&psql_app1.stdout);
+        .expect("failed to execute psql for user u1");
+    let stdout_u1 = String::from_utf8_lossy(&psql_u1.stdout);
     assert!(
-        psql_app1.status.success(),
-        "psql for user app1 failed: {}",
-        String::from_utf8_lossy(&psql_app1.stderr)
+        psql_u1.status.success(),
+        "psql for user u1 failed: {}",
+        String::from_utf8_lossy(&psql_u1.stderr)
     );
     assert!(
-        stdout_app1.contains('1'),
-        "expected '1' in psql response for user app1"
+        stdout_u1.contains('1'),
+        "expected '1' in psql response for user u1"
     );
 
     // ASSERT this machine can psql with user="u2" password="u2" database="mydb"
@@ -208,9 +202,9 @@ fn test_deploy() {
     );
 
     // Verify injected env variables in app .env
-    let env_file_content = interactor
-        .cmd("sudo cat /etc/crane/myapp/.env")
-        .expect("failed to read /etc/crane/myapp/.env")
+    let env_file_content = primary_interactor
+        .cmd("sudo cat /app_config/myapp/.env")
+        .expect("failed to read /app_config/myapp/.env")
         .stdout;
 
     assert!(
@@ -230,7 +224,7 @@ fn test_deploy() {
     );
 
     // Verify HAProxy is listening and healthy on ports 5000 and 5001
-    let haproxy_5000 = interactor
+    let haproxy_5000 = primary_interactor
         .cmd("pg_isready -h 127.0.0.1 -p 5000")
         .expect("failed to query pg_isready on port 5000");
     assert_eq!(
@@ -239,7 +233,7 @@ fn test_deploy() {
         haproxy_5000.stderr
     );
 
-    let haproxy_5001 = interactor
+    let haproxy_5001 = primary_interactor
         .cmd("pg_isready -h 127.0.0.1 -p 5001")
         .expect("failed to query pg_isready on port 5001");
     assert_eq!(
