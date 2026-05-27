@@ -46,12 +46,7 @@ pub fn connect_to_node(
     config: &config::Config,
     get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
 ) -> anyhow::Result<Box<dyn ServerInteractor>> {
-    let private_key = crate::helper::keys::find_private_key_for_user(&node.user, config);
-    let private_key = if private_key.is_empty() {
-        crate::helper::keys::get_any_private_key(config)
-    } else {
-        private_key
-    };
+    let private_key = crate::helper::keys::find_private_key_for_user(&node.user, config)?;
     let ssh = SSHSession::new(
         node.host.clone(),
         node.user.clone(),

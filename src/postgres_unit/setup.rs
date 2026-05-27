@@ -1,6 +1,6 @@
 use crate::{
     config::{self, PostgresDbConfig, PostgresUserConfig},
-    helper::keys::{find_private_key_for_user, get_any_private_key},
+    helper::keys::find_private_key_for_user,
     postgres_unit::{
         helper::{get_postgres_backup_schedule, interval_to_cron},
         install::install_postgres,
@@ -14,7 +14,7 @@ pub fn postgres_setup_wrapper(
     get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
     config: &config::Config,
     dot_env: &std::collections::HashMap<String, String>,
-    app_nodes: Vec<config::NodeConfig>,
+    app_nodes: &Vec<config::NodeConfig>,
 ) -> Result<(), anyhow::Error> {
     let pg_version = config
         .db
@@ -55,12 +55,7 @@ pub fn postgres_setup_wrapper(
             primary_node.name
         );
 
-        let private_key = find_private_key_for_user(&primary_node.user, config);
-        let private_key = if private_key.is_empty() {
-            get_any_private_key(config)
-        } else {
-            private_key
-        };
+        let private_key = find_private_key_for_user(&primary_node.user, config)?;
         let ssh = SSHSession::new(
             primary_node.host.clone(),
             primary_node.user.clone(),
@@ -87,12 +82,7 @@ pub fn postgres_setup_wrapper(
                 "Setting up follower PostgreSQL node at {}...",
                 follower_node.name
             );
-            let private_key = find_private_key_for_user(&follower_node.user, config);
-            let private_key = if private_key.is_empty() {
-                get_any_private_key(config)
-            } else {
-                private_key
-            };
+            let private_key = find_private_key_for_user(&follower_node.user, config)?;
             let ssh = SSHSession::new(
                 follower_node.host.clone(),
                 follower_node.user.clone(),
@@ -111,14 +101,9 @@ pub fn postgres_setup_wrapper(
         }
 
         // 3. Setup HAProxy on all vps nodes
-        for app_node in &app_nodes {
+        for app_node in app_nodes {
             println!("\n\tSetting up HAProxy on app node {}...", app_node.name);
-            let private_key = find_private_key_for_user(&app_node.user, config);
-            let private_key = if private_key.is_empty() {
-                get_any_private_key(config)
-            } else {
-                private_key
-            };
+            let private_key = find_private_key_for_user(&app_node.user, config)?;
 
             let ssh = SSHSession::new(
                 app_node.host.clone(),

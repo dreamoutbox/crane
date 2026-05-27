@@ -1,8 +1,10 @@
 use crate::config;
 use crate::deployer::helper::{deploy_update_etc_hosts, deploy_zip_app};
 use crate::deployer::users::deploy_setup_users;
-use crate::helper::keys::{find_private_key_for_user, get_any_private_key};
+use crate::helper::keys::find_private_key_for_user;
+use crate::helper::server::get_server_distro;
 use crate::postgres_unit::setup::postgres_setup_wrapper;
+use crate::server_interactor::get_interactor_for_distro;
 use crate::server_interactor::server_interactor_trait::ServerInteractor;
 use crate::ssh::SSHSession;
 use std::path::Path;
@@ -52,12 +54,8 @@ pub fn run(
             "Installing dependencies on {}@{} (port: {})...",
             node.user, node.name, node.port
         );
-        let private_key = find_private_key_for_user(&node.user, &config);
-        let private_key = if private_key.is_empty() {
-            get_any_private_key(&config)
-        } else {
-            private_key
-        };
+        let private_key = find_private_key_for_user(&node.user, &config)?;
+
         let ssh = SSHSession::new(
             node.host.clone(),
             node.user.clone(),
@@ -65,6 +63,7 @@ pub fn run(
             Some(node.port),
         );
 
+        //install required dependencies
         let interactor = get_interactor(ssh)?;
         interactor.install_dependencies(all_deps.clone())?;
 
@@ -82,7 +81,7 @@ pub fn run(
         .unwrap_or(false);
 
     if pg_enabled {
-        postgres_setup_wrapper(get_interactor, &config, &dot_env, app_nodes)?;
+        postgres_setup_wrapper(get_interactor, &config, &dot_env, &app_nodes)?;
     }
 
     // let mut handles = vec![];
@@ -181,38 +180,21 @@ pub fn run(
                 env_content.push_str(&format!("{}={}\n", k, v));
             }
 
-            // Find app nodes
-            let app_nodes: Vec<_> = config
-                .nodes
-                .iter()
-                .filter(|n| n.roles.contains(&"app".to_string()))
-                .cloned()
-                .collect();
-            if app_nodes.is_empty() {
-                anyhow::bail!("No nodes with the 'app' role found in configuration");
-            }
-
-            for node in app_nodes {
+            for node in &app_nodes {
                 println!(
                     "\n[{}] Deploying to node {}: {}@{} (port: {})",
                     app.name, node.user, node.name, node.host, node.port
                 );
 
-                let private_key = find_private_key_for_user(&node.user, &config);
-                let private_key = if private_key.is_empty() {
-                    get_any_private_key(&config)
-                } else {
-                    private_key
-                };
+                let private_key = find_private_key_for_user(&node.user, &config)?;
                 let ssh = SSHSession::new(
                     node.host.clone(),
                     node.user.clone(),
                     private_key,
                     Some(node.port),
                 );
-                let node_distro = crate::helper::server::get_server_distro(&ssh)?;
-                let node_interactor =
-                    crate::server_interactor::get_interactor_for_distro(ssh, &node_distro)?;
+                let node_distro = get_server_distro(&ssh)?;
+                let node_interactor = get_interactor_for_distro(ssh, &node_distro)?;
 
                 // 1. Setup user if specified
                 deploy_setup_users(&app, &config, &node_interactor)?;
@@ -229,35 +211,18 @@ pub fn run(
                     app.deploy_user, app.deploy_user, app.name
                 ))?;
 
-                let deploy_private_key = find_private_key_for_user(&app.deploy_user, &config);
-                let deploy_private_key = if deploy_private_key.is_empty() {
-                    get_any_private_key(&config)
-                } else {
-                    deploy_private_key
-                };
-                // Create deploy SSH session (reuse distro detected via admin)
-                let deploy_ssh = SSHSession::new(
-                    node.host.clone(),
-                    app.deploy_user.clone(),
-                    deploy_private_key,
-                    Some(node.port),
-                );
-                let deploy_interactor =
-                    crate::server_interactor::get_interactor_for_distro(deploy_ssh, &node_distro)?;
-
                 let release_dir = format!("/opt/{}/releases/{}", app.name, datetime);
-                deploy_interactor.cmd(&format!("mkdir -p '{}'", release_dir))?;
-
+                node_interactor.cmd(&format!("mkdir -p '{}'", release_dir))?;
                 let remote_zip_path = format!("{}/deploy.zip", release_dir);
-                deploy_interactor.upload(zip_path.to_str().unwrap(), &remote_zip_path)?;
+                node_interactor.upload(zip_path.to_str().unwrap(), &remote_zip_path)?;
 
                 // Extract zip on server
-                deploy_interactor.cmd(&format!(
+                node_interactor.cmd(&format!(
                     "unzip -o '{}' -d '{}'",
                     remote_zip_path, release_dir
                 ))?;
                 // Remove the remote zip file to clean up
-                deploy_interactor.cmd(&format!("rm -f '{}'", remote_zip_path))?;
+                node_interactor.cmd(&format!("rm -f '{}'", remote_zip_path))?;
                 // println!("Extracted zip to {}\n", release_dir);
 
                 // 4. Rolling deploy across vps instances
@@ -302,13 +267,13 @@ pub fn run(
                     let _ = node_interactor.stop_service(&service_instance);
 
                     // Update current symlink (deploy)
-                    deploy_interactor.cmd(&format!(
+                    node_interactor.cmd(&format!(
                         "ln -sfn '{}' '/opt/{}/current'",
                         release_dir, app.name
                     ))?;
 
                     // Chmod the entrypoint to be executable
-                    deploy_interactor.cmd(&format!(
+                    node_interactor.cmd(&format!(
                         "chmod +x '/opt/{}/current/{}'",
                         app.name,
                         app.entrypoint.trim_start_matches("./")
@@ -316,8 +281,8 @@ pub fn run(
 
                     // Write environment file (deploy)
                     let env_path = format!("/etc/crane/{}/.env", app.name);
-                    deploy_interactor.create_file(&env_path, &env_content)?;
-                    deploy_interactor.cmd(&format!("chmod 600 '{}'", env_path))?;
+                    node_interactor.create_file(&env_path, &env_content)?;
+                    node_interactor.cmd(&format!("chmod 600 '{}'", env_path))?;
 
                     // Create systemd template unit (admin)
                     crate::systemd_unit::setup::setup_systemd_template(
@@ -350,7 +315,7 @@ pub fn run(
                             }
                         }
 
-                        std::thread::sleep(std::time::Duration::from_millis(500));
+                        std::thread::sleep(std::time::Duration::from_millis(800));
                     }
 
                     if !healthy {

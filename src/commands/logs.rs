@@ -1,5 +1,5 @@
 use crate::config;
-use crate::helper::keys::{find_private_key_for_user, get_any_private_key};
+use crate::helper::keys::find_private_key_for_user;
 use crate::server_interactor::server_interactor_trait::ServerInteractor;
 use crate::ssh::SSHSession;
 use std::io::{BufRead, BufReader};
@@ -85,7 +85,6 @@ pub fn run(
         }
     }
 
-
     // Helper to build journalctl command string
     let build_cmd = |port: u16| -> String {
         let mut cmd = format!(
@@ -112,14 +111,10 @@ pub fn run(
     if follow {
         // Stream in parallel using raw SSH Session child processes
         let mut handles = vec![];
+
         for target in targets {
             let cmd = build_cmd(target.port);
-            let private_key = find_private_key_for_user(&target.node.user, &config);
-            let private_key = if private_key.is_empty() {
-                get_any_private_key(&config)
-            } else {
-                private_key
-            };
+            let private_key = find_private_key_for_user(&target.node.user, &config)?;
             let ssh = SSHSession::new(
                 target.node.host.clone(),
                 target.node.user.clone(),
@@ -154,14 +149,10 @@ pub fn run(
     } else {
         // Query in parallel using interactors, print grouped/ordered by instance ID
         let mut handles = vec![];
+
         for target in targets {
             let cmd = build_cmd(target.port);
-            let private_key = find_private_key_for_user(&target.node.user, &config);
-            let private_key = if private_key.is_empty() {
-                get_any_private_key(&config)
-            } else {
-                private_key
-            };
+            let private_key = find_private_key_for_user(&target.node.user, &config)?;
             let ssh = SSHSession::new(
                 target.node.host.clone(),
                 target.node.user.clone(),

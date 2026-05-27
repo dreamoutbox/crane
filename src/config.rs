@@ -22,6 +22,7 @@ pub struct NodeConfig {
     pub port: u16,
     pub user: String,
     pub roles: Vec<String>,
+    pub private_key: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -29,6 +30,7 @@ pub struct UserConfig {
     pub name: String,
     pub groups: Vec<String>,
     pub ssh_authorized_keys: Vec<String>,
+    pub private_key: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]

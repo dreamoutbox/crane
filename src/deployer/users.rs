@@ -8,6 +8,7 @@ pub fn deploy_setup_users(
     if let Some(ref users) = config.users {
         if let Some(user_config) = users.iter().find(|u| u.name == app.deploy_user) {
             let mut authorized_keys = Vec::new();
+
             for key in &user_config.ssh_authorized_keys {
                 let expanded_path = if key.starts_with('~') {
                     if let Some(home) = std::env::var_os("HOME") {
