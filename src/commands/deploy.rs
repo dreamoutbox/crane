@@ -9,7 +9,7 @@ use crate::ssh::SSHSession;
 use std::path::Path;
 
 /// deploy app commands
-pub fn run(config_path: &Path) -> anyhow::Result<()> {
+pub fn run(config_path: &Path, no_dns_update: bool) -> anyhow::Result<()> {
     println!("Loading configuration from {:?}\n", config_path);
 
     let config = config::load_config(config_path)?;
@@ -337,7 +337,7 @@ pub fn run(config_path: &Path) -> anyhow::Result<()> {
                     config
                         .domain
                         .as_ref()
-                        .map(|d| d.name.clone())
+                        .map(|d| d.domain_name.clone())
                         .unwrap_or_else(|| "localhost".to_string())
                 });
                 let health_path = app.health_check_path.as_deref().unwrap_or("/health");
@@ -357,7 +357,7 @@ pub fn run(config_path: &Path) -> anyhow::Result<()> {
                 let global_domain = config
                     .domain
                     .as_ref()
-                    .map(|d| d.name.as_str())
+                    .map(|d| d.domain_name.as_str())
                     .unwrap_or("localhost");
 
                 let mut hosts_entries: Vec<(String, String)> = config
@@ -405,6 +405,12 @@ pub fn run(config_path: &Path) -> anyhow::Result<()> {
     // }
 
     println!("\nDEPLOY COMPLETE\n");
+
+    if !no_dns_update {
+        if let Err(e) = crate::cloudflare_unit::setup::update_dns_blocking(&config, None, true) {
+            eprintln!("Failed to update DNS records: {}", e);
+        }
+    }
 
     Ok(())
 }

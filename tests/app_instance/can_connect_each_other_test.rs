@@ -20,7 +20,7 @@ fn test_app_instances_can_connect_each_other() {
 
     // 2. Deploy app configuration to VPS nodes
     let config_path = Path::new("demo/crane.toml");
-    crane::commands::deploy::run(config_path).expect("deploy failed");
+    crane::commands::deploy::run(config_path, false).expect("deploy failed");
 
     // 3. Test myapp to myapp2 connectivity
     let curl1 = Command::new("curl")

@@ -22,7 +22,7 @@ fn test_deploy() {
 
     // 2. Deploy app configuration to VPS nodes
     let config_path = Path::new("demo/crane.toml");
-    crane::commands::deploy::run(config_path).expect("deploy failed");
+    crane::commands::deploy::run(config_path, false).expect("deploy failed");
 
     // ASSERT this machine can curl at myapp.localhost
     let curl_myapp = Command::new("curl")

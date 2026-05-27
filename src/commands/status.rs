@@ -70,7 +70,7 @@ pub fn run(config_path: &Path, app_name: &str) -> anyhow::Result<()> {
     let external_url = if app.domain.is_some() {
         format!("https://{}", app.domain.as_ref().unwrap())
     } else if let Some(ref d) = config.domain {
-        format!("https://{}", d.name)
+        format!("https://{}", d.domain_name)
     } else {
         format!("http://{}", app_nodes[0].public_ip)
     };

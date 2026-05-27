@@ -63,7 +63,7 @@ pub struct AppDatabaseConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub struct DomainConfig {
     pub provider: String,
-    pub name: String,
+    pub domain_name: String,
     pub tls_email: Option<String>,
 }
 
