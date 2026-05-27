@@ -80,12 +80,12 @@ impl ServerInteractor for DebianInteractor {
     }
 
     fn chmod(&self, path: &str, permission: &str) -> anyhow::Result<()> {
-        self.run_checked(&format!("chmod '{}' '{}'", permission, path))?;
+        self.run_checked(&format!("chmod -R '{}' '{}'", permission, path))?;
         Ok(())
     }
 
     fn chown(&self, path: &str, user: &str, group: &str) -> anyhow::Result<()> {
-        self.run_checked(&format!("chown '{}:{}' '{}'", user, group, path))?;
+        self.run_checked(&format!("chown -R '{}:{}' '{}'", user, group, path))?;
         Ok(())
     }
 

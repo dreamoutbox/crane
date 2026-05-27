@@ -12,7 +12,7 @@ use crate::{
     s3::{get_s3_config, s3_client::RealS3Client},
 };
 
-pub fn run_postgres_backup_cmd(
+pub fn backup_from_config_wrapper(
     config_path: &Path,
     backup_type: &str,
 ) -> anyhow::Result<BackupMetadata> {
@@ -51,7 +51,7 @@ pub fn run_postgres_backup_cmd(
 }
 
 pub fn run_backup_cmd(config_path: &Path, backup_type: &str) -> anyhow::Result<()> {
-    let meta = run_postgres_backup_cmd(config_path, backup_type)?;
+    let meta = backup_from_config_wrapper(config_path, backup_type)?;
 
     println!("\nBackup successful!\n");
     println!("ID: {}", meta.id);

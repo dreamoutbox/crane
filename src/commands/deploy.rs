@@ -114,6 +114,7 @@ pub fn run(config_path: &Path) -> anyhow::Result<()> {
             // Canonicalize to absolute path so python script works regardless of CWD
             let dir_to_deploy = deploy_dir_candidate.canonicalize()?;
 
+            // zip app directory
             let zip_path = deploy_zip_app(&app, &datetime, dir_to_deploy)?;
 
             // Merge environment
@@ -194,30 +195,43 @@ pub fn run(config_path: &Path) -> anyhow::Result<()> {
                 deploy_setup_users(&app, &config, &*node_interactor)?;
 
                 // 3. Prepare target directories (admin) and chown to deploy_user
-                node_interactor.cmd(&format!("sudo mkdir -p '/opt/{}'", app.name))?;
+                let app_dir = format!("/app/{}", app.name);
+                let app_config_dir = format!("/app_config/{}", app.name);
+
+                node_interactor.cmd(&format!("sudo mkdir -p '{}'", app_dir))?;
                 node_interactor.cmd(&format!(
-                    "sudo chown -R '{}:{}' '/opt/{}'",
-                    app.deploy_user, app.deploy_user, app.name
+                    "sudo chown -R '{}:{}' '{}'",
+                    app.deploy_user, app.deploy_user, app_dir
                 ))?;
-                node_interactor.cmd(&format!("sudo mkdir -p '/etc/crane/{}'", app.name))?;
+                node_interactor.cmd(&format!("sudo mkdir -p '{}'", app_config_dir))?;
                 node_interactor.cmd(&format!(
-                    "sudo chown -R '{}:{}' '/etc/crane/{}'",
-                    app.deploy_user, app.deploy_user, app.name
+                    "sudo chown -R '{}:{}' '{}'",
+                    app.deploy_user, app.deploy_user, app_config_dir
                 ))?;
 
-                let release_dir = format!("/opt/{}/releases/{}", app.name, datetime);
-                node_interactor.cmd(&format!("mkdir -p '{}'", release_dir))?;
-                let remote_zip_path = format!("{}/deploy.zip", release_dir);
-                node_interactor.upload(zip_path.to_str().unwrap(), &remote_zip_path)?;
+                // Upload zip to /tmp to avoid permission issues
+                let temp_zip_path = format!("/tmp/crane-deploy-{}-{}.zip", app.name, datetime);
+                node_interactor.upload(zip_path.to_str().unwrap(), &temp_zip_path)?;
 
-                // Extract zip on server
+                // Extract zip on server using sudo
                 node_interactor.cmd(&format!(
-                    "unzip -o '{}' -d '{}'",
-                    remote_zip_path, release_dir
+                    "sudo unzip -o '{}' -d '{}'",
+                    temp_zip_path, app_dir
                 ))?;
-                // Remove the remote zip file to clean up
-                node_interactor.cmd(&format!("rm -f '{}'", remote_zip_path))?;
-                // println!("Extracted zip to {}\n", release_dir);
+                // Ensure correct ownership of extracted files
+                node_interactor.cmd(&format!(
+                    "sudo chown -R '{}:{}' '{}'",
+                    app.deploy_user, app.deploy_user, app_dir
+                ))?;
+                // Chmod the entrypoint to be executable
+                node_interactor.cmd(&format!(
+                    "sudo chmod +x '{}/{}'",
+                    app_dir,
+                    app.entrypoint.trim_start_matches("./")
+                ))?;
+                // Remove the remote temporary zip file
+                node_interactor.cmd(&format!("rm -f '{}'", temp_zip_path))?;
+                // println!("\tExtracted zip to {}\n", app_dir);
 
                 // 4. Rolling deploy across vps instances
                 let min_replicas = app
@@ -260,23 +274,18 @@ pub fn run(config_path: &Path) -> anyhow::Result<()> {
                     // Stop service if running (admin)
                     let _ = node_interactor.stop_service(&service_instance);
 
-                    // Update current symlink (deploy)
-                    node_interactor.cmd(&format!(
-                        "ln -sfn '{}' '/opt/{}/current'",
-                        release_dir, app.name
-                    ))?;
+                    // No symlink update needed for direct /app deployment
 
-                    // Chmod the entrypoint to be executable
+                    // Write env file to /tmp first, then move and set permissions using sudo
+                    let temp_env_path = format!("/tmp/crane-env-{}-{}.tmp", app.name, port);
+                    node_interactor.create_file(&temp_env_path, &env_content)?;
+                    let env_path = format!("{}/.env", app_config_dir);
+                    node_interactor.cmd(&format!("sudo mv '{}' '{}'", temp_env_path, env_path))?;
                     node_interactor.cmd(&format!(
-                        "chmod +x '/opt/{}/current/{}'",
-                        app.name,
-                        app.entrypoint.trim_start_matches("./")
+                        "sudo chown '{}:{}' '{}'",
+                        app.deploy_user, app.deploy_user, env_path
                     ))?;
-
-                    // Write environment file (deploy)
-                    let env_path = format!("/etc/crane/{}/.env", app.name);
-                    node_interactor.create_file(&env_path, &env_content)?;
-                    node_interactor.cmd(&format!("chmod 600 '{}'", env_path))?;
+                    node_interactor.cmd(&format!("sudo chmod 600 '{}'", env_path))?;
 
                     // Create systemd template unit (admin)
                     crate::systemd_unit::setup::setup_systemd_template(
@@ -287,7 +296,7 @@ pub fn run(config_path: &Path) -> anyhow::Result<()> {
                     )?;
 
                     // Start service
-                    node_interactor.cmd(&format!("sudo systemctl start '{}'", service_instance))?;
+                    node_interactor.start_service(&service_instance)?;
 
                     // Health check loop
                     let health_path = app.health_check_path.as_deref().unwrap_or("/health");
@@ -302,6 +311,7 @@ pub fn run(config_path: &Path) -> anyhow::Result<()> {
                             "curl -s -o /dev/null -w \"%{{http_code}}\" http://127.0.0.1:{}{}",
                             port, health_path
                         );
+
                         if let Ok(code) = node_interactor.cmd(&curl_cmd) {
                             if code.stdout.trim() == "200" {
                                 healthy = true;
@@ -343,14 +353,15 @@ pub fn run(config_path: &Path) -> anyhow::Result<()> {
                     false, // will reload once at the end
                 )?;
 
-                // 5b. Update /etc/hosts on the VPS so apps can resolve each
-                // other by service name (e.g. curl myapp2/curl?to=myapp).
+                // 5b. Update /etc/hosts on the VPS so apps can resolve each other by service name
+                // e.g. curl myapp2/curl?to=myapp
                 // Use domain's first label (e.g. "myapp2" from "myapp2.localhost") as hostname.
                 let global_domain = config
                     .domain
                     .as_ref()
                     .map(|d| d.name.as_str())
                     .unwrap_or("localhost");
+
                 let mut hosts_entries: Vec<(String, String)> = config
                     .app
                     .values()
@@ -366,6 +377,7 @@ pub fn run(config_path: &Path) -> anyhow::Result<()> {
                         Some((hostname, "127.0.0.1".to_string()))
                     })
                     .collect();
+
                 // Dedup by hostnamesetup_traefik
                 hosts_entries.sort_by(|a, b| a.0.cmp(&b.0));
                 hosts_entries.dedup_by(|a, b| a.0 == b.0);
@@ -373,26 +385,7 @@ pub fn run(config_path: &Path) -> anyhow::Result<()> {
                 println!("\tUpdating /etc/hosts on node {}...", node.name);
                 deploy_update_etc_hosts(&*node_interactor, &hosts_entries)?;
 
-                // 6. Prune old releases
-                let retain = app.retain_releases.unwrap_or(3) as usize;
-                let releases_dir = format!("/opt/{}/releases", app.name);
-                if let Ok(list_output) = node_interactor.cmd(&format!("ls -1d {}/*", releases_dir))
-                {
-                    let mut dirs: Vec<String> = list_output
-                        .stdout
-                        .lines()
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty())
-                        .collect();
-                    dirs.sort();
-                    if dirs.len() > retain {
-                        let to_remove = dirs.len() - retain;
-                        for dir in dirs.iter().take(to_remove) {
-                            println!("Pruning old release: {}", dir);
-                            let _ = node_interactor.cmd(&format!("sudo rm -rf '{}'", dir));
-                        }
-                    }
-                }
+                // No pruning needed for direct /app deployment
 
                 // Reload traefik after all services are deployed on this node
                 crate::traefik_unit::setup::reload_traefik(&*node_interactor)?;
