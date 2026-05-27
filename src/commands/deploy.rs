@@ -276,11 +276,9 @@ pub fn run(config_path: &Path) -> anyhow::Result<()> {
 
                     // No symlink update needed for direct /app deployment
 
-                    // Write env file to /tmp first, then move and set permissions using sudo
-                    let temp_env_path = format!("/tmp/crane-env-{}-{}.tmp", app.name, port);
-                    node_interactor.create_file(&temp_env_path, &env_content)?;
+                    // Write env file directly
                     let env_path = format!("{}/.env", app_config_dir);
-                    node_interactor.cmd(&format!("sudo mv '{}' '{}'", temp_env_path, env_path))?;
+                    node_interactor.create_file(&env_path, &env_content)?;
                     node_interactor.cmd(&format!(
                         "sudo chown '{}:{}' '{}'",
                         app.deploy_user, app.deploy_user, env_path

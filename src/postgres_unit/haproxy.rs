@@ -78,8 +78,7 @@ backend postgres_back
     }
 
     println!("\tWriting HAProxy configuration...");
-    interactor.create_file("/tmp/haproxy.cfg.tmp", &haproxy_cfg)?;
-    interactor.cmd("sudo mv /tmp/haproxy.cfg.tmp /etc/haproxy/haproxy.cfg")?;
+    interactor.create_file("/etc/haproxy/haproxy.cfg", &haproxy_cfg)?;
     interactor.cmd("sudo chown root:root /etc/haproxy/haproxy.cfg")?;
     interactor.cmd("sudo chmod 644 /etc/haproxy/haproxy.cfg")?;
 

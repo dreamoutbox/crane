@@ -10,6 +10,7 @@ use crate::postgres_unit::helper::get_backups_from_s3;
 use crate::postgres_unit::helper::postgres_get_leader;
 use crate::s3::get_s3_config;
 use crate::s3::s3_client::RealS3Client;
+use crate::server_interactor::server_interactor_trait::ServerInteractor;
 
 pub fn run_promote_cmd(config_path: &Path, target_node_str: &str) -> anyhow::Result<()> {
     let config = config::load_config(config_path)?;
@@ -374,6 +375,27 @@ pub fn run_postgres_logs_cmd(
     }
 
     let interactor = connect_to_node(&target_conf, &config)?;
+
+    run_postgres_logs_cmd_internal(
+        &*interactor,
+        target_node_str,
+        since,
+        until,
+        user,
+        db,
+        sql,
+    )
+}
+
+pub fn run_postgres_logs_cmd_internal(
+    interactor: &dyn ServerInteractor,
+    target_node_str: &str,
+    since: Option<&str>,
+    until: Option<&str>,
+    user: Option<&str>,
+    db: Option<&str>,
+    sql: Option<&str>,
+) -> anyhow::Result<()> {
 
     // Check if 'postgres' user exists on the remote node
     let user_check = interactor.cmd("id postgres")?;

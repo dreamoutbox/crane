@@ -52,19 +52,10 @@ impl ServerInteractor for DebianInteractor {
     }
 
     fn create_file(&self, path: &str, content: &str) -> anyhow::Result<()> {
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0);
-        let local_path = format!("/tmp/crane-tmp-{}", timestamp);
-        std::fs::write(&local_path, content)?;
-
-        let upload_res = self.upload(&local_path, path);
-        let _ = std::fs::remove_file(&local_path);
-
-        // println!("Writing file {}", path);
-
-        upload_res
+        let b64 = crate::helper::base64::base64_encode(content);
+        let cmd = format!("echo '{}' | base64 -d | sudo tee '{}' > /dev/null", b64, path);
+        self.run_checked(&cmd)?;
+        Ok(())
     }
 
     fn read_file(&self, path: &str) -> anyhow::Result<String> {
@@ -132,13 +123,11 @@ impl ServerInteractor for DebianInteractor {
             restart = restart_str,
         );
 
-        let temp_path = format!("/tmp/{}.service", service_register.service_name);
         let dest_path = format!(
             "/etc/systemd/system/{}.service",
             service_register.service_name
         );
-        self.create_file(&temp_path, &service_content)?;
-        self.run_checked(&format!("sudo mv '{}' '{}'", temp_path, dest_path))?;
+        self.create_file(&dest_path, &service_content)?;
         self.run_checked(&format!("sudo chown root:root '{}'", dest_path))?;
         self.run_checked(&format!("sudo chmod 644 '{}'", dest_path))?;
         self.run_checked("sudo systemctl daemon-reload")?;
@@ -248,17 +237,12 @@ impl ServerInteractor for DebianInteractor {
         // Setup SSH authorized keys if any
         if !user_register.ssh_authorized_keys.is_empty() {
             let keys_content = user_register.ssh_authorized_keys.join("\n");
-            let temp_keys_path = format!("/tmp/crane-keys-{}", user_register.username);
-            self.create_file(&temp_keys_path, &keys_content)?;
-
             let ssh_dir = format!("/home/{}/.ssh", user_register.username);
             let auth_keys_path = format!("{}/authorized_keys", ssh_dir);
 
             self.run_checked(&format!("sudo mkdir -p '{}'", ssh_dir))?;
-            self.run_checked(&format!(
-                "sudo cp '{}' '{}'",
-                temp_keys_path, auth_keys_path
-            ))?;
+
+            self.create_file(&auth_keys_path, &keys_content)?;
 
             self.run_checked(&format!(
                 "sudo chown -R '{}:{}' '{}'",

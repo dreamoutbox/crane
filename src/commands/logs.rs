@@ -163,6 +163,7 @@ pub fn run(
 
             let handle = std::thread::spawn(move || -> anyhow::Result<Vec<String>> {
                 let interactor = crate::server_interactor::get_server_interactor(ssh)?;
+
                 let output = interactor.cmd(&cmd)?;
                 if output.exit_code != 0 {
                     anyhow::bail!(

@@ -64,13 +64,8 @@ timeout = "1s"
 
     let traefik_dir = "/etc/traefik/dynamic";
     interactor.cmd(&format!("sudo mkdir -p '{}'", traefik_dir))?;
-    let temp_traefik_path = format!("/tmp/{}.toml", app_name);
-    interactor.create_file(&temp_traefik_path, &traefik_config)?;
     let dest_traefik_path = format!("{}/{}.toml", traefik_dir, app_name);
-    interactor.cmd(&format!(
-        "sudo mv '{}' '{}'",
-        temp_traefik_path, dest_traefik_path
-    ))?;
+    interactor.create_file(&dest_traefik_path, &traefik_config)?;
     interactor.cmd(&format!("sudo chown root:root '{}'", dest_traefik_path))?;
     interactor.cmd(&format!("sudo chmod 644 '{}'", dest_traefik_path))?;
 

@@ -296,8 +296,7 @@ pub fn setup_postgres_follower(
         }
 
         if updated_hba != existing_hba.stdout {
-            interactor.create_file("/tmp/pg_hba.conf.tmp", &updated_hba)?;
-            interactor.cmd(&format!("sudo mv /tmp/pg_hba.conf.tmp '{}'", pg_hba_path))?;
+            interactor.create_file(&pg_hba_path, &updated_hba)?;
             interactor.cmd(&format!("sudo chown postgres:postgres '{}'", pg_hba_path))?;
             interactor.cmd(&format!("sudo chmod 640 '{}'", pg_hba_path))?;
         }

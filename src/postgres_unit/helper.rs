@@ -358,8 +358,7 @@ pub fn configure_postgres_primary_rules(
     }
 
     if updated_hba != existing_hba.stdout {
-        interactor.create_file("/tmp/pg_hba.conf.tmp", &updated_hba)?;
-        interactor.cmd(&format!("sudo mv /tmp/pg_hba.conf.tmp '{}'", pg_hba_path))?;
+        interactor.create_file(&pg_hba_path, &updated_hba)?;
         interactor.cmd(&format!("sudo chown postgres:postgres '{}'", pg_hba_path))?;
         interactor.cmd(&format!("sudo chmod 640 '{}'", pg_hba_path))?;
     }
@@ -471,17 +470,13 @@ pub fn configure_postgres_backup(
             version,
             replica_pass
         );
-        // Write postgres-backup-config.json via tmp
-        interactor.create_file("/tmp/postgres-backup-config.json.tmp", &s3_json_str)?;
-        interactor.cmd(
-            "sudo mv /tmp/postgres-backup-config.json.tmp /etc/crane/postgres-backup-config.json",
-        )?;
+        // Write postgres-backup-config.json directly
+        interactor.create_file("/etc/crane/postgres-backup-config.json", &s3_json_str)?;
         interactor.cmd("sudo chown root:root /etc/crane/postgres-backup-config.json")?;
         interactor.cmd("sudo chmod 600 /etc/crane/postgres-backup-config.json")?;
 
-        // Write postgres-backup.py via tmp
-        interactor.create_file("/tmp/postgres-backup.py.tmp", PYTHON_BACKUP_SCRIPT)?;
-        interactor.cmd("sudo mv /tmp/postgres-backup.py.tmp /opt/crane/postgres-backup.py")?;
+        // Write postgres-backup.py directly
+        interactor.create_file("/opt/crane/postgres-backup.py", PYTHON_BACKUP_SCRIPT)?;
         interactor.cmd("sudo chown root:root /opt/crane/postgres-backup.py")?;
         interactor.cmd("sudo chmod 755 /opt/crane/postgres-backup.py")?;
 
@@ -496,8 +491,7 @@ pub fn configure_postgres_backup(
             "#,
             full_cron, incr_cron
         );
-        interactor.create_file("/tmp/postgres-backup-cron.tmp", &cron_content)?;
-        interactor.cmd("sudo mv /tmp/postgres-backup-cron.tmp /etc/cron.d/postgres-backup")?;
+        interactor.create_file("/etc/cron.d/postgres-backup", &cron_content)?;
         interactor.cmd("sudo chown root:root /etc/cron.d/postgres-backup")?;
         interactor.cmd("sudo chmod 644 /etc/cron.d/postgres-backup")?;
     }

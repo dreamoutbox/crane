@@ -89,13 +89,8 @@ pub fn run_backup(
                 let manifest_data = s3_client.get_object(&s3_key)?;
 
                 // Write back on VPS
-                let temp_path = format!("/tmp/manifest_{}", parent.id);
                 let content = String::from_utf8_lossy(&manifest_data);
-                interactor.create_file(&temp_path, &content)?;
-                cmdw(
-                    interactor,
-                    &format!("sudo mv {} {}", temp_path, parent_manifest),
-                )?;
+                interactor.create_file(&parent_manifest, &content)?;
                 cmdw(
                     interactor,
                     &format!("sudo chown postgres:postgres {}", parent_manifest),
@@ -219,12 +214,7 @@ pub fn run_backup(
 
     // 9. Write metadata descriptor file locally and upload to S3
     let meta_toml = toml::to_string(&meta)?;
-    let temp_meta_path = format!("/tmp/metadata_{}.toml", id);
-    interactor.create_file(&temp_meta_path, &meta_toml)?;
-    cmdw(
-        interactor,
-        &format!("sudo mv {} {}/metadata.toml", temp_meta_path, local_path),
-    )?;
+    interactor.create_file(&format!("{}/metadata.toml", local_path), &meta_toml)?;
     cmdw(
         interactor,
         &format!("sudo chown postgres:postgres {}/metadata.toml", local_path),
@@ -243,15 +233,7 @@ pub fn run_backup(
     let registry_toml = toml::to_string(&registry)?;
     s3_client.put_object(registry_key, registry_toml.as_bytes())?;
 
-    let temp_reg_path = format!("/tmp/registry_{}.toml", id);
-    interactor.create_file(&temp_reg_path, &registry_toml)?;
-    cmdw(
-        interactor,
-        &format!(
-            "sudo mv {} /var/lib/postgresql/backups/registry.toml",
-            temp_reg_path
-        ),
-    )?;
+    interactor.create_file("/var/lib/postgresql/backups/registry.toml", &registry_toml)?;
     cmdw(
         interactor,
         "sudo chown postgres:postgres /var/lib/postgresql/backups/registry.toml",

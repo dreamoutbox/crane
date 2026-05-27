@@ -45,8 +45,7 @@ certificatesResolvers:
         entryPoint: "web"
 "#;
 
-    interactor.create_file("/tmp/traefik.yml", static_config)?;
-    interactor.cmd("sudo mv /tmp/traefik.yml /etc/traefik/traefik.yml")?;
+    interactor.create_file("/etc/traefik/traefik.yml", static_config)?;
     interactor.cmd("sudo chown root:root /etc/traefik/traefik.yml")?;
     interactor.cmd("sudo chmod 644 /etc/traefik/traefik.yml")?;
 
@@ -66,8 +65,7 @@ Restart=always
 WantedBy=multi-user.target
 "#;
 
-    interactor.create_file("/tmp/traefik.service", service_config)?;
-    interactor.cmd("sudo mv /tmp/traefik.service /etc/systemd/system/traefik.service")?;
+    interactor.create_file("/etc/systemd/system/traefik.service", service_config)?;
     interactor.cmd("sudo chown root:root /etc/systemd/system/traefik.service")?;
     interactor.cmd("sudo chmod 644 /etc/systemd/system/traefik.service")?;
 
