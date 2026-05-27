@@ -51,20 +51,21 @@ RUN mkdir -p /run/sshd && \
     mkdir -p /etc/tmpfiles.d && \
     echo "d /run/sshd 0755 root root -" > /etc/tmpfiles.d/ssh.conf
 
-# Create admin user (mirrors real VPS deploy user) with UID/GID 1000 to match host user
+#Create crane user (VPS deploy user) 
+#with UID/GID 1000 to match host user
 RUN (userdel -r ubuntu || true) && \
     (groupdel ubuntu || true) && \
-    useradd -u 1000 -U -m -s /bin/bash -G sudo admin && \
-    echo "admin ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/admin && \
-    chmod 440 /etc/sudoers.d/admin && \
-    mkdir -p /home/admin/.ssh && \
-    chmod 700 /home/admin/.ssh && \
-    chown admin:admin /home/admin/.ssh
+    useradd -u 1000 -U -m -s /bin/bash -G sudo crane && \
+    echo "crane ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/crane && \
+    chmod 440 /etc/sudoers.d/crane && \
+    mkdir -p /home/crane/.ssh && \
+    chmod 700 /home/crane/.ssh && \
+    chown crane:crane /home/crane/.ssh
 
 # Mount authorized_keys at runtime via volume (see docker-compose)
 # Fallback: copy if present at build time
-COPY --chown=admin:admin keys/authorized_keys /home/admin/.ssh/authorized_keys
-RUN chmod 600 /home/admin/.ssh/authorized_keys 2>/dev/null || true
+COPY --chown=crane:crane keys/authorized_keys /home/crane/.ssh/authorized_keys
+RUN chmod 600 /home/crane/.ssh/authorized_keys 2>/dev/null || true
 
 # Enable SSH service
 RUN systemctl enable ssh

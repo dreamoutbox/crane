@@ -10,7 +10,7 @@ services:
     privileged: true # required for systemd
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
-      - ./keys/authorized_keys:/home/admin/.ssh/authorized_keys:ro
+      - ./keys/authorized_keys:/home/crane/.ssh/authorized_keys:ro
     ports:
       - "2221:22"
       - "8081:80"
@@ -40,7 +40,7 @@ services:
     privileged: true
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
-      - ./keys/authorized_keys:/home/admin/.ssh/authorized_keys:ro
+      - ./keys/authorized_keys:/home/crane/.ssh/authorized_keys:ro
     ports:
       - "2222:22"
       - "8082:80"
@@ -68,7 +68,7 @@ services:
     privileged: true
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
-      - ./keys/authorized_keys:/home/admin/.ssh/authorized_keys:ro
+      - ./keys/authorized_keys:/home/crane/.ssh/authorized_keys:ro
     ports:
       - "2223:22"
       - "8083:80"

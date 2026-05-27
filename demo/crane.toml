@@ -6,8 +6,8 @@ host = "localhost"
 public_ip = "localhost"
 internal_ip = "10.0.0.11"
 port = 2221
-user = "admin"
 roles = ["app", "traefik", "postgres", "redis"]
+user = "admin"
 
 [[nodes]]
 name = "vps2"
@@ -15,8 +15,8 @@ host = "localhost"
 public_ip = "localhost"
 internal_ip = "10.0.0.12"
 port = 2222
-user = "admin"
 roles = ["app", "traefik", "postgres", "redis"]
+user = "admin"
 
 # [[nodes]]
 # name = "vps3"
@@ -24,23 +24,22 @@ roles = ["app", "traefik", "postgres", "redis"]
 # public_ip = "localhost"
 # internal_ip = "10.0.0.13"
 # port = 2223
-# user = "admin"
 # roles = ["app", "traefik", "postgres", "redis"]
-
+# user = "admin"
 
 [[users]]
 name = "deployman"
 groups = ["www"]
-ssh_authorized_keys = ["~/.ssh/id_rsa.pub"]
+ssh_authorized_keys = ["keys/id_ed25519.pub"]
 
 
 [app.myapp]
 name = "myapp"
 # Setup Info
 dependencies = ["libssl3", "ca-certificates"]
+# Deploy Info
 deploy_dir = "./demo"
 entrypoint = "./myapp"
-# Deploy Info
 deploy_user = "deployman"
 port_start = 3000
 port_end = 3100
@@ -74,14 +73,14 @@ user = "u1"
 
 [app.myapp2]
 name = "myapp2"
+# Setup Info
+dependencies = ["libssl3", "ca-certificates"]
 # Deploy Info
 deploy_dir = "./demo"
 entrypoint = "./myapp"
 deploy_user = "deployman"
-port_start = 4000
-port_end = 4100
-instances = 1
-dependencies = ["libssl3", "ca-certificates"]
+port_start = 3000
+port_end = 3100
 # Health Check
 health_check_path = "/health"
 health_check_timeout = 30
@@ -91,6 +90,7 @@ domain = "myapp2.localhost"
 # Keep old app versions
 retain_releases = 3
 # Replicas
+instances = 1
 min_replicas = 1
 max_replicas = 3
 
