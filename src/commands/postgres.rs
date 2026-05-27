@@ -8,21 +8,16 @@ use crate::postgres_unit::helper::{get_pg_version, get_replica_pass};
 use crate::postgres_unit::tasks::*;
 use crate::s3::get_s3_config;
 use crate::s3::s3_client::RealS3Client;
-use crate::server_interactor::server_interactor_trait::ServerInteractor;
-use crate::ssh::SSHSession;
+
 use std::path::Path;
 
-pub fn promote(
-    config_path: &Path,
-    target_node_str: &str,
-    get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
-) -> anyhow::Result<()> {
+pub fn promote(config_path: &Path, target_node_str: &str) -> anyhow::Result<()> {
     let config = config::load_config(config_path)?;
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
     let env_path = config_dir.join(".env");
     let dot_env = config::load_env_file(&env_path).unwrap_or_default();
 
-    let target_conf = find_node_config_with_fallback(target_node_str, &config, get_interactor)
+    let target_conf = find_node_config_with_fallback(target_node_str, &config)
         .ok_or_else(|| anyhow::anyhow!("Node '{}' not found in configuration", target_node_str))?;
 
     if !target_conf.roles.contains(&"postgres".to_string()) {
@@ -46,7 +41,7 @@ pub fn promote(
         .cloned()
         .unwrap_or_else(|| "repl_password".to_string());
 
-    let current_leader = postgres_get_leader(&config, get_interactor)?;
+    let current_leader = postgres_get_leader(&config)?;
 
     if let Some(ref leader) = current_leader {
         if leader.internal_ip == target_conf.internal_ip {
@@ -63,14 +58,7 @@ pub fn promote(
             "\nSynchronizing target follower node {} with current leader {} before promotion...",
             target_conf.name, leader.name
         );
-        run_demote_node(
-            &target_conf,
-            leader,
-            &pg_version,
-            &replica_pass,
-            &config,
-            get_interactor,
-        )?;
+        run_demote_node(&target_conf, leader, &pg_version, &replica_pass, &config)?;
     }
 
     // Configure target node's primary rules before promotion
@@ -78,7 +66,7 @@ pub fn promote(
         "\nConfiguring replication and local trust rules on node {}...",
         target_conf.name
     );
-    let target_interactor = connect_to_node(&target_conf, &config, get_interactor)?;
+    let target_interactor = connect_to_node(&target_conf, &config)?;
 
     let target_follower_ips: Vec<String> = config
         .nodes
@@ -95,7 +83,7 @@ pub fn promote(
         .collect();
 
     crate::postgres_unit::setup::configure_postgres_primary_rules(
-        &*target_interactor,
+        &target_interactor,
         &pg_version,
         "replicator",
         &target_follower_ips,
@@ -128,14 +116,7 @@ pub fn promote(
                 "\nDemoting node {} to follow new leader {}...",
                 node.name, target_conf.name
             );
-            run_demote_node(
-                &node,
-                &target_conf,
-                &pg_version,
-                &replica_pass,
-                &config,
-                get_interactor,
-            )?;
+            run_demote_node(&node, &target_conf, &pg_version, &replica_pass, &config)?;
         }
     }
 
@@ -160,7 +141,7 @@ pub fn promote(
             "\nUpdating HAProxy configuration on app node {}...",
             app_node.name
         );
-        let app_interactor = connect_to_node(app_node, &config, get_interactor)?;
+        let app_interactor = connect_to_node(app_node, &config)?;
 
         crate::postgres_unit::haproxy::setup_haproxy(
             &*app_interactor,
@@ -176,17 +157,13 @@ pub fn promote(
     Ok(())
 }
 
-pub fn demote(
-    config_path: &Path,
-    target_node_str: &str,
-    get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
-) -> anyhow::Result<()> {
+pub fn demote(config_path: &Path, target_node_str: &str) -> anyhow::Result<()> {
     let config = config::load_config(config_path)?;
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
     let env_path = config_dir.join(".env");
     let dot_env = config::load_env_file(&env_path).unwrap_or_default();
 
-    let target_conf = find_node_config_with_fallback(target_node_str, &config, get_interactor)
+    let target_conf = find_node_config_with_fallback(target_node_str, &config)
         .ok_or_else(|| anyhow::anyhow!("Node '{}' not found in configuration", target_node_str))?;
 
     if !target_conf.roles.contains(&"postgres".to_string()) {
@@ -210,7 +187,7 @@ pub fn demote(
         .cloned()
         .unwrap_or_else(|| "repl_password".to_string());
 
-    let current_leader = postgres_get_leader(&config, get_interactor)?;
+    let current_leader = postgres_get_leader(&config)?;
 
     let leader = current_leader.ok_or_else(|| {
         anyhow::anyhow!("Cannot demote: No active PostgreSQL leader discovered in the cluster to replicate from.")
@@ -228,23 +205,13 @@ pub fn demote(
         target_conf.name, leader.name
     );
 
-    run_demote_node(
-        &target_conf,
-        &leader,
-        &pg_version,
-        &replica_pass,
-        &config,
-        get_interactor,
-    )?;
+    run_demote_node(&target_conf, &leader, &pg_version, &replica_pass, &config)?;
 
     println!("\nDEMOTION COMPLETE FOR NODE '{}'", target_conf.name);
     Ok(())
 }
 
-pub fn status(
-    config_path: &Path,
-    get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
-) -> anyhow::Result<()> {
+pub fn status(config_path: &Path) -> anyhow::Result<()> {
     let config = config::load_config(config_path)?;
 
     let pg_nodes: Vec<_> = config
@@ -273,7 +240,7 @@ pub fn status(
         let mut version = pg_version_config.clone();
         let mut health = "Unhealthy".to_string();
 
-        match connect_to_node(node, &config, get_interactor) {
+        match connect_to_node(node, &config) {
             Ok(interactor) => {
                 // 1. Get Hostname
                 if let Ok(h) = interactor.cmd("hostname") {
@@ -353,25 +320,21 @@ pub fn status(
     Ok(())
 }
 
-pub fn run_backup_cmd(
-    config_path: &Path,
-    backup_type: &str,
-    get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
-) -> anyhow::Result<BackupMetadata> {
+pub fn run_backup_cmd(config_path: &Path, backup_type: &str) -> anyhow::Result<BackupMetadata> {
     let config = config::load_config(config_path)?;
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
     let env_path = config_dir.join(".env");
     let dot_env = config::load_env_file(&env_path).unwrap_or_default();
 
     let s3_config = get_s3_config(&config, &dot_env)?;
-    let primary_node = postgres_get_leader(&config, get_interactor)?
+    let primary_node = postgres_get_leader(&config)?
         .ok_or_else(|| anyhow::anyhow!("No active PostgreSQL leader found in the cluster."))?;
 
     let pg_version = get_pg_version(&config);
     let replica_pass = get_replica_pass(&dot_env);
 
     let s3_client = RealS3Client::new(&s3_config)?;
-    let interactor = connect_to_node(&primary_node, &config, get_interactor)?;
+    let interactor = connect_to_node(&primary_node, &config)?;
 
     let backups = crate::postgres_unit::backup::get_backups(&s3_client)?;
     let last_backup = backups.last();
@@ -381,7 +344,7 @@ pub fn run_backup_cmd(
         backup_type.to_uppercase()
     );
     crate::postgres_unit::backup::run_backup(
-        &*interactor,
+        &interactor,
         &s3_client,
         &pg_version,
         backup_type,
@@ -391,12 +354,8 @@ pub fn run_backup_cmd(
     )
 }
 
-pub fn backup(
-    config_path: &Path,
-    backup_type: &str,
-    get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
-) -> anyhow::Result<()> {
-    let meta = run_backup_cmd(config_path, backup_type, get_interactor)?;
+pub fn backup(config_path: &Path, backup_type: &str) -> anyhow::Result<()> {
+    let meta = run_backup_cmd(config_path, backup_type)?;
 
     println!("\nBackup successful!\n");
     println!("ID: {}", meta.id);
@@ -409,10 +368,7 @@ pub fn backup(
     Ok(())
 }
 
-pub fn list_backups(
-    config_path: &Path,
-    _get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
-) -> anyhow::Result<()> {
+pub fn list_backups(config_path: &Path) -> anyhow::Result<()> {
     let config = config::load_config(config_path)?;
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
     let env_path = config_dir.join(".env");
@@ -449,7 +405,6 @@ pub fn run_restore_cmd(
     target_id: &str,
     base_id: Option<&str>,
     pitr_time: Option<&str>,
-    get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
 ) -> anyhow::Result<()> {
     let config = config::load_config(config_path)?;
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
@@ -457,7 +412,7 @@ pub fn run_restore_cmd(
     let dot_env = config::load_env_file(&env_path).unwrap_or_default();
 
     let s3_config = get_s3_config(&config, &dot_env)?;
-    let primary_node = match postgres_get_leader(&config, get_interactor)? {
+    let primary_node = match postgres_get_leader(&config)? {
         Some(node) => node,
         None => config
             .nodes
@@ -545,7 +500,7 @@ pub fn run_restore_cmd(
         }
     }
 
-    let interactor = connect_to_node(&primary_node, &config, get_interactor)?;
+    let interactor = connect_to_node(&primary_node, &config)?;
 
     println!("Restoring database to backup ID: {}...", target_id);
     if let Some(t) = pitr_time {
@@ -553,7 +508,7 @@ pub fn run_restore_cmd(
     }
 
     crate::postgres_unit::backup::run_restore(
-        &*interactor,
+        &interactor,
         &s3_client,
         &pg_version,
         target_backup,
@@ -571,9 +526,8 @@ pub fn restore(
     target_id: &str,
     base_id: Option<&str>,   // --base: stop chain walk here (inclusive)
     pitr_time: Option<&str>, // --pitr "YYYY-MM-DD HH:MM:SS" UTC
-    get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
 ) -> anyhow::Result<()> {
-    run_restore_cmd(config_path, target_id, base_id, pitr_time, get_interactor)
+    run_restore_cmd(config_path, target_id, base_id, pitr_time)
 }
 
 pub fn logs(
@@ -584,10 +538,9 @@ pub fn logs(
     user: Option<&str>,
     db: Option<&str>,
     sql: Option<&str>,
-    get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
 ) -> anyhow::Result<()> {
     let config = config::load_config(config_path)?;
-    let target_conf = find_node_config_with_fallback(target_node_str, &config, get_interactor)
+    let target_conf = find_node_config_with_fallback(target_node_str, &config)
         .ok_or_else(|| anyhow::anyhow!("Node '{}' not found in configuration", target_node_str))?;
 
     if !target_conf.roles.contains(&"postgres".to_string()) {
@@ -597,7 +550,7 @@ pub fn logs(
         );
     }
 
-    let interactor = connect_to_node(&target_conf, &config, get_interactor)?;
+    let interactor = connect_to_node(&target_conf, &config)?;
 
     // Check if 'postgres' user exists on the remote node
     let user_check = interactor.cmd("id postgres")?;

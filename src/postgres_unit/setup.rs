@@ -6,12 +6,11 @@ use crate::{
         install::install_postgres,
         python_backup_script::PYTHON_BACKUP_SCRIPT,
     },
-    server_interactor::server_interactor_trait::ServerInteractor,
+    server_interactor::{get_server_interactor, server_interactor_trait::ServerInteractor},
     ssh::SSHSession,
 };
 
 pub fn postgres_setup_wrapper(
-    get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
     config: &config::Config,
     dot_env: &std::collections::HashMap<String, String>,
     app_nodes: &Vec<config::NodeConfig>,
@@ -56,15 +55,15 @@ pub fn postgres_setup_wrapper(
         );
 
         let private_key = find_private_key_for_user(&primary_node.user, config)?;
-        let ssh = SSHSession::new(
+        let ssh_primary = SSHSession::new(
             primary_node.host.clone(),
             primary_node.user.clone(),
             private_key,
             Some(primary_node.port),
         );
-        let interactor = get_interactor(ssh)?;
+        let interactor = get_server_interactor(ssh_primary)?;
         setup_postgres_primary(
-            &*interactor,
+            &interactor,
             &pg_version,
             "replicator",
             &replica_pass,
@@ -89,9 +88,9 @@ pub fn postgres_setup_wrapper(
                 private_key,
                 Some(follower_node.port),
             );
-            let interactor = get_interactor(ssh)?;
+            let follower_interactor = get_server_interactor(ssh)?;
             setup_postgres_follower(
-                &*interactor,
+                &follower_interactor,
                 &pg_version,
                 &primary_node.internal_ip,
                 "replicator",
@@ -111,7 +110,7 @@ pub fn postgres_setup_wrapper(
                 private_key,
                 Some(app_node.port),
             );
-            let interactor = get_interactor(ssh)?;
+            let interactor = get_server_interactor(ssh)?;
 
             crate::postgres_unit::haproxy::setup_haproxy(
                 &*interactor,
@@ -220,7 +219,7 @@ pub fn configure_postgres_users(
 }
 
 pub fn configure_postgres_primary_rules(
-    interactor: &dyn ServerInteractor,
+    interactor: &Box<dyn ServerInteractor>,
     version: &str,
     replica_user: &str,
     follower_ips: &[String],
@@ -316,7 +315,7 @@ pub fn configure_postgres_primary_rules(
 }
 
 pub fn setup_postgres_primary(
-    interactor: &dyn ServerInteractor,
+    interactor: &Box<dyn ServerInteractor>,
     version: &str,
     replica_user: &str,
     replica_pass: &str,
@@ -411,7 +410,7 @@ pub fn setup_postgres_primary(
 }
 
 fn configure_postgres_backup(
-    interactor: &dyn ServerInteractor,
+    interactor: &Box<dyn ServerInteractor>,
     version: &str,
     replica_pass: &str,
     config: &config::Config,
@@ -487,7 +486,7 @@ fn configure_postgres_backup(
 }
 
 pub fn setup_postgres_follower(
-    interactor: &dyn ServerInteractor,
+    interactor: &Box<dyn ServerInteractor>,
     version: &str,
     primary_ip: &str,
     replica_user: &str,

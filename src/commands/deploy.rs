@@ -2,18 +2,13 @@ use crate::config;
 use crate::deployer::helper::{deploy_update_etc_hosts, deploy_zip_app};
 use crate::deployer::users::deploy_setup_users;
 use crate::helper::keys::find_private_key_for_user;
-use crate::helper::server::get_server_distro;
 use crate::postgres_unit::setup::postgres_setup_wrapper;
-use crate::server_interactor::get_interactor_for_distro;
-use crate::server_interactor::server_interactor_trait::ServerInteractor;
+use crate::server_interactor::get_server_interactor;
 use crate::ssh::SSHSession;
 use std::path::Path;
 
 /// deploy app commands
-pub fn run(
-    config_path: &Path,
-    get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
-) -> anyhow::Result<()> {
+pub fn run(config_path: &Path) -> anyhow::Result<()> {
     println!("Loading configuration from {:?}\n", config_path);
 
     let config = config::load_config(config_path)?;
@@ -64,7 +59,7 @@ pub fn run(
         );
 
         //install required dependencies
-        let interactor = get_interactor(ssh)?;
+        let interactor = get_server_interactor(ssh)?;
         interactor.install_dependencies(all_deps.clone())?;
 
         // install traefik
@@ -81,7 +76,7 @@ pub fn run(
         .unwrap_or(false);
 
     if pg_enabled {
-        postgres_setup_wrapper(get_interactor, &config, &dot_env, &app_nodes)?;
+        postgres_setup_wrapper(&config, &dot_env, &app_nodes)?;
     }
 
     // let mut handles = vec![];
@@ -193,8 +188,7 @@ pub fn run(
                     private_key,
                     Some(node.port),
                 );
-                let node_distro = get_server_distro(&ssh)?;
-                let node_interactor = get_interactor_for_distro(ssh, &node_distro)?;
+                let node_interactor = get_server_interactor(ssh)?;
 
                 // 1. Setup user if specified
                 deploy_setup_users(&app, &config, &node_interactor)?;

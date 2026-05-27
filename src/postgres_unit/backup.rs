@@ -42,7 +42,7 @@ fn base64_encode(s: &str) -> String {
 }
 
 fn run_cmd(
-    interactor: &dyn ServerInteractor,
+    interactor: &Box<dyn ServerInteractor>,
     command: &str,
 ) -> anyhow::Result<crate::ssh::CmdOutput> {
     let out = interactor.cmd(command)?;
@@ -60,7 +60,7 @@ fn run_cmd(
 }
 
 pub fn run_backup(
-    interactor: &dyn ServerInteractor,
+    interactor: &Box<dyn ServerInteractor>,
     s3_client: &dyn S3Client,
     pg_version: &str,
     backup_type: &str,
@@ -319,7 +319,7 @@ pub fn run_backup(
 }
 
 pub fn run_restore(
-    interactor: &dyn ServerInteractor,
+    interactor: &Box<dyn ServerInteractor>,
     s3_client: &dyn S3Client,
     pg_version: &str,
     backup: &BackupMetadata,
@@ -690,7 +690,7 @@ pub fn run_restore(
     Ok(())
 }
 
-fn get_last_postgres_logs(interactor: &dyn ServerInteractor, pg_version: &str) -> String {
+fn get_last_postgres_logs(interactor: &Box<dyn ServerInteractor>, pg_version: &str) -> String {
     let log_dir = format!("/var/lib/postgresql/{}/main/log", pg_version);
     let find_logs_cmd = format!(
         "sudo find {} -maxdepth 1 -type f \\( -name \"*.log\" -o -name \"*.csv\" \\) -printf \"%T@ %p\\n\" 2>/dev/null | sort -n -r | head -n 5 | cut -d' ' -f2-",

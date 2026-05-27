@@ -20,7 +20,7 @@ fn test_deploy() {
 
     // 2. Deploy app configuration to VPS nodes
     let config_path = Path::new("demo/crane.toml");
-    crane::commands::deploy::run(config_path, crane::server_interactor::get_interactor)
+    crane::commands::deploy::run(config_path, crane::server_interactor::get_server_interactor)
         .expect("deploy failed");
 
     // ASSERT this machine can curl at myapp.localhost
@@ -131,7 +131,7 @@ fn test_deploy() {
 
     let primary_node = crane::postgres_unit::tasks::postgres_get_leader(
         &config,
-        crane::server_interactor::get_interactor,
+        crane::server_interactor::get_server_interactor,
     )
     .expect("Failed to get leader node")
     .expect("No active PostgreSQL leader found");
@@ -139,7 +139,7 @@ fn test_deploy() {
     let interactor = crane::postgres_unit::helper::connect_to_node(
         &primary_node,
         &config,
-        crane::server_interactor::get_interactor,
+        crane::server_interactor::get_server_interactor,
     )
     .expect("Failed to connect to primary node");
 

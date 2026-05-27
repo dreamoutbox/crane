@@ -1,4 +1,5 @@
 use crate::config::{self, PostgresBackupSchedule};
+use crate::server_interactor::get_server_interactor;
 use crate::server_interactor::server_interactor_trait::ServerInteractor;
 use crate::ssh::SSHSession;
 
@@ -14,7 +15,6 @@ pub fn find_node_config<'a>(
 pub fn find_node_config_with_fallback(
     target: &str,
     config: &config::Config,
-    get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
 ) -> Option<config::NodeConfig> {
     if let Some(n) = find_node_config(target, config) {
         return Some(n.clone());
@@ -29,7 +29,7 @@ pub fn find_node_config_with_fallback(
         .collect();
 
     for node in pg_nodes {
-        if let Ok(interactor) = connect_to_node(&node, config, get_interactor) {
+        if let Ok(interactor) = connect_to_node(&node, config) {
             if let Ok(h) = interactor.cmd("hostname") {
                 if h.stdout.trim() == target {
                     return Some(node);
@@ -44,7 +44,6 @@ pub fn find_node_config_with_fallback(
 pub fn connect_to_node(
     node: &config::NodeConfig,
     config: &config::Config,
-    get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
 ) -> anyhow::Result<Box<dyn ServerInteractor>> {
     let private_key = crate::helper::keys::find_private_key_for_user(&node.user, config)?;
     let ssh = SSHSession::new(
@@ -53,7 +52,8 @@ pub fn connect_to_node(
         private_key,
         Some(node.port),
     );
-    get_interactor(ssh)
+
+    get_server_interactor(ssh)
 }
 
 pub fn get_pg_version(config: &config::Config) -> String {
@@ -74,7 +74,7 @@ pub fn get_replica_pass(dot_env: &std::collections::HashMap<String, String>) -> 
         .unwrap_or_else(|| "repl_password".to_string())
 }
 
-pub fn is_postgres_running(interactor: &dyn ServerInteractor, version: &str) -> bool {
+pub fn is_postgres_running(interactor: &Box<dyn ServerInteractor>, version: &str) -> bool {
     let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", version);
     let status_cmd = format!(
         "sudo -u postgres {} -D /var/lib/postgresql/{}/main status",
@@ -86,7 +86,7 @@ pub fn is_postgres_running(interactor: &dyn ServerInteractor, version: &str) -> 
         .unwrap_or(false)
 }
 
-pub fn start_postgres(interactor: &dyn ServerInteractor, version: &str) -> anyhow::Result<()> {
+pub fn start_postgres(interactor: &Box<dyn ServerInteractor>, version: &str) -> anyhow::Result<()> {
     let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", version);
     let postgres_start_cmd = format!(
         "sudo -u postgres {} -D /var/lib/postgresql/{}/main -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf -c restore_command=false\" start > /dev/null 2>&1 < /dev/null",
@@ -112,7 +112,7 @@ pub fn start_postgres(interactor: &dyn ServerInteractor, version: &str) -> anyho
     Ok(())
 }
 
-pub fn ensure_postgres_running(interactor: &dyn ServerInteractor, version: &str) {
+pub fn ensure_postgres_running(interactor: &Box<dyn ServerInteractor>, version: &str) {
     //-> anyhow::Result<()>
     if is_postgres_running(interactor, version) {
         // return Ok(());

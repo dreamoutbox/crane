@@ -172,9 +172,7 @@ fn main() {
 
     match matches.subcommand() {
         Some(("deploy", _sub_m)) => {
-            if let Err(e) =
-                crane::commands::deploy::run(config_path, crane::server_interactor::get_interactor)
-            {
+            if let Err(e) = crane::commands::deploy::run(config_path) {
                 eprintln!("Deployment failed: {}", e);
                 std::process::exit(1);
             }
@@ -184,11 +182,7 @@ fn main() {
             match sub_m.subcommand() {
                 Some(("promote", sub_sub_m)) => {
                     let target_node = sub_sub_m.get_one::<String>("node").unwrap();
-                    if let Err(e) = crane::commands::postgres::promote(
-                        config_path,
-                        target_node,
-                        crane::server_interactor::get_interactor,
-                    ) {
+                    if let Err(e) = crane::commands::postgres::promote(config_path, target_node) {
                         eprintln!("Promotion failed: {}", e);
                         std::process::exit(1);
                     }
@@ -196,21 +190,14 @@ fn main() {
 
                 Some(("demote", sub_sub_m)) => {
                     let target_node = sub_sub_m.get_one::<String>("node").unwrap();
-                    if let Err(e) = crane::commands::postgres::demote(
-                        config_path,
-                        target_node,
-                        crane::server_interactor::get_interactor,
-                    ) {
+                    if let Err(e) = crane::commands::postgres::demote(config_path, target_node) {
                         eprintln!("Demotion failed: {}", e);
                         std::process::exit(1);
                     }
                 }
 
                 Some(("status", _)) => {
-                    if let Err(e) = crane::commands::postgres::status(
-                        config_path,
-                        crane::server_interactor::get_interactor,
-                    ) {
+                    if let Err(e) = crane::commands::postgres::status(config_path) {
                         eprintln!("Status check failed: {}", e);
                         std::process::exit(1);
                     }
@@ -225,21 +212,14 @@ fn main() {
                         std::process::exit(1);
                     }
 
-                    if let Err(e) = crane::commands::postgres::backup(
-                        config_path,
-                        backup_type,
-                        crane::server_interactor::get_interactor,
-                    ) {
+                    if let Err(e) = crane::commands::postgres::backup(config_path, backup_type) {
                         eprintln!("Backup failed: {}", e);
                         std::process::exit(1);
                     }
                 }
 
                 Some(("list", _)) => {
-                    if let Err(e) = crane::commands::postgres::list_backups(
-                        config_path,
-                        crane::server_interactor::get_interactor,
-                    ) {
+                    if let Err(e) = crane::commands::postgres::list_backups(config_path) {
                         eprintln!("Listing backups failed: {}", e);
                         std::process::exit(1);
                     }
@@ -254,7 +234,6 @@ fn main() {
                         target_id,
                         base_id,
                         pitr_time,
-                        crane::server_interactor::get_interactor,
                     ) {
                         eprintln!("Restore failed: {}", e);
                         std::process::exit(1);
@@ -277,7 +256,6 @@ fn main() {
                         user,
                         db,
                         sql,
-                        crane::server_interactor::get_interactor,
                     ) {
                         eprintln!("Logs failed: {}", e);
                         std::process::exit(1);
@@ -290,11 +268,7 @@ fn main() {
 
         Some(("status", sub_m)) => {
             let app_name = sub_m.get_one::<String>("app").unwrap();
-            if let Err(e) = crane::commands::status::run(
-                config_path,
-                app_name,
-                crane::server_interactor::get_interactor,
-            ) {
+            if let Err(e) = crane::commands::status::run(config_path, app_name) {
                 eprintln!("Status check failed: {}", e);
                 std::process::exit(1);
             }
@@ -318,7 +292,6 @@ fn main() {
                 show_timestamps,
                 follow,
                 no_app_instance_id,
-                crane::server_interactor::get_interactor,
             ) {
                 eprintln!("Failed to get logs: {}", e);
                 std::process::exit(1);

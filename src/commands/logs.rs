@@ -1,6 +1,6 @@
 use crate::config;
 use crate::helper::keys::find_private_key_for_user;
-use crate::server_interactor::server_interactor_trait::ServerInteractor;
+use crate::server_interactor::get_server_interactor;
 use crate::ssh::SSHSession;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
@@ -14,7 +14,6 @@ pub fn run(
     show_timestamps: bool,
     follow: bool,
     no_app_instance_id: bool,
-    get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
 ) -> anyhow::Result<()> {
     // 1. Parse app target (e.g. "myapp" or "myapp@1")
     let (app_name, target_instance_id) = if let Some((name, id_str)) = app_target.split_once('@') {
@@ -162,7 +161,7 @@ pub fn run(
             let instance_id = target.instance_id;
 
             let handle = std::thread::spawn(move || -> anyhow::Result<Vec<String>> {
-                let interactor = get_interactor(ssh)?;
+                let interactor = get_server_interactor(ssh)?;
                 let output = interactor.cmd(&cmd)?;
                 if output.exit_code != 0 {
                     anyhow::bail!(

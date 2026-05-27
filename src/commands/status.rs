@@ -1,6 +1,6 @@
 use crate::config;
 use crate::helper::keys::find_private_key_for_user;
-use crate::server_interactor::server_interactor_trait::ServerInteractor;
+use crate::server_interactor::get_server_interactor;
 use crate::ssh::SSHSession;
 use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
@@ -41,11 +41,7 @@ pub struct NodeStatusResult {
     pub status: Result<(NodeResourceStatus, Vec<InstanceStatus>), String>,
 }
 
-pub fn run(
-    config_path: &Path,
-    app_name: &str,
-    get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
-) -> anyhow::Result<()> {
+pub fn run(config_path: &Path, app_name: &str) -> anyhow::Result<()> {
     let config = config::load_config(config_path)?;
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
     let env_path = config_dir.join(".env");
@@ -114,7 +110,7 @@ pub fn run(
                     Some(node_clone.port),
                 );
 
-                let interactor = get_interactor(ssh)?;
+                let interactor = get_server_interactor(ssh)?;
 
                 // Query service instances from systemd to dynamically discover active ports
                 let systemd_cmd = format!(

@@ -6,7 +6,7 @@ fn test_restore_integrated_workflow() {
     let config_path = std::path::Path::new("demo/crane.toml");
 
     //Deploy
-    crane::commands::deploy::run(config_path, crane::server_interactor::get_interactor)
+    crane::commands::deploy::run(config_path, crane::server_interactor::get_server_interactor)
         .expect("deploy failed");
 
     // Load config
@@ -15,7 +15,7 @@ fn test_restore_integrated_workflow() {
     // Retrieve leader node and connect
     let primary_node = crane::postgres_unit::tasks::postgres_get_leader(
         &config,
-        crane::server_interactor::get_interactor,
+        crane::server_interactor::get_server_interactor,
     )
     .expect("Failed to get leader node")
     .expect("No active PostgreSQL leader found");
@@ -23,7 +23,7 @@ fn test_restore_integrated_workflow() {
     let interactor = crane::postgres_unit::helper::connect_to_node(
         &primary_node,
         &config,
-        crane::server_interactor::get_interactor,
+        crane::server_interactor::get_server_interactor,
     )
     .expect("Failed to connect to primary node");
 
@@ -46,7 +46,7 @@ fn test_restore_integrated_workflow() {
     let full_backup = crane::commands::postgres::run_backup_cmd(
         config_path,
         "full",
-        crane::server_interactor::get_interactor,
+        crane::server_interactor::get_server_interactor,
     )
     .expect("Full backup failed");
     assert_eq!(full_backup.backup_type, "FULL");
@@ -72,7 +72,7 @@ fn test_restore_integrated_workflow() {
         &full_backup.id,
         None,
         None,
-        crane::server_interactor::get_interactor,
+        crane::server_interactor::get_server_interactor,
     )
     .expect("Restore from full backup failed");
 
@@ -83,7 +83,7 @@ fn test_restore_integrated_workflow() {
     let interactor = crane::postgres_unit::helper::connect_to_node(
         &primary_node,
         &config,
-        crane::server_interactor::get_interactor,
+        crane::server_interactor::get_server_interactor,
     )
     .expect("Failed to reconnect to primary node");
 
@@ -118,7 +118,7 @@ fn test_restore_integrated_workflow() {
     let incr_backup_1 = crane::commands::postgres::run_backup_cmd(
         config_path,
         "incr",
-        crane::server_interactor::get_interactor,
+        crane::server_interactor::get_server_interactor,
     )
     .expect("Incremental backup #1 failed");
     assert_eq!(incr_backup_1.backup_type, "INCR");
@@ -166,7 +166,7 @@ fn test_restore_integrated_workflow() {
     let incr_backup_2 = crane::commands::postgres::run_backup_cmd(
         config_path,
         "incr",
-        crane::server_interactor::get_interactor,
+        crane::server_interactor::get_server_interactor,
     )
     .expect("Incremental backup #2 failed");
     assert_eq!(incr_backup_2.backup_type, "INCR");
@@ -193,7 +193,7 @@ fn test_restore_integrated_workflow() {
         &incr_backup_1.id,
         None,
         Some(&pitr_time_insert_3),
-        crane::server_interactor::get_interactor,
+        crane::server_interactor::get_server_interactor,
     )
     .expect("PITR restore to SQL `INSERT 3` failed");
 
@@ -204,7 +204,7 @@ fn test_restore_integrated_workflow() {
     let interactor = crane::postgres_unit::helper::connect_to_node(
         &primary_node,
         &config,
-        crane::server_interactor::get_interactor,
+        crane::server_interactor::get_server_interactor,
     )
     .expect("Failed to reconnect to primary node");
 
@@ -239,7 +239,7 @@ fn test_restore_integrated_workflow() {
         &incr_backup_2.id,
         None,
         Some(&pitr_time_before_drop),
-        crane::server_interactor::get_interactor,
+        crane::server_interactor::get_server_interactor,
     )
     .expect("PITR restore to SQL `INSERT 5` failed");
 
@@ -250,7 +250,7 @@ fn test_restore_integrated_workflow() {
     let interactor = crane::postgres_unit::helper::connect_to_node(
         &primary_node,
         &config,
-        crane::server_interactor::get_interactor,
+        crane::server_interactor::get_server_interactor,
     )
     .expect("Failed to reconnect to primary node");
 

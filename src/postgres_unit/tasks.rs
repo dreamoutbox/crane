@@ -1,12 +1,6 @@
-use crate::{
-    config, postgres_unit::helper::connect_to_node,
-    server_interactor::server_interactor_trait::ServerInteractor, ssh::SSHSession,
-};
+use crate::{config, postgres_unit::helper::connect_to_node};
 
-pub fn postgres_get_leader(
-    config: &config::Config,
-    get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
-) -> anyhow::Result<Option<config::NodeConfig>> {
+pub fn postgres_get_leader(config: &config::Config) -> anyhow::Result<Option<config::NodeConfig>> {
     let pg_nodes: Vec<_> = config
         .nodes
         .iter()
@@ -15,7 +9,7 @@ pub fn postgres_get_leader(
         .collect();
 
     for node in pg_nodes {
-        if let Ok(interactor) = connect_to_node(&node, config, get_interactor) {
+        if let Ok(interactor) = connect_to_node(&node, config) {
             let cmd = r#"sudo -u postgres psql -t -A -c "select pg_is_in_recovery();""#;
 
             if let Ok(output) = interactor.cmd(cmd) {
@@ -34,9 +28,8 @@ pub fn run_demote_node(
     pg_version: &str,
     replica_pass: &str,
     config: &config::Config,
-    get_interactor: fn(SSHSession) -> anyhow::Result<Box<dyn ServerInteractor>>,
 ) -> anyhow::Result<()> {
-    let interactor = connect_to_node(node, config, get_interactor)?;
+    let interactor = connect_to_node(node, config)?;
 
     let app_node_ips: Vec<String> = config
         .nodes
@@ -46,7 +39,7 @@ pub fn run_demote_node(
         .collect();
 
     crate::postgres_unit::setup::setup_postgres_follower(
-        &*interactor,
+        &interactor,
         pg_version,
         &leader.internal_ip,
         "replicator",

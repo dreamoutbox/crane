@@ -1,15 +1,20 @@
 use crate::server_interactor::server_interactor_trait::ServerInteractor;
 
-pub fn install_postgres(interactor: &dyn ServerInteractor, version: &str) -> anyhow::Result<()> {
+pub fn install_postgres(
+    interactor: &Box<dyn ServerInteractor>,
+    version: &str,
+) -> anyhow::Result<()> {
     let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", version);
-    let pg_installed = interactor.cmd(&format!("test -f {}", pg_ctl))
+    let pg_installed = interactor
+        .cmd(&format!("test -f {}", pg_ctl))
         .map(|out| out.exit_code == 0)
         .unwrap_or(false);
 
     if pg_installed {
         println!("\tPostgreSQL {} is already installed.", version);
         let main_dir = format!("/var/lib/postgresql/{}/main", version);
-        let dir_exists = interactor.cmd(&format!("test -d {}", main_dir))
+        let dir_exists = interactor
+            .cmd(&format!("test -d {}", main_dir))
             .map(|out| out.exit_code == 0)
             .unwrap_or(false);
 
@@ -28,7 +33,8 @@ pub fn install_postgres(interactor: &dyn ServerInteractor, version: &str) -> any
             "sudo -u postgres {} -D /var/lib/postgresql/{}/main status",
             pg_ctl, version
         );
-        let is_running = interactor.cmd(&status_cmd)
+        let is_running = interactor
+            .cmd(&status_cmd)
             .map(|out| out.exit_code == 0)
             .unwrap_or(false);
 
