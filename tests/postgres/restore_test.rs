@@ -1,3 +1,5 @@
+use crane::postgres_unit::restore::run_restore;
+
 #[test]
 fn test_restore_full() {
     let interactor = MockInteractor::new(vec![]);

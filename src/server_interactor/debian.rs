@@ -3,7 +3,6 @@ use crate::{
     ssh::{CmdOutput, SSHSession},
 };
 use std::sync::Once;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 static APT_UPDATE: Once = Once::new();
 

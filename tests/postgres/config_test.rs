@@ -1,4 +1,4 @@
-use crane::postgres_unit::setup::get_postgres_configs;
+use crane::postgres_unit::helper::get_postgres_configs;
 
 #[test]
 fn test_get_postgres_configs() {
@@ -11,6 +11,7 @@ fn test_get_postgres_configs() {
             port = 2221
             user = "admin"
             roles = ["postgres"]
+            private_key = "dummy"
 
             [app.myapp]
             name = "myapp"
@@ -47,7 +48,8 @@ fn test_get_postgres_configs() {
 
 #[test]
 fn test_interval_to_cron() {
-    use crane::postgres_unit::helper::interval_to_cron;
+    use crane::helper::cron::interval_to_cron;
+
     assert_eq!(interval_to_cron("1m"), "* * * * *");
     assert_eq!(interval_to_cron("5m"), "*/5 * * * *");
     assert_eq!(interval_to_cron("1h"), "0 * * * *");
