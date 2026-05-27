@@ -182,7 +182,9 @@ fn main() {
             match sub_m.subcommand() {
                 Some(("promote", sub_sub_m)) => {
                     let target_node = sub_sub_m.get_one::<String>("node").unwrap();
-                    if let Err(e) = crane::commands::postgres::promote(config_path, target_node) {
+                    if let Err(e) =
+                        crane::commands::postgres::run_promote_cmd(config_path, target_node)
+                    {
                         eprintln!("Promotion failed: {}", e);
                         std::process::exit(1);
                     }
@@ -190,14 +192,16 @@ fn main() {
 
                 Some(("demote", sub_sub_m)) => {
                     let target_node = sub_sub_m.get_one::<String>("node").unwrap();
-                    if let Err(e) = crane::commands::postgres::demote(config_path, target_node) {
+                    if let Err(e) =
+                        crane::commands::postgres::run_demote_cmd(config_path, target_node)
+                    {
                         eprintln!("Demotion failed: {}", e);
                         std::process::exit(1);
                     }
                 }
 
                 Some(("status", _)) => {
-                    if let Err(e) = crane::commands::postgres::status(config_path) {
+                    if let Err(e) = crane::commands::postgres::run_status_cmd(config_path) {
                         eprintln!("Status check failed: {}", e);
                         std::process::exit(1);
                     }
@@ -212,14 +216,16 @@ fn main() {
                         std::process::exit(1);
                     }
 
-                    if let Err(e) = crane::commands::postgres::backup(config_path, backup_type) {
+                    if let Err(e) =
+                        crane::commands::postgres_backup::run_backup_cmd(config_path, backup_type)
+                    {
                         eprintln!("Backup failed: {}", e);
                         std::process::exit(1);
                     }
                 }
 
                 Some(("list", _)) => {
-                    if let Err(e) = crane::commands::postgres::list_backups(config_path) {
+                    if let Err(e) = crane::commands::postgres::run_list_backups_cmd(config_path) {
                         eprintln!("Listing backups failed: {}", e);
                         std::process::exit(1);
                     }
@@ -229,7 +235,7 @@ fn main() {
                     let target_id = sub_sub_m.get_one::<String>("id").unwrap();
                     let base_id = sub_sub_m.get_one::<String>("base").map(|s| s.as_str());
                     let pitr_time = sub_sub_m.get_one::<String>("pitr").map(|s| s.as_str());
-                    if let Err(e) = crane::commands::postgres::restore(
+                    if let Err(e) = crane::commands::postgres_restore::run_restore_cmd(
                         config_path,
                         target_id,
                         base_id,
@@ -248,7 +254,8 @@ fn main() {
                     let db = sub_sub_m.get_one::<String>("db").map(|s| s.as_str());
                     let sql = sub_sub_m.get_one::<String>("sql").map(|s| s.as_str());
 
-                    if let Err(e) = crane::commands::postgres::logs(
+                    
+                    if let Err(e) = crane::commands::postgres::run_postgres_logs_cmd(
                         config_path,
                         target_node,
                         since,
@@ -276,6 +283,7 @@ fn main() {
 
         Some(("logs", sub_m)) => {
             let app_target = sub_m.get_one::<String>("app").unwrap();
+
             let lines = *sub_m.get_one::<u32>("lines").unwrap();
             let since = sub_m.get_one::<String>("since").map(|s| s.as_str());
             let until = sub_m.get_one::<String>("until").map(|s| s.as_str());

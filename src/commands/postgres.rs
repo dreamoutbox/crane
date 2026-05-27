@@ -1,17 +1,17 @@
+use std::path::Path;
+
 use crate::config;
-use crate::postgres_unit::entity::BackupMetadata;
-use crate::postgres_unit::entity::BackupRegistry;
+use crate::postgres_unit::demote::run_demote_node;
 use crate::postgres_unit::entity::PostgresNode;
+use crate::postgres_unit::helper::configure_postgres_primary_rules;
 use crate::postgres_unit::helper::connect_to_node;
 use crate::postgres_unit::helper::find_node_config_with_fallback;
-use crate::postgres_unit::helper::{get_pg_version, get_replica_pass};
-use crate::postgres_unit::tasks::*;
+use crate::postgres_unit::helper::get_backups_from_s3;
+use crate::postgres_unit::helper::postgres_get_leader;
 use crate::s3::get_s3_config;
 use crate::s3::s3_client::RealS3Client;
 
-use std::path::Path;
-
-pub fn promote(config_path: &Path, target_node_str: &str) -> anyhow::Result<()> {
+pub fn run_promote_cmd(config_path: &Path, target_node_str: &str) -> anyhow::Result<()> {
     let config = config::load_config(config_path)?;
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
     let env_path = config_dir.join(".env");
@@ -58,6 +58,7 @@ pub fn promote(config_path: &Path, target_node_str: &str) -> anyhow::Result<()> 
             "\nSynchronizing target follower node {} with current leader {} before promotion...",
             target_conf.name, leader.name
         );
+
         run_demote_node(&target_conf, leader, &pg_version, &replica_pass, &config)?;
     }
 
@@ -82,8 +83,8 @@ pub fn promote(config_path: &Path, target_node_str: &str) -> anyhow::Result<()> 
         .map(|n| n.internal_ip.clone())
         .collect();
 
-    crate::postgres_unit::setup::configure_postgres_primary_rules(
-        &target_interactor,
+    configure_postgres_primary_rules(
+        &*target_interactor,
         &pg_version,
         "replicator",
         &target_follower_ips,
@@ -157,7 +158,7 @@ pub fn promote(config_path: &Path, target_node_str: &str) -> anyhow::Result<()> 
     Ok(())
 }
 
-pub fn demote(config_path: &Path, target_node_str: &str) -> anyhow::Result<()> {
+pub fn run_demote_cmd(config_path: &Path, target_node_str: &str) -> anyhow::Result<()> {
     let config = config::load_config(config_path)?;
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
     let env_path = config_dir.join(".env");
@@ -211,7 +212,7 @@ pub fn demote(config_path: &Path, target_node_str: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn status(config_path: &Path) -> anyhow::Result<()> {
+pub fn run_status_cmd(config_path: &Path) -> anyhow::Result<()> {
     let config = config::load_config(config_path)?;
 
     let pg_nodes: Vec<_> = config
@@ -320,55 +321,7 @@ pub fn status(config_path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run_backup_cmd(config_path: &Path, backup_type: &str) -> anyhow::Result<BackupMetadata> {
-    let config = config::load_config(config_path)?;
-    let config_dir = config_path.parent().unwrap_or(Path::new("."));
-    let env_path = config_dir.join(".env");
-    let dot_env = config::load_env_file(&env_path).unwrap_or_default();
-
-    let s3_config = get_s3_config(&config, &dot_env)?;
-    let primary_node = postgres_get_leader(&config)?
-        .ok_or_else(|| anyhow::anyhow!("No active PostgreSQL leader found in the cluster."))?;
-
-    let pg_version = get_pg_version(&config);
-    let replica_pass = get_replica_pass(&dot_env);
-
-    let s3_client = RealS3Client::new(&s3_config)?;
-    let interactor = connect_to_node(&primary_node, &config)?;
-
-    let backups = crate::postgres_unit::backup::get_backups(&s3_client)?;
-    let last_backup = backups.last();
-
-    println!(
-        "Starting PostgreSQL {} backup...",
-        backup_type.to_uppercase()
-    );
-    crate::postgres_unit::backup::run_backup(
-        &interactor,
-        &s3_client,
-        &pg_version,
-        backup_type,
-        &replica_pass,
-        &s3_config.bucket,
-        last_backup,
-    )
-}
-
-pub fn backup(config_path: &Path, backup_type: &str) -> anyhow::Result<()> {
-    let meta = run_backup_cmd(config_path, backup_type)?;
-
-    println!("\nBackup successful!\n");
-    println!("ID: {}", meta.id);
-    println!("Date: {}", meta.date);
-    println!("Time: {}", meta.time);
-    println!("Type: {}", meta.backup_type);
-    println!("LOCAL: {}", meta.local_path);
-    println!("S3: {}", meta.s3_path);
-
-    Ok(())
-}
-
-pub fn list_backups(config_path: &Path) -> anyhow::Result<()> {
+pub fn run_list_backups_cmd(config_path: &Path) -> anyhow::Result<()> {
     let config = config::load_config(config_path)?;
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
     let env_path = config_dir.join(".env");
@@ -377,7 +330,7 @@ pub fn list_backups(config_path: &Path) -> anyhow::Result<()> {
     let s3_config = get_s3_config(&config, &dot_env)?;
     let s3_client = RealS3Client::new(&s3_config)?;
 
-    let backups = crate::postgres_unit::backup::get_backups(&s3_client)?;
+    let backups = get_backups_from_s3(&s3_client)?;
 
     if backups.is_empty() {
         println!("No backups found in cluster.");
@@ -400,137 +353,7 @@ pub fn list_backups(config_path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run_restore_cmd(
-    config_path: &Path,
-    target_id: &str,
-    base_id: Option<&str>,
-    pitr_time: Option<&str>,
-) -> anyhow::Result<()> {
-    let config = config::load_config(config_path)?;
-    let config_dir = config_path.parent().unwrap_or(Path::new("."));
-    let env_path = config_dir.join(".env");
-    let dot_env = config::load_env_file(&env_path).unwrap_or_default();
-
-    let s3_config = get_s3_config(&config, &dot_env)?;
-    let primary_node = match postgres_get_leader(&config)? {
-        Some(node) => node,
-        None => config
-            .nodes
-            .iter()
-            .find(|n| n.roles.contains(&"postgres".to_string()))
-            .cloned()
-            .ok_or_else(|| anyhow::anyhow!("No PostgreSQL nodes found in configuration"))?,
-    };
-
-    let pg_version = get_pg_version(&config);
-    let s3_client = RealS3Client::new(&s3_config)?;
-
-    let backups = crate::postgres_unit::backup::get_backups(&s3_client)?;
-    let registry = BackupRegistry { backups };
-
-    let target_backup = registry
-        .backups
-        .iter()
-        .find(|b| b.id == target_id)
-        .ok_or_else(|| anyhow::anyhow!("Backup ID '{}' not found in registry", target_id))?;
-
-    // Validate --base exists in registry if specified
-    if let Some(forced_base) = base_id {
-        if !registry.backups.iter().any(|b| b.id == forced_base) {
-            anyhow::bail!("Base backup ID '{}' not found in registry", forced_base);
-        }
-    }
-
-    // Build restore chain, stopping at base_id when specified
-    let mut chain = Vec::new();
-    let mut current = target_backup.clone();
-    chain.push(current.clone());
-
-    while let Some(ref next_base_id) = current.base {
-        // If the user specified --base, stop once we've included that backup
-        if let Some(forced_base) = base_id {
-            if current.id == forced_base {
-                break;
-            }
-        }
-        let parent = registry
-            .backups
-            .iter()
-            .find(|b| &b.id == next_base_id)
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Broken backup chain: parent backup ID '{}' not found in registry",
-                    next_base_id
-                )
-            })?;
-        chain.push(parent.clone());
-        current = parent.clone();
-    }
-
-    chain.reverse();
-
-    println!("Backup chain to restore:");
-    for item in &chain {
-        println!(" - ID: {} ({})", item.id, item.backup_type);
-    }
-
-    // Validate --pitr is after the oldest backup in the chain (chain[0] after reverse)
-    if let Some(pitr) = pitr_time {
-        let pitr_dt =
-            chrono::NaiveDateTime::parse_from_str(pitr, "%Y-%m-%d %H:%M:%S").map_err(|_| {
-                anyhow::anyhow!(
-                    "--pitr must be in 'YYYY-MM-DD HH:MM:SS' format. got `{}`",
-                    pitr
-                )
-            })?;
-
-        let base_backup = &chain[0];
-        if let Some(ref taken_at) = base_backup.taken_at {
-            let base_dt = chrono::NaiveDateTime::parse_from_str(taken_at, "%Y-%m-%d %H:%M:%S")
-                .map_err(|_| anyhow::anyhow!("Base backup has invalid taken_at: '{}'", taken_at))?;
-
-            if pitr_dt <= base_dt {
-                anyhow::bail!(
-                    "--pitr time '{}' must be after the base backup time '{}' (backup ID: {})",
-                    pitr,
-                    taken_at,
-                    base_backup.id
-                );
-            }
-        }
-    }
-
-    let interactor = connect_to_node(&primary_node, &config)?;
-
-    println!("Restoring database to backup ID: {}...", target_id);
-    if let Some(t) = pitr_time {
-        println!("Point-in-time recovery target: {}", t);
-    }
-
-    crate::postgres_unit::backup::run_restore(
-        &interactor,
-        &s3_client,
-        &pg_version,
-        target_backup,
-        &chain,
-        pitr_time,
-    )?;
-
-    println!("Restore complete! PostgreSQL is online.");
-
-    Ok(())
-}
-
-pub fn restore(
-    config_path: &Path,
-    target_id: &str,
-    base_id: Option<&str>,   // --base: stop chain walk here (inclusive)
-    pitr_time: Option<&str>, // --pitr "YYYY-MM-DD HH:MM:SS" UTC
-) -> anyhow::Result<()> {
-    run_restore_cmd(config_path, target_id, base_id, pitr_time)
-}
-
-pub fn logs(
+pub fn run_postgres_logs_cmd(
     config_path: &Path,
     target_node_str: &str,
     since: Option<&str>,

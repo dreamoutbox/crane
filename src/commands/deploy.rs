@@ -2,6 +2,7 @@ use crate::config;
 use crate::deployer::helper::{deploy_update_etc_hosts, deploy_zip_app};
 use crate::deployer::users::deploy_setup_users;
 use crate::helper::keys::find_private_key_for_user;
+use crate::postgres_unit::helper::get_postgres_configs;
 use crate::postgres_unit::setup::postgres_setup_wrapper;
 use crate::server_interactor::get_server_interactor;
 use crate::ssh::SSHSession;
@@ -127,8 +128,7 @@ pub fn run(config_path: &Path) -> anyhow::Result<()> {
             }
 
             if let Some(ref app_db_deps) = app.database {
-                let (db_configs, user_configs) =
-                    crate::postgres_unit::setup::get_postgres_configs(&config);
+                let (db_configs, user_configs) = get_postgres_configs(&config);
                 for db_dep in app_db_deps {
                     let user_name = &db_dep.user;
                     let user_pass = user_configs
@@ -191,7 +191,7 @@ pub fn run(config_path: &Path) -> anyhow::Result<()> {
                 let node_interactor = get_server_interactor(ssh)?;
 
                 // 1. Setup user if specified
-                deploy_setup_users(&app, &config, &node_interactor)?;
+                deploy_setup_users(&app, &config, &*node_interactor)?;
 
                 // 3. Prepare target directories (admin) and chown to deploy_user
                 node_interactor.cmd(&format!("sudo mkdir -p '/opt/{}'", app.name))?;

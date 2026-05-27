@@ -46,6 +46,7 @@ docker exec vps1 sudo -u postgres psql -t -A -c "show server_version;"
 ```
 
 
+
 ### Postgres Logs
 
 /var/lib/postgresql/17/main/log

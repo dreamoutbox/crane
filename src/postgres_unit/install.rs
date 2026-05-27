@@ -1,9 +1,6 @@
 use crate::server_interactor::server_interactor_trait::ServerInteractor;
 
-pub fn install_postgres(
-    interactor: &Box<dyn ServerInteractor>,
-    version: &str,
-) -> anyhow::Result<()> {
+pub fn install_postgres(interactor: &dyn ServerInteractor, version: &str) -> anyhow::Result<()> {
     let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", version);
     let pg_installed = interactor
         .cmd(&format!("test -f {}", pg_ctl))

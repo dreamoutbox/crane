@@ -1,6 +1,5 @@
 use crate::config;
 use crate::helper::keys::find_private_key_for_user;
-use crate::server_interactor::get_server_interactor;
 use crate::ssh::SSHSession;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
@@ -113,6 +112,7 @@ pub fn run(
 
         for target in targets {
             let cmd = build_cmd(target.port);
+
             let private_key = find_private_key_for_user(&target.node.user, &config)?;
             let ssh = SSHSession::new(
                 target.node.host.clone(),
@@ -120,6 +120,7 @@ pub fn run(
                 private_key,
                 Some(target.node.port),
             );
+
             let app_name = app.name.clone();
             let instance_id = target.instance_id;
 
@@ -161,7 +162,7 @@ pub fn run(
             let instance_id = target.instance_id;
 
             let handle = std::thread::spawn(move || -> anyhow::Result<Vec<String>> {
-                let interactor = get_server_interactor(ssh)?;
+                let interactor = crate::server_interactor::get_server_interactor(ssh)?;
                 let output = interactor.cmd(&cmd)?;
                 if output.exit_code != 0 {
                     anyhow::bail!(
@@ -170,9 +171,11 @@ pub fn run(
                         output.stderr
                     );
                 }
+
                 let lines: Vec<String> = output.stdout.lines().map(|s| s.to_string()).collect();
                 Ok(lines)
             });
+
             handles.push((instance_id, handle));
         }
 

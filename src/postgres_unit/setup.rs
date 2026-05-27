@@ -2,9 +2,10 @@ use crate::{
     config::{self, PostgresDbConfig, PostgresUserConfig},
     helper::keys::find_private_key_for_user,
     postgres_unit::{
-        helper::{get_postgres_backup_schedule, interval_to_cron},
+        helper::{
+            configure_postgres_backup, configure_postgres_primary_rules, get_postgres_configs,
+        },
         install::install_postgres,
-        python_backup_script::PYTHON_BACKUP_SCRIPT,
     },
     server_interactor::{get_server_interactor, server_interactor_trait::ServerInteractor},
     ssh::SSHSession,
@@ -63,7 +64,7 @@ pub fn postgres_setup_wrapper(
         );
         let interactor = get_server_interactor(ssh_primary)?;
         setup_postgres_primary(
-            &interactor,
+            &*interactor,
             &pg_version,
             "replicator",
             &replica_pass,
@@ -90,7 +91,7 @@ pub fn postgres_setup_wrapper(
             );
             let follower_interactor = get_server_interactor(ssh)?;
             setup_postgres_follower(
-                &follower_interactor,
+                &*follower_interactor,
                 &pg_version,
                 &primary_node.internal_ip,
                 "replicator",
@@ -123,199 +124,8 @@ pub fn postgres_setup_wrapper(
     Ok(())
 }
 
-// Parses database and user configs from TOML structure
-pub fn get_postgres_configs(
-    config: &crate::config::Config,
-) -> (Vec<PostgresDbConfig>, Vec<PostgresUserConfig>) {
-    let mut db_configs = Vec::new();
-    let mut user_configs = std::collections::HashMap::new();
-
-    if let Some(ref db) = config.db {
-        if let Some(ref pg_map) = db.postgres {
-            // 1. Parse databases
-            for (key, val) in pg_map {
-                if key == "enabled" || key == "version" || key == "users" || key == "backup" {
-                    continue;
-                }
-
-                if let Some(table) = val.as_table() {
-                    let db_name = table
-                        .get("db_name")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-
-                    if !db_name.is_empty() {
-                        db_configs.push(PostgresDbConfig {
-                            name: key.clone(),
-                            db_name,
-                        });
-                    }
-                }
-            }
-
-            // 2. config postgres users
-            // println!("\tConfigure postgres users");
-            configure_postgres_users(&mut user_configs, pg_map);
-        }
-    }
-
-    let users = user_configs.into_values().collect();
-
-    (db_configs, users)
-}
-
-pub fn configure_postgres_users(
-    user_configs: &mut std::collections::HashMap<String, PostgresUserConfig>,
-    pg_map: &std::collections::HashMap<String, toml::Value>,
-) {
-    if let Some(users_val) = pg_map.get("users") {
-        // Parse users array
-        if let Some(users_arr) = users_val.as_array() {
-            for u_val in users_arr {
-                if let Some(u_table) = u_val.as_table() {
-                    let user = u_table
-                        .get("user")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-
-                    if !user.is_empty() {
-                        let password = u_table
-                            .get("password")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string());
-
-                        let mut databases = Vec::new();
-
-                        if let Some(db_list_val) = u_table.get("databases") {
-                            if let Some(db_arr) = db_list_val.as_array() {
-                                for db_item in db_arr {
-                                    if let Some(db_name_str) = db_item.as_str() {
-                                        databases.push(db_name_str.to_string());
-                                    }
-                                }
-                            }
-                        }
-
-                        let user_entry = user_configs.entry(user.clone()).or_insert_with(|| {
-                            PostgresUserConfig {
-                                user: user.clone(),
-                                password,
-                                databases: Vec::new(),
-                            }
-                        });
-
-                        for db_name in databases {
-                            if !user_entry.databases.contains(&db_name) {
-                                user_entry.databases.push(db_name);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-pub fn configure_postgres_primary_rules(
-    interactor: &Box<dyn ServerInteractor>,
-    version: &str,
-    replica_user: &str,
-    follower_ips: &[String],
-    app_node_ips: &[String],
-) -> anyhow::Result<()> {
-    // 1. Configure postgresql.conf parameters using ALTER SYSTEM
-    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET listen_addresses = '*';\"")?;
-    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET wal_level = 'replica';\"")?;
-    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET max_wal_senders = 10;\"")?;
-    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET hot_standby = 'on';\"")?;
-    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET log_statement = 'mod';\"")?;
-    interactor
-        .cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET log_min_duration_statement = 0;\"")?;
-    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET log_line_prefix = '%t [%p]: user=%u db=%d app=%a client=%h ';\"")?;
-    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET log_destination = 'csvlog';\"")?;
-    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET logging_collector = 'on';\"")?;
-    // WAL archiving for PITR support
-    interactor.cmd("sudo mkdir -p /var/lib/postgresql/wal_archive")?;
-    interactor.cmd("sudo chown postgres:postgres /var/lib/postgresql/wal_archive")?;
-    interactor.cmd("sudo chmod 700 /var/lib/postgresql/wal_archive")?;
-    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET archive_mode = 'on';\"")?;
-    interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET archive_command = 'cp %p /var/lib/postgresql/wal_archive/%f';\"")?;
-
-    if version.parse::<i32>().unwrap_or(0) >= 17 {
-        interactor.cmd("sudo -u postgres psql -c \"ALTER SYSTEM SET summarize_wal = 'on';\"")?;
-    }
-
-    // 2. Configure pg_hba.conf
-    let pg_hba_path = format!("/etc/postgresql/{}/main/pg_hba.conf", version);
-    let existing_hba = interactor.cmd(&format!("sudo cat '{}'", pg_hba_path))?;
-    let mut updated_hba = existing_hba.stdout.clone();
-
-    // Allow local connections without password (trust)
-    updated_hba = updated_hba.replace(
-        "local   all             postgres                                peer",
-        "local   all             postgres                                trust",
-    );
-    updated_hba = updated_hba.replace(
-        "local   all             all                                     peer",
-        "local   all             all                                     trust",
-    );
-    updated_hba = updated_hba.replace(
-        "host    all             all             127.0.0.1/32            scram-sha-256",
-        "host    all             all             127.0.0.1/32            trust",
-    );
-    updated_hba = updated_hba.replace(
-        "host    all             all             ::1/128                 scram-sha-256",
-        "host    all             all             ::1/128                 trust",
-    );
-
-    let mut new_rules = String::new();
-    for follower in follower_ips {
-        let rule = format!(
-            "host replication {} {}/32 scram-sha-256",
-            replica_user, follower
-        );
-        if !updated_hba.contains(&rule) {
-            new_rules.push_str(&format!("{}\n", rule));
-        }
-    }
-    for app_ip in app_node_ips {
-        let rule = format!("host all all {}/32 scram-sha-256", app_ip);
-        if !updated_hba.contains(&rule) {
-            new_rules.push_str(&format!("{}\n", rule));
-        }
-    }
-
-    if !new_rules.is_empty() {
-        if !updated_hba.ends_with('\n') {
-            updated_hba.push('\n');
-        }
-        updated_hba.push_str("\n# Crane replication & client connections\n");
-        updated_hba.push_str(&new_rules);
-    }
-
-    if updated_hba != existing_hba.stdout {
-        interactor.create_file("/tmp/pg_hba.conf.tmp", &updated_hba)?;
-        interactor.cmd(&format!("sudo mv /tmp/pg_hba.conf.tmp '{}'", pg_hba_path))?;
-        interactor.cmd(&format!("sudo chown postgres:postgres '{}'", pg_hba_path))?;
-        interactor.cmd(&format!("sudo chmod 640 '{}'", pg_hba_path))?;
-    }
-
-    // Restart PostgreSQL cluster to apply replication config
-    println!("\tRestarting PostgreSQL cluster to apply replication config...");
-    let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", version);
-    let restart_cmd = format!(
-        "sudo -u postgres {} -D /var/lib/postgresql/{}/main -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf -c restore_command=false\" restart > /dev/null 2>&1 < /dev/null",
-        pg_ctl, version, version
-    );
-    interactor.cmd(&restart_cmd)?;
-
-    Ok(())
-}
-
 pub fn setup_postgres_primary(
-    interactor: &Box<dyn ServerInteractor>,
+    interactor: &dyn ServerInteractor,
     version: &str,
     replica_user: &str,
     replica_pass: &str,
@@ -409,84 +219,8 @@ pub fn setup_postgres_primary(
     Ok(())
 }
 
-fn configure_postgres_backup(
-    interactor: &Box<dyn ServerInteractor>,
-    version: &str,
-    replica_pass: &str,
-    config: &config::Config,
-    dot_env: &std::collections::HashMap<String, String>,
-) -> anyhow::Result<()> {
-    if let Some(schedule) = get_postgres_backup_schedule(config) {
-        println!("\n\tSetting up automated cron backups...");
-
-        // Resolve S3Config
-        let s3_config = crate::s3::get_s3_config(config, dot_env)?;
-
-        // Ensure directories exist
-        interactor.cmd("sudo mkdir -p /etc/crane /opt/crane /var/lib/postgresql/backups")?;
-        interactor.cmd("sudo chown postgres:postgres /var/lib/postgresql/backups")?;
-        interactor.cmd("sudo chmod 755 /var/lib/postgresql/backups")?;
-
-        // Write postgres-backup-config.json
-        let s3_json_str = format!(
-            r#"
-{{
-  "bucket": "{}",
-  "region": "{}",
-  "endpoint": {},
-  "access_key": "{}",
-  "secret_key": "{}",
-  "pg_version": "{}",
-  "replica_pass": "{}"
-}}"#,
-            s3_config.bucket,
-            s3_config.region,
-            s3_config
-                .endpoint
-                .as_ref()
-                .map(|e| format!("\"{}\"", e))
-                .unwrap_or_else(|| "null".to_string()),
-            s3_config.access_key,
-            s3_config.secret_key,
-            version,
-            replica_pass
-        );
-        // Write postgres-backup-config.json via tmp
-        interactor.create_file("/tmp/postgres-backup-config.json.tmp", &s3_json_str)?;
-        interactor.cmd(
-            "sudo mv /tmp/postgres-backup-config.json.tmp /etc/crane/postgres-backup-config.json",
-        )?;
-        interactor.cmd("sudo chown root:root /etc/crane/postgres-backup-config.json")?;
-        interactor.cmd("sudo chmod 600 /etc/crane/postgres-backup-config.json")?;
-
-        // Write postgres-backup.py via tmp
-        interactor.create_file("/tmp/postgres-backup.py.tmp", PYTHON_BACKUP_SCRIPT)?;
-        interactor.cmd("sudo mv /tmp/postgres-backup.py.tmp /opt/crane/postgres-backup.py")?;
-        interactor.cmd("sudo chown root:root /opt/crane/postgres-backup.py")?;
-        interactor.cmd("sudo chmod 755 /opt/crane/postgres-backup.py")?;
-
-        // Write cron schedule via tmp
-        let full_cron = interval_to_cron(&schedule.full_backup_every);
-        let incr_cron = interval_to_cron(&schedule.incremental_backup_every);
-        let cron_content = format!(
-            r#"
-# Crane Postgres Backups
-{} root python3 /opt/crane/postgres-backup.py full >> /var/log/crane-backup.log 2>&1
-{} root python3 /opt/crane/postgres-backup.py incr >> /var/log/crane-backup.log 2>&1
-            "#,
-            full_cron, incr_cron
-        );
-        interactor.create_file("/tmp/postgres-backup-cron.tmp", &cron_content)?;
-        interactor.cmd("sudo mv /tmp/postgres-backup-cron.tmp /etc/cron.d/postgres-backup")?;
-        interactor.cmd("sudo chown root:root /etc/cron.d/postgres-backup")?;
-        interactor.cmd("sudo chmod 644 /etc/cron.d/postgres-backup")?;
-    }
-
-    Ok(())
-}
-
 pub fn setup_postgres_follower(
-    interactor: &Box<dyn ServerInteractor>,
+    interactor: &dyn ServerInteractor,
     version: &str,
     primary_ip: &str,
     replica_user: &str,

@@ -3,7 +3,7 @@ use crate::{config, server_interactor::server_interactor_trait::ServerInteractor
 pub fn deploy_setup_users(
     app: &config::AppConfig,
     config: &config::Config,
-    node_interactor: &Box<dyn ServerInteractor>,
+    node_interactor: &dyn ServerInteractor,
 ) -> anyhow::Result<()> {
     if let Some(ref users) = config.users {
         if let Some(user_config) = users.iter().find(|u| u.name == app.deploy_user) {

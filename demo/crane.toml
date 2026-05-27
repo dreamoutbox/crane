@@ -7,7 +7,7 @@ public_ip = "localhost"
 internal_ip = "10.0.0.11"
 port = 2221
 roles = ["app", "traefik", "postgres", "redis"]
-user = "admin"
+user = "crane"
 private_key = "keys/id_ed25519"
 
 [[nodes]]
@@ -17,7 +17,7 @@ public_ip = "localhost"
 internal_ip = "10.0.0.12"
 port = 2222
 roles = ["app", "traefik", "postgres", "redis"]
-user = "admin"
+user = "crane"
 private_key = "keys/id_ed25519"
 
 # [[nodes]]

@@ -1,66 +1,14 @@
 use crate::{
-    postgres_unit::entity::{BackupMetadata, BackupRegistry},
-    postgres_unit::helper::is_postgres_running,
+    postgres_unit::{
+        entity::{BackupMetadata, BackupRegistry},
+        helper::{cmdw, get_backups_from_s3},
+    },
     s3::s3_client::S3Client,
     server_interactor::server_interactor_trait::ServerInteractor,
 };
 
-/// Encode a string as URL-safe base64 (no line wrapping) for safe shell transfer.
-fn base64_encode(s: &str) -> String {
-    use std::fmt::Write as _;
-    let bytes = s.as_bytes();
-    let mut out = String::new();
-    // simple base64 alphabet
-    const ALPHA: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    for chunk in bytes.chunks(3) {
-        let b0 = chunk[0] as u32;
-        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
-        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
-        let n = (b0 << 16) | (b1 << 8) | b2;
-        let _ = write!(out, "{}", ALPHA[((n >> 18) & 0x3F) as usize] as char);
-        let _ = write!(out, "{}", ALPHA[((n >> 12) & 0x3F) as usize] as char);
-        let _ = write!(
-            out,
-            "{}",
-            if chunk.len() > 1 {
-                ALPHA[((n >> 6) & 0x3F) as usize] as char
-            } else {
-                '='
-            }
-        );
-        let _ = write!(
-            out,
-            "{}",
-            if chunk.len() > 2 {
-                ALPHA[(n & 0x3F) as usize] as char
-            } else {
-                '='
-            }
-        );
-    }
-    out
-}
-
-fn run_cmd(
-    interactor: &Box<dyn ServerInteractor>,
-    command: &str,
-) -> anyhow::Result<crate::ssh::CmdOutput> {
-    let out = interactor.cmd(command)?;
-    if out.exit_code != 0 {
-        println!("Command {}\nSTDERR:\n{}\n\n", command, out.stderr.trim());
-
-        anyhow::bail!(
-            "Command '{}' failed with exit code {}: {}",
-            command,
-            out.exit_code,
-            out.stderr.trim()
-        );
-    }
-    Ok(out)
-}
-
 pub fn run_backup(
-    interactor: &Box<dyn ServerInteractor>,
+    interactor: &dyn ServerInteractor,
     s3_client: &dyn S3Client,
     pg_version: &str,
     backup_type: &str,
@@ -87,19 +35,19 @@ pub fn run_backup(
     let pg_verifybackup = format!("/usr/lib/postgresql/{}/bin/pg_verifybackup", pg_version);
 
     // 2. Ensure Backup Directories exist
-    run_cmd(interactor, "sudo mkdir -p /var/lib/postgresql/backups")?;
-    run_cmd(
+    cmdw(interactor, "sudo mkdir -p /var/lib/postgresql/backups")?;
+    cmdw(
         interactor,
         "sudo chown postgres:postgres /var/lib/postgresql/backups",
     )?;
-    run_cmd(interactor, "sudo chmod 755 /var/lib/postgresql/backups")?;
-    run_cmd(
+    cmdw(interactor, "sudo chmod 755 /var/lib/postgresql/backups")?;
+    cmdw(
         interactor,
         &format!("sudo -u postgres mkdir -p {}", local_path),
     )?;
 
     // 3. Grant pg_read_server_files to replicator (idempotent)
-    run_cmd(
+    cmdw(
         interactor,
         r#"sudo -u postgres psql -c "GRANT pg_read_server_files TO replicator;""#,
     )?;
@@ -126,14 +74,14 @@ pub fn run_backup(
             ))?;
             if test_manifest.stdout.trim() != "yes" {
                 // Recreate parent directory and restore manifest from S3
-                run_cmd(
+                cmdw(
                     interactor,
                     &format!(
                         "sudo -u postgres mkdir -p /var/lib/postgresql/backups/{}",
                         parent.id
                     ),
                 )?;
-                run_cmd(
+                cmdw(
                     interactor,
                     &format!("sudo chmod 755 /var/lib/postgresql/backups/{}", parent.id),
                 )?;
@@ -144,15 +92,15 @@ pub fn run_backup(
                 let temp_path = format!("/tmp/manifest_{}", parent.id);
                 let content = String::from_utf8_lossy(&manifest_data);
                 interactor.create_file(&temp_path, &content)?;
-                run_cmd(
+                cmdw(
                     interactor,
                     &format!("sudo mv {} {}", temp_path, parent_manifest),
                 )?;
-                run_cmd(
+                cmdw(
                     interactor,
                     &format!("sudo chown postgres:postgres {}", parent_manifest),
                 )?;
-                run_cmd(interactor, &format!("sudo chmod 644 {}", parent_manifest))?;
+                cmdw(interactor, &format!("sudo chmod 644 {}", parent_manifest))?;
             }
             pgbasebackup_cmd.push_str(&format!(" --incremental={}", parent_manifest));
         } else {
@@ -174,11 +122,11 @@ pub fn run_backup(
 
     // 6. Verify Backup (requires extracting tar to a temp directory first)
     let verify_dir = format!("/var/lib/postgresql/backups/{}_verify", id);
-    run_cmd(
+    cmdw(
         interactor,
         &format!("sudo -u postgres mkdir -p {}", verify_dir),
     )?;
-    run_cmd(
+    cmdw(
         interactor,
         &format!(
             "sudo -u postgres tar -xf {}/base.tar -C {}",
@@ -192,11 +140,11 @@ pub fn run_backup(
         local_path
     ))?;
     if test_wal.stdout.trim() == "yes" {
-        run_cmd(
+        cmdw(
             interactor,
             &format!("sudo -u postgres mkdir -p {}/pg_wal", verify_dir),
         )?;
-        run_cmd(
+        cmdw(
             interactor,
             &format!(
                 "sudo -u postgres tar -xf {}/pg_wal.tar -C {}/pg_wal/",
@@ -206,11 +154,11 @@ pub fn run_backup(
     }
 
     // Copy backup_manifest to verify_dir
-    run_cmd(
+    cmdw(
         interactor,
         &format!("sudo cp {}/backup_manifest {}/", local_path, verify_dir),
     )?;
-    run_cmd(
+    cmdw(
         interactor,
         &format!("sudo chown -R postgres:postgres {}", verify_dir),
     )?;
@@ -232,7 +180,7 @@ pub fn run_backup(
     }
 
     // Adjust permissions so that the SSH user can read and download the backup files
-    run_cmd(interactor, &format!("sudo chmod -R 755 {}", local_path))?;
+    cmdw(interactor, &format!("sudo chmod -R 755 {}", local_path))?;
 
     // 7. Get List of generated backup files to upload
     let files_list = interactor.ls(&local_path)?;
@@ -273,11 +221,11 @@ pub fn run_backup(
     let meta_toml = toml::to_string(&meta)?;
     let temp_meta_path = format!("/tmp/metadata_{}.toml", id);
     interactor.create_file(&temp_meta_path, &meta_toml)?;
-    run_cmd(
+    cmdw(
         interactor,
         &format!("sudo mv {} {}/metadata.toml", temp_meta_path, local_path),
     )?;
-    run_cmd(
+    cmdw(
         interactor,
         &format!("sudo chown postgres:postgres {}/metadata.toml", local_path),
     )?;
@@ -288,7 +236,7 @@ pub fn run_backup(
 
     // 10. Update backup registry on S3 and local
     let registry_key = "backups/registry.toml";
-    let backups = get_backups(s3_client)?;
+    let backups = get_backups_from_s3(s3_client)?;
     let mut registry = BackupRegistry { backups };
 
     registry.backups.push(meta.clone());
@@ -297,18 +245,18 @@ pub fn run_backup(
 
     let temp_reg_path = format!("/tmp/registry_{}.toml", id);
     interactor.create_file(&temp_reg_path, &registry_toml)?;
-    run_cmd(
+    cmdw(
         interactor,
         &format!(
             "sudo mv {} /var/lib/postgresql/backups/registry.toml",
             temp_reg_path
         ),
     )?;
-    run_cmd(
+    cmdw(
         interactor,
         "sudo chown postgres:postgres /var/lib/postgresql/backups/registry.toml",
     )?;
-    run_cmd(
+    cmdw(
         interactor,
         "sudo chmod 644 /var/lib/postgresql/backups/registry.toml",
     )?;
@@ -316,435 +264,4 @@ pub fn run_backup(
     println!("\nBACKUP {} {:?} completed\n", id, meta.taken_at);
 
     Ok(meta)
-}
-
-pub fn run_restore(
-    interactor: &Box<dyn ServerInteractor>,
-    s3_client: &dyn S3Client,
-    pg_version: &str,
-    backup: &BackupMetadata,
-    chain: &[BackupMetadata],
-    pitr_time: Option<&str>, // "YYYY-MM-DD HH:MM:SS" UTC — None = regular restore
-) -> anyhow::Result<()> {
-    let mut chain = chain.to_vec();
-    let mut backup = backup.clone();
-
-    if let Some(pitr) = pitr_time {
-        let pitr_dt = chrono::NaiveDateTime::parse_from_str(pitr, "%Y-%m-%d %H:%M:%S")
-            .map_err(|_| anyhow::anyhow!("--pitr must be in 'YYYY-MM-DD HH:MM:SS' format"))?;
-
-        let mut filtered_chain = Vec::new();
-        for item in &chain {
-            if let Some(ref taken_at) = item.taken_at {
-                let backup_dt =
-                    chrono::NaiveDateTime::parse_from_str(taken_at, "%Y-%m-%d %H:%M:%S").map_err(
-                        |_| anyhow::anyhow!("Backup has invalid taken_at: '{}'", taken_at),
-                    )?;
-                if backup_dt < pitr_dt {
-                    filtered_chain.push(item.clone());
-                }
-            } else {
-                filtered_chain.push(item.clone());
-            }
-        }
-
-        if filtered_chain.is_empty() {
-            anyhow::bail!(
-                "No backup in the chain starts before the PITR target time '{}'",
-                pitr
-            );
-        }
-
-        chain = filtered_chain;
-        backup = chain.last().unwrap().clone();
-    }
-
-    let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", pg_version);
-    let pg_combinebackup = format!("/usr/lib/postgresql/{}/bin/pg_combinebackup", pg_version);
-    let pg_verifybackup = format!("/usr/lib/postgresql/{}/bin/pg_verifybackup", pg_version);
-    let pgdata_dir = format!("/var/lib/postgresql/{}/main", pg_version);
-
-    // 1. Stop PostgreSQL service
-    let _ = interactor.cmd("sudo systemctl stop postgresql --no-block");
-    let _ = interactor.cmd(&format!(
-        "sudo systemctl stop postgresql@{}-main --no-block",
-        pg_version
-    ));
-    let _ = interactor.cmd(&format!(
-        "sudo -u postgres {} -D {} stop -m immediate",
-        pg_ctl, pgdata_dir
-    ));
-
-    // 2. Download all backups in the chain from S3 to VPS local backups dir
-    run_cmd(interactor, "sudo mkdir -p /var/lib/postgresql/backups")?;
-    run_cmd(
-        interactor,
-        "sudo chown postgres:postgres /var/lib/postgresql/backups",
-    )?;
-    run_cmd(interactor, "sudo chmod 755 /var/lib/postgresql/backups")?;
-
-    for item in &chain {
-        let remote_dir = format!("/var/lib/postgresql/backups/{}", item.id);
-        run_cmd(
-            interactor,
-            &format!("sudo -u postgres mkdir -p {}", remote_dir),
-        )?;
-        run_cmd(interactor, &format!("sudo chmod 755 {}", remote_dir))?;
-
-        // base.tar and backup_manifest are required; pg_wal.tar is optional
-        let required_files = ["base.tar", "backup_manifest"];
-        for file in required_files {
-            let s3_key = format!("backups/{}/{}", item.id, file);
-            let data = s3_client.get_object(&s3_key).map_err(|_| {
-                anyhow::anyhow!(
-                    "Backup '{}' is incomplete: required file '{}' not found in S3. \
-                     This backup cannot be restored.",
-                    item.id,
-                    file
-                )
-            })?;
-            let temp_path =
-                std::env::temp_dir().join(format!("crane-restore-{}-{}", item.id, file));
-            std::fs::write(&temp_path, &data)?;
-
-            let remote_temp_file = format!("/tmp/crane-restore-{}-{}", item.id, file);
-            interactor.upload(temp_path.to_str().unwrap(), &remote_temp_file)?;
-            let _ = std::fs::remove_file(temp_path);
-
-            let remote_file = format!("{}/{}", remote_dir, file);
-            run_cmd(
-                interactor,
-                &format!("sudo mv {} {}", remote_temp_file, remote_file),
-            )?;
-            run_cmd(
-                interactor,
-                &format!("sudo chown postgres:postgres {}", remote_file),
-            )?;
-            run_cmd(interactor, &format!("sudo chmod 644 {}", remote_file))?;
-        }
-
-        // pg_wal.tar is optional
-        let wal_s3_key = format!("backups/{}/pg_wal.tar", item.id);
-        if let Ok(data) = s3_client.get_object(&wal_s3_key) {
-            let temp_path =
-                std::env::temp_dir().join(format!("crane-restore-{}-pg_wal.tar", item.id));
-            std::fs::write(&temp_path, &data)?;
-
-            let remote_temp_file = format!("/tmp/crane-restore-{}-pg_wal.tar", item.id);
-            interactor.upload(temp_path.to_str().unwrap(), &remote_temp_file)?;
-            let _ = std::fs::remove_file(temp_path);
-
-            let remote_file = format!("{}/pg_wal.tar", remote_dir);
-            run_cmd(
-                interactor,
-                &format!("sudo mv {} {}", remote_temp_file, remote_file),
-            )?;
-            run_cmd(
-                interactor,
-                &format!("sudo chown postgres:postgres {}", remote_file),
-            )?;
-            run_cmd(interactor, &format!("sudo chmod 644 {}", remote_file))?;
-        }
-    }
-
-    if chain.len() <= 1 {
-        // 3. Clear data directory
-        run_cmd(interactor, &format!("sudo rm -rf {}", pgdata_dir))?;
-        run_cmd(
-            interactor,
-            &format!("sudo -u postgres mkdir -p {}", pgdata_dir),
-        )?;
-        run_cmd(interactor, &format!("sudo chmod 700 {}", pgdata_dir))?;
-
-        // 4. Extract base.tar
-        run_cmd(
-            interactor,
-            &format!(
-                "sudo -u postgres tar -xf /var/lib/postgresql/backups/{}/base.tar -C {}",
-                backup.id, pgdata_dir
-            ),
-        )?;
-
-        // 5. Extract pg_wal.tar if present
-        let test_wal = interactor.cmd(&format!(
-            "test -f /var/lib/postgresql/backups/{}/pg_wal.tar && echo 'yes' || echo 'no'",
-            backup.id
-        ))?;
-        if test_wal.stdout.trim() == "yes" {
-            run_cmd(
-                interactor,
-                &format!("sudo -u postgres mkdir -p {}/pg_wal", pgdata_dir),
-            )?;
-
-            run_cmd(
-                interactor,
-                &format!(
-                    "sudo -u postgres tar -xf /var/lib/postgresql/backups/{}/pg_wal.tar -C {}/pg_wal/",
-                    backup.id, pgdata_dir
-                ),
-            )?;
-        }
-    } else {
-        // 3. Extract all backups in the chain to separate folders
-        for item in &chain {
-            let extracted_dir = format!("/var/lib/postgresql/backups/{}_extracted", item.id);
-            run_cmd(interactor, &format!("sudo rm -rf {}", extracted_dir))?;
-            run_cmd(
-                interactor,
-                &format!("sudo -u postgres mkdir -p {}", extracted_dir),
-            )?;
-            run_cmd(
-                interactor,
-                &format!(
-                    "sudo -u postgres tar -xf /var/lib/postgresql/backups/{}/base.tar -C {}",
-                    item.id, extracted_dir
-                ),
-            )?;
-
-            // Copy backup_manifest to extracted directory so pg_combinebackup can find it
-            run_cmd(
-                interactor,
-                &format!(
-                    "sudo cp /var/lib/postgresql/backups/{}/backup_manifest {}/",
-                    item.id, extracted_dir
-                ),
-            )?;
-            run_cmd(
-                interactor,
-                &format!(
-                    "sudo chown postgres:postgres {}/backup_manifest",
-                    extracted_dir
-                ),
-            )?;
-            run_cmd(
-                interactor,
-                &format!("sudo chmod 644 {}/backup_manifest", extracted_dir),
-            )?;
-        }
-
-        // 4. Combine backups
-        let combined_dir = "/var/lib/postgresql/backups/combined";
-        run_cmd(interactor, &format!("sudo rm -rf {}", combined_dir))?;
-
-        let mut combine_cmd = format!("sudo -u postgres {} ", pg_combinebackup);
-        for item in &chain {
-            combine_cmd.push_str(&format!(
-                "/var/lib/postgresql/backups/{}_extracted ",
-                item.id
-            ));
-        }
-        combine_cmd.push_str(&format!("-o {}", combined_dir));
-        run_cmd(interactor, &combine_cmd)?;
-
-        // Extract target backup's pg_wal.tar to combined_dir/pg_wal if present
-        let test_wal = interactor.cmd(&format!(
-            "test -f /var/lib/postgresql/backups/{}/pg_wal.tar && echo 'yes' || echo 'no'",
-            backup.id
-        ))?;
-        if test_wal.stdout.trim() == "yes" {
-            run_cmd(
-                interactor,
-                &format!("sudo -u postgres mkdir -p {}/pg_wal", combined_dir),
-            )?;
-            run_cmd(
-                interactor,
-                &format!(
-                    "sudo -u postgres tar -xf /var/lib/postgresql/backups/{}/pg_wal.tar -C {}/pg_wal/",
-                    backup.id, combined_dir
-                ),
-            )?;
-        }
-
-        // 5. Verify the combined backup
-        let verify_cmd = format!("sudo -u postgres {} {}", pg_verifybackup, combined_dir);
-        run_cmd(interactor, &verify_cmd)?;
-
-        // 6. Clear and replace data directory with combined backup
-        run_cmd(interactor, &format!("sudo rm -rf {}", pgdata_dir))?;
-        run_cmd(
-            interactor,
-            &format!("sudo mv {} {}", combined_dir, pgdata_dir),
-        )?;
-
-        // Clean up extracted directories
-        for item in &chain {
-            let extracted_dir = format!("/var/lib/postgresql/backups/{}_extracted", item.id);
-            let _ = interactor.cmd(&format!("sudo rm -rf {}", extracted_dir));
-        }
-    }
-
-    // 6. Set ownership and start service
-    run_cmd(
-        interactor,
-        &format!("sudo chown -R postgres:postgres {}", pgdata_dir),
-    )?;
-    run_cmd(interactor, &format!("sudo chmod 700 {}", pgdata_dir))?;
-
-    if let Some(target_time) = pitr_time {
-        // Write PITR settings to postgresql.auto.conf in pgdata_dir to avoid quoting issues
-        let pitr_conf_path = format!("{}/postgresql.auto.conf", pgdata_dir);
-        let pitr_conf_content = format!(
-            "restore_command = 'cp /var/lib/postgresql/wal_archive/%f %p'\nrecovery_target_time = '{}'\nrecovery_target_action = promote\nrecovery_target_inclusive = on\nrecovery_target_timeline = 'current'\n",
-            target_time
-        );
-        // Write via base64 to avoid any shell quoting issues with single quotes
-        println!("writing PITR config at: {}", pitr_conf_path);
-        let b64 = base64_encode(&pitr_conf_content);
-        run_cmd(
-            interactor,
-            &format!(
-                "echo {} | base64 -d | sudo -u postgres tee -a {} > /dev/null",
-                b64, pitr_conf_path
-            ),
-        )?;
-
-        // Create recovery.signal (PG12+ triggers archive recovery mode)
-        println!("writing recovery signal at: {}", pgdata_dir);
-        run_cmd(
-            interactor,
-            &format!("sudo -u postgres touch {}/recovery.signal", pgdata_dir),
-        )?;
-
-        // Start postgres; log to file so we can read errors
-        let log_file = "/tmp/crane-pitr-pg-start.log";
-        let start_cmd = format!(
-            "sudo -u postgres {} -D {} -l {} -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf\" start",
-            pg_ctl, pgdata_dir, log_file, pg_version
-        );
-
-        let out = interactor.cmd(&start_cmd)?;
-        if out.exit_code != 0 {
-            // Capture pg log for diagnosis
-            // let mut log = interactor
-            //     .cmd(&format!("sudo cat {} 2>/dev/null || true", log_file))
-            //     .map(|o| o.stdout)
-            //     .unwrap_or_default();
-
-            // let extra_logs = get_last_postgres_logs(interactor, pg_version);
-            // if !extra_logs.is_empty() {
-            //     log.push_str(&extra_logs);
-            // }
-
-            // Clean up: try to restore/clean postgresql.auto.conf
-            let _ = interactor.cmd(&format!(
-                "sudo -u postgres sed -i '/restore_command/d;/recovery_target/d' {}",
-                pitr_conf_path
-            ));
-
-            println!("\nstart command: {}\n", start_cmd);
-            println!("stdout: {}\n", out.stdout);
-            println!("stderr: {}\n\n", out.stderr);
-
-            anyhow::bail!(
-                "Failed to start PostgreSQL with PITR (exit code {})",
-                out.exit_code
-            );
-        }
-
-        // Wait for recovery to complete (postgres promotes itself)
-        let mut ready = false;
-        for _ in 0..30 {
-            std::thread::sleep(std::time::Duration::from_millis(500));
-
-            if is_postgres_running(interactor, pg_version) {
-                ready = true;
-                break;
-            }
-        }
-        // Clean up PITR settings from postgresql.auto.conf
-        let _ = interactor.cmd(&format!(
-            "sudo -u postgres sed -i '/restore_command/d;/recovery_target/d' {}",
-            pitr_conf_path
-        ));
-
-        if !ready {
-            let mut log = interactor
-                .cmd(&format!("sudo cat {} 2>/dev/null || true", log_file))
-                .map(|o| o.stdout)
-                .unwrap_or_default();
-
-            let extra_logs = get_last_postgres_logs(interactor, pg_version);
-            if !extra_logs.is_empty() {
-                log.push_str(&extra_logs);
-            }
-
-            anyhow::bail!("PostgreSQL did not become ready after PITR:\n{}", log);
-        }
-    } else {
-        // Regular restore: suppress archive recovery with restore_command=false
-        let start_cmd = format!(
-            "sudo -u postgres {} -D {} -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf -c restore_command=false\" start > /dev/null 2>&1 < /dev/null",
-            pg_ctl, pgdata_dir, pg_version
-        );
-        let out = interactor.cmd(&start_cmd)?;
-
-        if out.exit_code != 0 {
-            anyhow::bail!(
-                "Failed to start PostgreSQL (exit code {}): {}",
-                out.exit_code,
-                out.stderr
-            );
-        }
-    }
-
-    Ok(())
-}
-
-fn get_last_postgres_logs(interactor: &Box<dyn ServerInteractor>, pg_version: &str) -> String {
-    let log_dir = format!("/var/lib/postgresql/{}/main/log", pg_version);
-    let find_logs_cmd = format!(
-        "sudo find {} -maxdepth 1 -type f \\( -name \"*.log\" -o -name \"*.csv\" \\) -printf \"%T@ %p\\n\" 2>/dev/null | sort -n -r | head -n 5 | cut -d' ' -f2-",
-        log_dir
-    );
-
-    let mut extra_logs = String::new();
-    let mut file_paths = Vec::new();
-
-    if let Ok(find_out) = interactor.cmd(&find_logs_cmd) {
-        for line in find_out.stdout.lines() {
-            let p = line.trim();
-            if !p.is_empty() {
-                file_paths.push(p.to_string());
-            }
-        }
-    }
-
-    // Fallback if find output is empty
-    if file_paths.is_empty() {
-        let fallback_cmd = format!(
-            "sudo ls -t {}/*.log {}/*.csv 2>/dev/null | head -n 5",
-            log_dir, log_dir
-        );
-        if let Ok(fb_out) = interactor.cmd(&fallback_cmd) {
-            for line in fb_out.stdout.lines() {
-                let p = line.trim();
-                if !p.is_empty() {
-                    file_paths.push(p.to_string());
-                }
-            }
-        }
-    }
-
-    for file_path in file_paths {
-        extra_logs.push_str(&format!("\n--- Last 50 lines of {} ---\n", file_path));
-        let cat_cmd = format!("sudo tail -n 50 '{}'", file_path);
-        if let Ok(cat_out) = interactor.cmd(&cat_cmd) {
-            extra_logs.push_str(&cat_out.stdout);
-        }
-    }
-
-    extra_logs
-}
-
-pub fn get_backups(s3_client: &dyn S3Client) -> anyhow::Result<Vec<BackupMetadata>> {
-    let registry_key = "backups/registry.toml";
-    match s3_client.get_object(registry_key) {
-        Ok(data) => {
-            let content = String::from_utf8_lossy(&data).to_string();
-            let registry: BackupRegistry = toml::from_str(&content)
-                .map_err(|e| anyhow::anyhow!("Failed to parse backups/registry.toml: {}", e))?;
-            Ok(registry.backups)
-        }
-        Err(_) => Ok(Vec::new()),
-    }
 }
