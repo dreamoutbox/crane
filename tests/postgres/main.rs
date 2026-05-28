@@ -17,4 +17,5 @@ mod postgres {
     include!("config_test.rs");
     include!("logs_test.rs");
     include!("restore_integrated_test.rs");
+    include!("user_change_password_test.rs");
 }

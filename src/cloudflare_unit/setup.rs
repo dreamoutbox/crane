@@ -71,12 +71,14 @@ pub async fn update_dns(config: &Config, app_name: Option<&str>, is_deploy: bool
             continue;
         }
 
+        // get zone name
         let zone_name = get_zone_name(&app_domain, config);
         println!(
             "\nUpdating DNS for app '{}' ({}) using zone '{}'",
             app.name, app_domain, zone_name
         );
 
+        // create cloudflare client
         let client = CloudflareDns::new_without_zone(&token)?;
         let zone_id = client
             .get_zone_id_by_name(&zone_name)

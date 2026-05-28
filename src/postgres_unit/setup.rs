@@ -180,8 +180,17 @@ pub fn setup_postgres_primary(
         println!("\tSetting up user '{}'...", user.user);
 
         let user_sql = format!(
-            "DO \\$\\$ BEGIN IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{}') THEN CREATE ROLE {} WITH PASSWORD '{}' LOGIN; END IF; END \\$\\$;",
+            "DO \\$\\$ \
+             BEGIN \
+                 IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{}') THEN \
+                     CREATE ROLE {} WITH PASSWORD '{}' LOGIN; \
+                 ELSE \
+                     ALTER ROLE {} WITH PASSWORD '{}'; \
+                 END IF; \
+             END \\$\\$;",
             user.user,
+            user.user,
+            user.password.as_deref().unwrap_or(""),
             user.user,
             user.password.as_deref().unwrap_or("")
         );
