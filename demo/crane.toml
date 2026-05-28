@@ -122,11 +122,14 @@ full_backup_every = "1d"
 incremental_backup_every = "1h"
 
 [[db.postgres.users]]
+# state = "present" / "absent"
+state = "present"
 user = "u1"
 password = "u1"
 databases = ["mydb"]
 
 [[db.postgres.users]]
+state = "present"
 user = "u2"
 password = "u2"
 databases = ["mydb"]

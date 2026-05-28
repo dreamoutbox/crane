@@ -12,10 +12,13 @@ mod postgres {
 
     include!("../common/mock_interactor.rs");
     include!("../common/mock_s3.rs");
+    include!("helper.rs");
+
     include!("backup_test.rs");
     include!("restore_test.rs");
     include!("config_test.rs");
     include!("logs_test.rs");
     include!("restore_integrated_test.rs");
     include!("user_change_password_test.rs");
+    include!("user_state_test.rs");
 }

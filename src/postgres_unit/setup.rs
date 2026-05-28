@@ -162,11 +162,14 @@ pub fn setup_postgres_primary(
     // 5. Idempotently create databases
     for db in db_configs {
         println!("\n\tSetting up database '{}'...", db.db_name);
+
         let check_db_sql = format!("SELECT 1 FROM pg_database WHERE datname = '{}'", db.db_name);
+
         let db_exists = interactor.cmd(&format!(
             "sudo -u postgres psql -t -A -c \"{}\"",
             check_db_sql
         ))?;
+
         if db_exists.stdout.trim() != "1" {
             interactor.cmd(&format!(
                 "sudo -u postgres psql -c \"CREATE DATABASE {};\"",
@@ -175,51 +178,92 @@ pub fn setup_postgres_primary(
         }
     }
 
-    // 6. Idempotently create users and grant permissions
+    // 6. Idempotently create/remove users and grant/revoke privileges
     for user in user_configs {
-        println!("\tSetting up user '{}'...", user.user);
+        let user_state = user.state.as_deref().unwrap_or("present");
 
-        let user_sql = format!(
-            "DO \\$\\$ \
-             BEGIN \
-                 IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{}') THEN \
-                     CREATE ROLE {} WITH PASSWORD '{}' LOGIN; \
-                 ELSE \
-                     ALTER ROLE {} WITH PASSWORD '{}'; \
-                 END IF; \
-             END \\$\\$;",
-            user.user,
-            user.user,
-            user.password.as_deref().unwrap_or(""),
-            user.user,
-            user.password.as_deref().unwrap_or("")
-        );
-        interactor.cmd(&format!("sudo -u postgres psql -c \"{}\"", user_sql))?;
+        println!("user {} state is {}", user.user, user_state);
 
-        for db_ref in &user.databases {
-            // Find db_name corresponding to db_ref (which could be key or db_name itself)
-            let db_name = db_configs
-                .iter()
-                .find(|d| &d.name == db_ref || &d.db_name == db_ref)
-                .map(|d| d.db_name.as_str())
-                .unwrap_or(db_ref);
+        if user_state == "absent" {
+            println!("\tRemoving user '{}'...", user.user);
 
-            println!(
-                "\tGranting access for user '{}' to database '{}'...",
-                user.user, db_name
+            for db_ref in &user.databases {
+                let db_name = db_configs
+                    .iter()
+                    .find(|d| &d.name == db_ref || &d.db_name == db_ref)
+                    .map(|d| d.db_name.as_str())
+                    .unwrap_or(db_ref);
+
+                println!(
+                    "\tRevoking privileges for user '{}' on database '{}'...",
+                    user.user, db_name
+                );
+
+                // Revoke privileges on schema public inside that database
+                let _ = interactor.cmd(&format!(
+                    "sudo -u postgres psql -d {} -c \"REVOKE ALL ON SCHEMA public FROM {};\"",
+                    db_name, user.user
+                ));
+
+                // Revoke privileges on the database
+                let _ = interactor.cmd(&format!(
+                    "sudo -u postgres psql -c \"REVOKE ALL PRIVILEGES ON DATABASE {} FROM {};\"",
+                    db_name, user.user
+                ));
+            }
+
+            // Drop the role
+            interactor.cmd(&format!(
+                "sudo -u postgres psql -c \"DROP ROLE IF EXISTS {};\"",
+                user.user
+            ))?;
+        } else if user_state == "present" {
+            println!("\tSetting up user '{}'...", user.user);
+
+            let user_sql = format!(
+                "DO \\$\\$ \
+                 BEGIN \
+                     IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{}') THEN \
+                         CREATE ROLE {} WITH PASSWORD '{}' LOGIN; \
+                     ELSE \
+                         ALTER ROLE {} WITH PASSWORD '{}'; \
+                     END IF; \
+                 END \\$\\$;",
+                user.user,
+                user.user,
+                user.password.as_deref().unwrap_or(""),
+                user.user,
+                user.password.as_deref().unwrap_or("")
             );
+            interactor.cmd(&format!("sudo -u postgres psql -c \"{}\"", user_sql))?;
 
-            // Grant privileges on the database
-            interactor.cmd(&format!(
-                "sudo -u postgres psql -c \"GRANT ALL PRIVILEGES ON DATABASE {} TO {};\"",
-                db_name, user.user
-            ))?;
+            for db_ref in &user.databases {
+                // Find db_name corresponding to db_ref (which could be key or db_name itself)
+                let db_name = db_configs
+                    .iter()
+                    .find(|d| &d.name == db_ref || &d.db_name == db_ref)
+                    .map(|d| d.db_name.as_str())
+                    .unwrap_or(db_ref);
 
-            // Grant privileges on schema public inside that database
-            interactor.cmd(&format!(
-                "sudo -u postgres psql -d {} -c \"GRANT ALL ON SCHEMA public TO {};\"",
-                db_name, user.user
-            ))?;
+                println!(
+                    "\tGranting access for user '{}' to database '{}'...",
+                    user.user, db_name
+                );
+
+                // Grant privileges on the database
+                interactor.cmd(&format!(
+                    "sudo -u postgres psql -c \"GRANT ALL PRIVILEGES ON DATABASE {} TO {};\"",
+                    db_name, user.user
+                ))?;
+
+                // Grant privileges on schema public inside that database
+                interactor.cmd(&format!(
+                    "sudo -u postgres psql -d {} -c \"GRANT ALL ON SCHEMA public TO {};\"",
+                    db_name, user.user
+                ))?;
+            }
+        } else {
+            anyhow::bail!("unknown user state: {}", user_state);
         }
     }
 

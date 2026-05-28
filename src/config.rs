@@ -87,6 +87,7 @@ pub struct PostgresUserConfig {
     pub user: String,
     pub password: Option<String>,
     pub databases: Vec<String>,
+    pub state: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

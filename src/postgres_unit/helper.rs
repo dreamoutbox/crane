@@ -450,6 +450,11 @@ pub fn configure_postgres_users(
                             .and_then(|v| v.as_str())
                             .map(|s| s.to_string());
 
+                        let state = u_table
+                            .get("state")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+
                         let mut databases = Vec::new();
 
                         if let Some(db_list_val) = u_table.get("databases") {
@@ -467,6 +472,7 @@ pub fn configure_postgres_users(
                                 user: user.clone(),
                                 password,
                                 databases: Vec::new(),
+                                state,
                             }
                         });
 
