@@ -11,7 +11,7 @@ fn test_restore_integrated_workflow() {
     let config_path = std::path::Path::new("demo/crane.toml");
 
     //Deploy
-    crane::commands::deploy::run(config_path, false).expect("deploy failed");
+    crane::commands::deploy::run(config_path, true).expect("deploy failed");
 
     // Load config
     let config = crane::config::load_config(config_path).expect("Failed to load crane.toml");

@@ -38,6 +38,7 @@ pub struct AppConfig {
     pub name: String,
     pub deploy_dir: String,
     pub entrypoint: String,
+    pub pre_deploy_script: Option<String>,
     pub deploy_user: String,
     pub port_start: u16,
     pub port_end: Option<u16>,

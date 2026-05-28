@@ -43,6 +43,7 @@ dependencies = ["libssl3", "ca-certificates"]
 # Deploy Info
 deploy_dir = "./demo"
 entrypoint = "./myapp"
+pre_deploy_script = "./before-deploy.sh"
 deploy_user = "deployman"
 port_start = 3000
 port_end = 3100

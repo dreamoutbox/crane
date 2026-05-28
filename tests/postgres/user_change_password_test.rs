@@ -8,7 +8,7 @@ fn test_user_change_password() {
     //Deploy config with postgres user old password
     let old_config_path =
         std::path::Path::new("tests/postgres/crane.postgres_user_old_password.toml");
-    crane::commands::deploy::run(old_config_path, false).expect("deploy failed");
+    crane::commands::deploy::run(old_config_path, true).expect("deploy failed");
 
     // Allow host machine connection to Docker container
     allow_host_connection(old_config_path);
@@ -24,7 +24,7 @@ fn test_user_change_password() {
     //Deploy config with postgres user new password
     let new_config_path =
         std::path::Path::new("tests/postgres/crane.postgres_user_new_password.toml");
-    crane::commands::deploy::run(new_config_path, false).expect("deploy failed");
+    crane::commands::deploy::run(new_config_path, true).expect("deploy failed");
 
     // Allow host machine connection again since configuration was redeployed
     allow_host_connection(new_config_path);

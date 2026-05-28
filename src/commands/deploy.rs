@@ -233,6 +233,32 @@ pub fn run(config_path: &Path, no_dns_update: bool) -> anyhow::Result<()> {
                 node_interactor.cmd(&format!("rm -f '{}'", temp_zip_path))?;
                 // println!("\tExtracted zip to {}\n", app_dir);
 
+                // Run pre-deploy script if configured
+                if let Some(ref pre_script) = app.pre_deploy_script {
+                    let clean_script_path = pre_script.trim_start_matches("./");
+                    let script_full_path = format!("{}/{}", app_dir, clean_script_path);
+                    println!(
+                        "\t[{}] Running pre-deploy script '{}'...",
+                        app.name, clean_script_path
+                    );
+
+                    node_interactor.cmd(&format!("sudo chmod +x '{}'", script_full_path))?;
+                    let out = node_interactor.cmd(&format!(
+                        "sudo -u '{}' '{}'",
+                        app.deploy_user, script_full_path
+                    ))?;
+
+                    if out.exit_code != 0 {
+                        anyhow::bail!(
+                            "\t[{}] pre-deploy script '{}' failed (exit code {}): {}",
+                            app.name,
+                            clean_script_path,
+                            out.exit_code,
+                            out.stderr
+                        );
+                    }
+                }
+
                 // 4. Rolling deploy across vps instances
                 let min_replicas = app
                     .min_replicas

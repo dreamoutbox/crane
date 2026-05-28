@@ -22,9 +22,9 @@ fn test_deploy() {
 
     // 2. Deploy app configuration to VPS nodes
     let config_path = Path::new("demo/crane.toml");
-    crane::commands::deploy::run(config_path, false).expect("deploy failed");
+    crane::commands::deploy::run(config_path, true).expect("deploy failed");
 
-    // ASSERT this machine can curl at myapp.localhost
+    // ASSERT this machine can curl at myapp.example.com
     let curl_myapp = Command::new("curl")
         .args([
             "-w",
@@ -33,20 +33,22 @@ fn test_deploy() {
             "-k",
             "-i",
             "--resolve",
-            "myapp.localhost:80:127.0.0.1",
-            "http://myapp.localhost",
+            "myapp.example.com:80:127.0.0.1",
+            "--resolve",
+            "myapp.example.com:443:127.0.0.1",
+            "http://myapp.example.com",
         ])
         .output()
-        .expect("failed to execute curl myapp.localhost");
+        .expect("failed to execute curl myapp.example.com");
     let stdout_myapp = String::from_utf8_lossy(&curl_myapp.stdout);
-    assert!(curl_myapp.status.success(), "curl myapp.localhost failed");
+    assert!(curl_myapp.status.success(), "curl myapp.example.com failed");
     assert!(
         stdout_myapp.contains("Hello, myapp!"),
         "expected 'Hello, myapp!' in response, got: {}",
         stdout_myapp
     );
 
-    // ASSERT this machine can curl at myapp2.localhost
+    // ASSERT this machine can curl at myapp2.example.com
     let curl_myapp2 = Command::new("curl")
         .args([
             "-w",
@@ -55,20 +57,25 @@ fn test_deploy() {
             "-k",
             "-i",
             "--resolve",
-            "myapp2.localhost:80:127.0.0.1",
-            "http://myapp2.localhost",
+            "myapp2.example.com:80:127.0.0.1",
+            "--resolve",
+            "myapp2.example.com:443:127.0.0.1",
+            "http://myapp2.example.com",
         ])
         .output()
-        .expect("failed to execute curl myapp2.localhost");
+        .expect("failed to execute curl myapp2.example.com");
     let stdout_myapp2 = String::from_utf8_lossy(&curl_myapp2.stdout);
-    assert!(curl_myapp2.status.success(), "curl myapp2.localhost failed");
+    assert!(
+        curl_myapp2.status.success(),
+        "curl myapp2.example.com failed"
+    );
     assert!(
         stdout_myapp2.contains("Hello, myapp2!"),
         "expected 'Hello, myapp2!' in response, got: {}",
         stdout_myapp2
     );
 
-    // ASSERT we can curl to myapp.localhost/pg and get a 200 status
+    // ASSERT we can curl to myapp.example.com/pg and get a 200 status
     let curl_pg = Command::new("curl")
         .args([
             "-w",
@@ -77,17 +84,19 @@ fn test_deploy() {
             "-k",
             "-s",
             "--resolve",
-            "myapp.localhost:80:127.0.0.1",
-            "http://myapp.localhost/pg",
+            "myapp.example.com:80:127.0.0.1",
+            "--resolve",
+            "myapp.example.com:443:127.0.0.1",
+            "http://myapp.example.com/pg",
         ])
         .output()
-        .expect("failed to execute curl myapp.localhost/pg");
+        .expect("failed to execute curl myapp.example.com/pg");
     let stdout_pg = String::from_utf8_lossy(&curl_pg.stdout);
     let stderr_pg = String::from_utf8_lossy(&curl_pg.stderr);
     let status_str = stdout_pg.lines().last().unwrap_or("").trim();
     if status_str != "200" {
         panic!(
-            "\n================== CURL myapp.localhost/pg FAILED ==================\n\
+            "\n================== CURL myapp.example.com/pg FAILED ==================\n\
              HTTP Status: {}\n\
              STDOUT:\n{}\n\
              STDERR:\n{}\n\
@@ -96,7 +105,7 @@ fn test_deploy() {
         );
     }
 
-    // ASSERT we can curl to myapp2.localhost/pg and get a 200 status
+    // ASSERT we can curl to myapp2.example.com/pg and get a 200 status
     let curl_pg = Command::new("curl")
         .args([
             "-w",
@@ -105,17 +114,19 @@ fn test_deploy() {
             "-k",
             "-s",
             "--resolve",
-            "myapp2.localhost:80:127.0.0.1",
-            "http://myapp2.localhost/pg",
+            "myapp2.example.com:80:127.0.0.1",
+            "--resolve",
+            "myapp2.example.com:443:127.0.0.1",
+            "http://myapp2.example.com/pg",
         ])
         .output()
-        .expect("failed to execute curl myapp2.localhost/pg");
+        .expect("failed to execute curl myapp2.example.com/pg");
     let stdout_pg = String::from_utf8_lossy(&curl_pg.stdout);
     let stderr_pg = String::from_utf8_lossy(&curl_pg.stderr);
     let status_str = stdout_pg.lines().last().unwrap_or("").trim();
     if status_str != "200" {
         panic!(
-            "\n================== CURL myapp2.localhost/pg FAILED ==================\n\
+            "\n================== CURL myapp2.example.com/pg FAILED ==================\n\
              HTTP Status: {}\n\
              STDOUT:\n{}\n\
              STDERR:\n{}\n\
@@ -240,5 +251,16 @@ fn test_deploy() {
         haproxy_5001.exit_code, 0,
         "HAProxy on port 5001 is not accepting connections: {}",
         haproxy_5001.stderr
+    );
+
+    // Verify pre-deploy script executed on the node
+    let before_deploy_content = primary_interactor
+        .cmd("cat /tmp/before-deploy.txt")
+        .expect("failed to read /tmp/before-deploy.txt")
+        .stdout;
+    assert_eq!(
+        before_deploy_content.trim(),
+        "1",
+        "Expected /tmp/before-deploy.txt content to be '1'"
     );
 }

@@ -196,6 +196,7 @@ fn main() {
     match matches.subcommand() {
         Some(("deploy", sub_m)) => {
             let no_dns_update = sub_m.get_flag("no-dns-update");
+
             if let Err(e) = crane::commands::deploy::run(config_path, no_dns_update) {
                 eprintln!("Deployment failed: {}", e);
                 std::process::exit(1);
@@ -339,6 +340,7 @@ fn main() {
                         std::process::exit(1);
                     }
                 };
+
                 if let Err(e) =
                     crane::cloudflare_unit::setup::update_dns_blocking(&config, app_name, false)
                 {
