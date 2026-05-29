@@ -80,7 +80,6 @@ impl SSHSession {
         Ok(child)
     }
 
-
     pub fn upload(&self, local_path: &str, remote_path: &str) -> anyhow::Result<()> {
         let mut command = std::process::Command::new("scp");
 
@@ -139,6 +138,14 @@ impl SSHSession {
             return Err(anyhow::anyhow!("SCP download failed: {}", err_msg.trim()));
         }
         Ok(())
+    }
+
+    /// ping is server online?
+    pub fn ping(&self) -> bool {
+        match self.run_cmd("true") {
+            Ok(output) => output.exit_code == 0,
+            Err(_) => false,
+        }
     }
 }
 
