@@ -20,15 +20,15 @@ roles = ["app", "traefik", "postgres", "redis"]
 user = "crane"
 private_key = "keys/id_ed25519"
 
-# [[nodes]]
-# name = "vps3"
-# host = "localhost"
-# public_ip = "10.0.0.13"
-# internal_ip = "10.0.0.13"
-# port = 2223
-# roles = ["app", "traefik", "postgres", "redis"]
-# user = "admin"
-# private_key = "keys/id_ed25519"
+[[nodes]]
+name = "vps3"
+host = "localhost"
+public_ip = "10.0.0.13"
+internal_ip = "10.0.0.13"
+port = 2223
+roles = ["app", "traefik", "postgres", "redis"]
+user = "crane"
+private_key = "keys/id_ed25519"
 
 [[users]]
 name = "deployman"

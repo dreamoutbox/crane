@@ -13,3 +13,10 @@ trigger: always_on
 - we use docker to simulate VPS setup.
 
 - we use cargo nextest to run tests. please read `tests/README.md` about testing.
+
+- you can debugging the command output like this
+
+```rust
+    let restart_etcd_cmd = interactor.cmd("sudo systemctl restart etcd")?;
+    dbg!(&restart_etcd_cmd );
+```

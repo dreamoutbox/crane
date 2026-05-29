@@ -19,11 +19,20 @@ impl DebianInteractor {
         let out = self.ssh.run_cmd(cmd)?;
 
         if out.exit_code != 0 {
+            // if error like:
+            // error executing command sudo systemctl stop 'myapp2@4000' (exit code: 5)
+            // with stderr like:
+            // Failed to stop myapp2@4000.service: Unit myapp2@4000.service not loaded.
+            // then skip
+            if cmd.contains("systemctl stop") && out.stderr.contains("not loaded") {
+                return Ok(String::new());
+            }
+
             println!(
                 "error executing command {} (exit code: {})",
                 cmd, out.exit_code
             );
-            println!("\nSTDERR: \n\n{}\n\n", out.stderr);
+            println!("\nDebianInteractor run_checked STDERR:\n{}\n", out.stderr);
 
             anyhow::bail!(
                 "Command '{}' failed with exit code {}: {}",
@@ -42,8 +51,31 @@ impl ServerInteractor for DebianInteractor {
         self.run_checked("whoami")
     }
 
-    fn cmd(&self, command: &str) -> anyhow::Result<CmdOutput> {
-        self.ssh.run_cmd(command)
+    fn cmd(&self, cmd: &str) -> anyhow::Result<CmdOutput> {
+        let out = self.ssh.run_cmd(cmd)?;
+
+        if out.exit_code != 0 {
+            // if error is error executing command sudo systemctl stop 'myapp2@4000' (exit code: 5)
+            // with stderr like:
+            // Failed to stop myapp2@4000.service: Unit myapp2@4000.service not loaded.
+            // then skip
+            if cmd.contains("systemctl stop")
+                || cmd.contains("test -d")
+                || out.stderr.contains("not loaded")
+            {
+            } else {
+                println!("=========================\n");
+                println!(
+                    "Error DebianInteractor#cmd executing command: {} (exit code: {})",
+                    cmd, out.exit_code
+                );
+                println!("DebianInteractor#cmd STDOUT:\n{}\n", out.stdout);
+                println!("DebianInteractor#cmd STDERR:\n{}\n", out.stderr);
+                println!("=========================\n");
+            }
+        }
+
+        Ok(out)
     }
 
     fn get_os_info(&self) -> anyhow::Result<String> {
@@ -52,7 +84,10 @@ impl ServerInteractor for DebianInteractor {
 
     fn create_file(&self, path: &str, content: &str) -> anyhow::Result<()> {
         let b64 = crate::helper::base64::base64_encode(content);
-        let cmd = format!("echo '{}' | base64 -d | sudo tee '{}' > /dev/null", b64, path);
+        let cmd = format!(
+            "echo '{}' | base64 -d | sudo tee '{}' > /dev/null",
+            b64, path
+        );
         self.run_checked(&cmd)?;
         Ok(())
     }

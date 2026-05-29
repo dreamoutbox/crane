@@ -149,6 +149,7 @@ impl SSHSession {
     }
 }
 
+#[derive(Debug)]
 pub struct CmdOutput {
     pub stdout: String,
     pub stderr: String,

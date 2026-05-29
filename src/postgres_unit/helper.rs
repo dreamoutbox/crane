@@ -189,8 +189,17 @@ pub fn postgres_get_leader(config: &config::Config) -> anyhow::Result<Option<con
 
     for node in pg_nodes {
         if let Ok(interactor) = connect_to_node(&node, config) {
-            let cmd = r#"sudo -u postgres psql -t -A -c "select pg_is_in_recovery();""#;
+            // First check via Patroni REST API
+            let patroni_cmd =
+                "curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8008/primary";
+            if let Ok(output) = interactor.cmd(patroni_cmd) {
+                if output.stdout.trim() == "200" {
+                    return Ok(Some(node));
+                }
+            }
 
+            // Fallback for mock interactor and compatibility
+            let cmd = r#"sudo -u postgres psql -t -A -c "select pg_is_in_recovery();""#;
             if let Ok(output) = interactor.cmd(cmd) {
                 if output.stdout.trim() == "f" {
                     return Ok(Some(node));

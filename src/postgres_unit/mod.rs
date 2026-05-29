@@ -1,3 +1,4 @@
+pub mod etcd;
 pub mod backup;
 pub mod demote;
 pub mod entity;

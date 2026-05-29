@@ -91,7 +91,7 @@ pub fn reload_traefik(interactor: &dyn ServerInteractor) -> anyhow::Result<()> {
         println!("traefik_start_output: {}", traefik_start_output.stdout);
     }
 
-    println!("\tTraefik reloaded successfully\n");
+    println!("\tTraefik reloaded successfully");
 
     Ok(())
 }

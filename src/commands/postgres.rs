@@ -1,9 +1,7 @@
 use std::path::Path;
 
 use crate::config;
-use crate::postgres_unit::demote::run_demote_node;
 use crate::postgres_unit::entity::PostgresNode;
-use crate::postgres_unit::helper::configure_postgres_primary_rules;
 use crate::postgres_unit::helper::connect_to_node;
 use crate::postgres_unit::helper::find_node_config_with_fallback;
 use crate::postgres_unit::helper::get_backups_from_s3;
@@ -14,9 +12,6 @@ use crate::server_interactor::server_interactor_trait::ServerInteractor;
 
 pub fn run_promote_cmd(config_path: &Path, target_node_str: &str) -> anyhow::Result<()> {
     let config = config::load_config(config_path)?;
-    let config_dir = config_path.parent().unwrap_or(Path::new("."));
-    let env_path = config_dir.join(".env");
-    let dot_env = config::load_env_file(&env_path).unwrap_or_default();
 
     let target_conf = find_node_config_with_fallback(target_node_str, &config)
         .ok_or_else(|| anyhow::anyhow!("Node '{}' not found in configuration", target_node_str))?;
@@ -27,20 +22,6 @@ pub fn run_promote_cmd(config_path: &Path, target_node_str: &str) -> anyhow::Res
             target_node_str
         );
     }
-
-    let pg_version = config
-        .db
-        .as_ref()
-        .and_then(|db| db.postgres.as_ref())
-        .and_then(|pg| pg.get("version"))
-        .and_then(|val| val.as_str())
-        .unwrap_or("16")
-        .to_string();
-
-    let replica_pass = dot_env
-        .get("POSTGRES_PASSWORD")
-        .cloned()
-        .unwrap_or_else(|| "repl_password".to_string());
 
     let current_leader = postgres_get_leader(&config)?;
 
@@ -53,103 +34,29 @@ pub fn run_promote_cmd(config_path: &Path, target_node_str: &str) -> anyhow::Res
             return Ok(());
         }
 
-        // Safe promotion sequence:
-        // 1. Demote the target follower node first to follow the current leader (synchronize fully)
+        // Trigger switchover using patronictl
         println!(
-            "\nSynchronizing target follower node {} with current leader {} before promotion...",
-            target_conf.name, leader.name
+            "\nSwitching over PostgreSQL leader from {} to {} using Patroni...",
+            leader.name, target_conf.name
         );
-
-        run_demote_node(&target_conf, leader, &pg_version, &replica_pass, &config)?;
-    }
-
-    // Configure target node's primary rules before promotion
-    println!(
-        "\nConfiguring replication and local trust rules on node {}...",
-        target_conf.name
-    );
-    let target_interactor = connect_to_node(&target_conf, &config)?;
-
-    let target_follower_ips: Vec<String> = config
-        .nodes
-        .iter()
-        .filter(|n| n.roles.contains(&"postgres".to_string()))
-        .filter(|n| n.internal_ip != target_conf.internal_ip)
-        .map(|n| n.internal_ip.clone())
-        .collect();
-    let app_node_ips: Vec<String> = config
-        .nodes
-        .iter()
-        .filter(|n| n.roles.contains(&"app".to_string()))
-        .map(|n| n.internal_ip.clone())
-        .collect();
-
-    configure_postgres_primary_rules(
-        &*target_interactor,
-        &pg_version,
-        "replicator",
-        &target_follower_ips,
-        &app_node_ips,
-    )?;
-
-    // 2. Promote the target node to leader
-    println!(
-        "\nPromoting node {} to PostgreSQL leader...",
-        target_conf.name
-    );
-    let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", pg_version);
-    let promote_cmd = format!(
-        "sudo -u postgres {} -D /var/lib/postgresql/{}/main promote",
-        pg_ctl, pg_version
-    );
-    target_interactor.cmd(&promote_cmd)?;
-
-    // 3. Demote all other nodes to follow the new leader
-    let pg_nodes: Vec<_> = config
-        .nodes
-        .iter()
-        .filter(|n| n.roles.contains(&"postgres".to_string()))
-        .cloned()
-        .collect();
-
-    for node in pg_nodes {
-        if node.internal_ip != target_conf.internal_ip {
-            println!(
-                "\nDemoting node {} to follow new leader {}...",
-                node.name, target_conf.name
-            );
-            run_demote_node(&node, &target_conf, &pg_version, &replica_pass, &config)?;
-        }
-    }
-
-    // 4. Update HAProxy configs on all app nodes
-    let app_nodes: Vec<_> = config
-        .nodes
-        .iter()
-        .filter(|n| n.roles.contains(&"app".to_string()))
-        .cloned()
-        .collect();
-
-    let follower_ips: Vec<String> = config
-        .nodes
-        .iter()
-        .filter(|n| n.roles.contains(&"postgres".to_string()))
-        .filter(|n| n.internal_ip != target_conf.internal_ip)
-        .map(|n| n.internal_ip.clone())
-        .collect();
-
-    for app_node in &app_nodes {
+        let target_interactor = connect_to_node(&target_conf, &config)?;
+        let switch_cmd = format!(
+            "sudo patronictl -c /etc/patroni/config.yml switchover --master {} --candidate {} --scheduled now --force",
+            leader.name, target_conf.name
+        );
+        target_interactor.cmd(&switch_cmd)?;
+    } else {
+        // Trigger failover using patronictl since there is no leader
         println!(
-            "\nUpdating HAProxy configuration on app node {}...",
-            app_node.name
+            "\nPromoting node {} to PostgreSQL leader using Patroni...",
+            target_conf.name
         );
-        let app_interactor = connect_to_node(app_node, &config)?;
-
-        crate::postgres_unit::haproxy::setup_haproxy(
-            &*app_interactor,
-            &target_conf.internal_ip,
-            &follower_ips,
-        )?;
+        let target_interactor = connect_to_node(&target_conf, &config)?;
+        let failover_cmd = format!(
+            "sudo patronictl -c /etc/patroni/config.yml failover --candidate {} --force",
+            target_conf.name
+        );
+        target_interactor.cmd(&failover_cmd)?;
     }
 
     println!(
@@ -161,9 +68,6 @@ pub fn run_promote_cmd(config_path: &Path, target_node_str: &str) -> anyhow::Res
 
 pub fn run_demote_cmd(config_path: &Path, target_node_str: &str) -> anyhow::Result<()> {
     let config = config::load_config(config_path)?;
-    let config_dir = config_path.parent().unwrap_or(Path::new("."));
-    let env_path = config_dir.join(".env");
-    let dot_env = config::load_env_file(&env_path).unwrap_or_default();
 
     let target_conf = find_node_config_with_fallback(target_node_str, &config)
         .ok_or_else(|| anyhow::anyhow!("Node '{}' not found in configuration", target_node_str))?;
@@ -174,20 +78,6 @@ pub fn run_demote_cmd(config_path: &Path, target_node_str: &str) -> anyhow::Resu
             target_node_str
         );
     }
-
-    let pg_version = config
-        .db
-        .as_ref()
-        .and_then(|db| db.postgres.as_ref())
-        .and_then(|pg| pg.get("version"))
-        .and_then(|val| val.as_str())
-        .unwrap_or("16")
-        .to_string();
-
-    let replica_pass = dot_env
-        .get("POSTGRES_PASSWORD")
-        .cloned()
-        .unwrap_or_else(|| "repl_password".to_string());
 
     let current_leader = postgres_get_leader(&config)?;
 
@@ -202,12 +92,17 @@ pub fn run_demote_cmd(config_path: &Path, target_node_str: &str) -> anyhow::Resu
         );
     }
 
+    // Under Patroni, standbys follow the leader automatically. We can reinit the node if we want to force it to follow the leader cleanly.
     println!(
-        "\nDemoting node {} to follow leader {}...",
+        "\nReinitializing Patroni standby node {} to ensure it follows leader {}...",
         target_conf.name, leader.name
     );
-
-    run_demote_node(&target_conf, &leader, &pg_version, &replica_pass, &config)?;
+    let target_interactor = connect_to_node(&target_conf, &config)?;
+    let reinit_cmd = format!(
+        "sudo patronictl -c /etc/patroni/config.yml reinit postgres-cluster {} --force",
+        target_conf.name
+    );
+    target_interactor.cmd(&reinit_cmd)?;
 
     println!("\nDEMOTION COMPLETE FOR NODE '{}'", target_conf.name);
     Ok(())

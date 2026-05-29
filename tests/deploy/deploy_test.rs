@@ -76,6 +76,10 @@ fn test_deploy() {
     );
 
     // ASSERT we can curl to myapp.example.com/pg and get a 200 status
+    // curl -w "\\n%{http_code}\\n" -L -k -s \
+    // --resolve myapp2.example.com:80:127.0.0.1 --resolve myapp2.example.com:443:127.0.0.1 \
+    // --resolve myapp.example.com:80:127.0.0.1 --resolve myapp.example.com:443:127.0.0.1  \
+    // http://myapp.example.com/pg
     let curl_pg = Command::new("curl")
         .args([
             "-w",
