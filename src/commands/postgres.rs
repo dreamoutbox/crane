@@ -41,28 +41,55 @@ pub fn run_promote_cmd(config_path: &Path, target_node_str: &str) -> anyhow::Res
         );
         let target_interactor = connect_to_node(&target_conf, &config)?;
         let switch_cmd = format!(
-            "sudo patronictl -c /etc/patroni/config.yml switchover --master {} --candidate {} --scheduled now --force",
+            "sudo patronictl -c /etc/patroni/config.yml switchover --leader {} --candidate {} --scheduled now --force",
             leader.name, target_conf.name
         );
-        target_interactor.cmd(&switch_cmd)?;
+        let switch_output = target_interactor.cmd(&switch_cmd)?;
+
+        if switch_output.exit_code != 0 {
+            println!(
+                "\nFailed to switchover PostgreSQL leader from {} to {}",
+                leader.name, target_conf.name
+            );
+
+            println!("\nSTDOUT: {}", switch_output.stdout);
+            println!("\nSTDERR: {}\n", switch_output.stderr);
+
+            return Err(anyhow::anyhow!(
+                "Failed to switchover PostgreSQL leader from {} to {}",
+                leader.name,
+                target_conf.name
+            ));
+        }
     } else {
         // Trigger failover using patronictl since there is no leader
         println!(
             "\nPromoting node {} to PostgreSQL leader using Patroni...",
             target_conf.name
         );
+
         let target_interactor = connect_to_node(&target_conf, &config)?;
         let failover_cmd = format!(
             "sudo patronictl -c /etc/patroni/config.yml failover --candidate {} --force",
             target_conf.name
         );
-        target_interactor.cmd(&failover_cmd)?;
+        let failover_output = target_interactor.cmd(&failover_cmd)?;
+
+        if failover_output.exit_code != 0 {
+            println!("\nFailed to failover PostgreSQL leader");
+
+            println!("\nSTDOUT: {}", failover_output.stdout);
+            println!("\nSTDERR\n: {}", failover_output.stderr);
+
+            return Err(anyhow::anyhow!("Failed to failover PostgreSQL leader"));
+        }
     }
 
     println!(
         "\nPROMOTION TO LEADER COMPLETE FOR NODE '{}'",
         target_conf.name
     );
+
     Ok(())
 }
 
@@ -271,15 +298,7 @@ pub fn run_postgres_logs_cmd(
 
     let interactor = connect_to_node(&target_conf, &config)?;
 
-    run_postgres_logs_cmd_internal(
-        &*interactor,
-        target_node_str,
-        since,
-        until,
-        user,
-        db,
-        sql,
-    )
+    run_postgres_logs_cmd_internal(&*interactor, target_node_str, since, until, user, db, sql)
 }
 
 pub fn run_postgres_logs_cmd_internal(
@@ -291,7 +310,6 @@ pub fn run_postgres_logs_cmd_internal(
     db: Option<&str>,
     sql: Option<&str>,
 ) -> anyhow::Result<()> {
-
     // Check if 'postgres' user exists on the remote node
     let user_check = interactor.cmd("id postgres")?;
     if user_check.exit_code != 0 {
