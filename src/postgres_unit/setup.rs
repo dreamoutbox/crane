@@ -105,8 +105,19 @@ pub fn postgres_setup_wrapper(
     }
 
     // Give etcd time to elect a leader and form quorum
-    println!("\tWaiting for etcd quorum...");
-    std::thread::sleep(std::time::Duration::from_secs(3));
+    if !pg_nodes.is_empty() {
+        let first_node = &pg_nodes[0];
+        let private_key = find_private_key_for_user(&first_node.user, config)?;
+        let ssh = SSHSession::new(
+            first_node.host.clone(),
+            first_node.user.clone(),
+            private_key,
+            Some(first_node.port),
+        );
+        let interactor = get_server_interactor(ssh)?;
+
+        etcd::wait_for_etcd_quorum(&*interactor, 10)?;
+    }
 
     // Phase 3: Start Patroni on all nodes simultaneously
     println!("\tStarting Patroni on all nodes...");

@@ -78,3 +78,24 @@ pub fn start_etcd(interactor: &dyn ServerInteractor) -> anyhow::Result<()> {
     dbg!(start_etcd_output);
     Ok(())
 }
+
+/// Wait for etcd quorum to form by polling the health of the endpoint.
+pub fn wait_for_etcd_quorum(
+    interactor: &dyn ServerInteractor,
+    timeout_secs: u64,
+) -> anyhow::Result<()> {
+    println!("\tWaiting for etcd quorum...");
+    let start = std::time::Instant::now();
+    let duration = std::time::Duration::from_secs(timeout_secs);
+
+    while start.elapsed() < duration {
+        if let Ok(output) = interactor.cmd("env ETCDCTL_API=3 etcdctl endpoint health") {
+            if output.exit_code == 0 {
+                return Ok(());
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+
+    anyhow::bail!("Timeout waiting for etcd quorum to form")
+}
