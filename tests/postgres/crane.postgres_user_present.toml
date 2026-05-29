@@ -26,7 +26,7 @@ password = "u1"
 databases = ["mydb"]
 
 [db.postgres.mydb]
-db_name = "mydb"
+name = "mydb"
 
 [backup.s3]
 bucket = "crane1"

@@ -142,8 +142,8 @@ pub fn run(
 
                     let db_name = db_configs
                         .iter()
-                        .find(|d| d.name == db_dep.databases || d.db_name == db_dep.databases)
-                        .map(|d| d.db_name.as_str())
+                        .find(|d| d.name == db_dep.databases || d.name == db_dep.databases)
+                        .map(|d| d.name.as_str())
                         .unwrap_or(&db_dep.databases);
 
                     let db_env_key = db_name

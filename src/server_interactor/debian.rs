@@ -66,7 +66,7 @@ impl ServerInteractor for DebianInteractor {
             } else {
                 println!("=========================\n");
                 println!(
-                    "Error DebianInteractor#cmd executing command: {} (exit code: {})",
+                    "Error DebianInteractor#cmd executing command:\n{}\n(exit code: {})\n",
                     cmd, out.exit_code
                 );
                 println!("DebianInteractor#cmd STDOUT:\n{}\n", out.stdout);

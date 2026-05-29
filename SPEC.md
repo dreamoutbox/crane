@@ -143,7 +143,7 @@ tls_email = "dev@example.com"
 
 [db.postgres]
 version = "16"
-db_name = "myapp_db"
+name = "myapp_db"
 user = "deployman"
 
 [db.redis]

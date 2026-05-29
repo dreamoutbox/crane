@@ -31,14 +31,13 @@ fn test_get_postgres_configs() {
             databases = ["myapp"]
 
             [db.postgres.myapp]
-            db_name = "myapp"
+            name = "myapp"
         "#;
     let config: crane::config::Config = toml::from_str(toml_str).unwrap();
     let (dbs, users) = get_postgres_configs(&config);
 
     assert_eq!(dbs.len(), 1);
     assert_eq!(dbs[0].name, "myapp");
-    assert_eq!(dbs[0].db_name, "myapp");
 
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].user, "app1");

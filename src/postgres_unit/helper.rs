@@ -424,10 +424,9 @@ pub fn get_postgres_configs(
     if let Some(ref db) = config.db {
         if let Some(ref pg) = db.postgres {
             // 1. Parse databases
-            for (key, val) in &pg.databases {
+            for (_key, val) in &pg.databases {
                 db_configs.push(PostgresDbConfig {
-                    name: key.clone(),
-                    db_name: val.db_name.clone(),
+                    name: val.name.clone(),
                 });
             }
 

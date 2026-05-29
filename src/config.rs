@@ -95,7 +95,6 @@ pub struct RedisConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub struct PostgresDbConfig {
     pub name: String,
-    pub db_name: String,
 }
 
 // Postgres user config mapping
