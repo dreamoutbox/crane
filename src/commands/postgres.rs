@@ -1,15 +1,12 @@
-use std::path::Path;
-
-use crate::config;
 use crate::postgres_unit::helper::connect_to_node;
 use crate::postgres_unit::helper::find_node_config_with_fallback;
-use crate::postgres_unit::helper::get_backups_from_s3;
 use crate::postgres_unit::helper::postgres_get_leader;
-use crate::s3::get_s3_config;
-use crate::s3::s3_client::RealS3Client;
 use crate::server_interactor::server_interactor_trait::ServerInteractor;
 
-pub fn run_promote_cmd(config: crate::config::Config, target_node_str: &str) -> anyhow::Result<()> {
+pub fn run_promote_cmd(
+    config: &crate::config::Config,
+    target_node_str: &str,
+) -> anyhow::Result<()> {
     let target_conf = find_node_config_with_fallback(target_node_str, &config)
         .ok_or_else(|| anyhow::anyhow!("Node '{}' not found in configuration", target_node_str))?;
 
@@ -90,7 +87,7 @@ pub fn run_promote_cmd(config: crate::config::Config, target_node_str: &str) -> 
     Ok(())
 }
 
-pub fn run_demote_cmd(config: crate::config::Config, target_node_str: &str) -> anyhow::Result<()> {
+pub fn run_demote_cmd(config: &crate::config::Config, target_node_str: &str) -> anyhow::Result<()> {
     let target_conf = find_node_config_with_fallback(target_node_str, &config)
         .ok_or_else(|| anyhow::anyhow!("Node '{}' not found in configuration", target_node_str))?;
 
@@ -130,42 +127,8 @@ pub fn run_demote_cmd(config: crate::config::Config, target_node_str: &str) -> a
     Ok(())
 }
 
-pub fn run_list_backups_cmd(
-    config: crate::config::Config,
-    config_path: &Path,
-) -> anyhow::Result<()> {
-    let config_dir = config_path.parent().unwrap_or(Path::new("."));
-    let env_path = config_dir.join(".env");
-    let dot_env = config::load_env_file(&env_path).unwrap_or_default();
-
-    let s3_config = get_s3_config(&config, &dot_env)?;
-    let s3_client = RealS3Client::new(&s3_config)?;
-
-    let backups = get_backups_from_s3(&s3_client)?;
-
-    if backups.is_empty() {
-        println!("No backups found in cluster.");
-        return Ok(());
-    }
-
-    for (idx, backup) in backups.iter().enumerate() {
-        if idx > 0 {
-            println!();
-        }
-
-        println!("ID: {}", backup.id);
-        println!("Date: {}", backup.date);
-        println!("Time: {}", backup.time);
-        println!("Type: {}", backup.backup_type);
-        println!("LOCAL: {}", backup.local_path);
-        println!("S3: {}", backup.s3_path);
-    }
-
-    Ok(())
-}
-
 pub fn run_postgres_logs_cmd(
-    config: crate::config::Config,
+    config: &crate::config::Config,
     target_node_str: &str,
     since: Option<&str>,
     until: Option<&str>,

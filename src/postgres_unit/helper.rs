@@ -65,10 +65,8 @@ pub fn get_pg_version(config: &config::Config) -> String {
         .db
         .as_ref()
         .and_then(|db| db.postgres.as_ref())
-        .and_then(|pg| pg.get("version"))
-        .and_then(|val| val.as_str())
-        .unwrap_or("16")
-        .to_string()
+        .map(|pg| pg.version.clone())
+        .unwrap_or_else(|| "16".to_string())
 }
 
 pub fn get_replica_pass(dot_env: &std::collections::HashMap<String, String>) -> String {
@@ -150,33 +148,11 @@ pub fn ensure_postgres_running(interactor: &dyn ServerInteractor, version: &str)
 pub fn get_postgres_backup_schedule(
     config: &crate::config::Config,
 ) -> Option<PostgresBackupSchedule> {
-    if let Some(ref db) = config.db {
-        if let Some(ref pg_map) = db.postgres {
-            if let Some(backup_val) = pg_map.get("backup") {
-                if let Some(backup_table) = backup_val.as_table() {
-                    let full = backup_table
-                        .get("full_backup_every")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-
-                    let incremental = backup_table
-                        .get("incremental_backup_every")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-
-                    if !full.is_empty() && !incremental.is_empty() {
-                        return Some(PostgresBackupSchedule {
-                            full_backup_every: full,
-                            incremental_backup_every: incremental,
-                        });
-                    }
-                }
-            }
-        }
-    }
-    None
+    config
+        .db
+        .as_ref()
+        .and_then(|db| db.postgres.as_ref())
+        .and_then(|pg| pg.backup.clone())
 }
 
 pub fn postgres_get_leader(config: &config::Config) -> anyhow::Result<Option<config::NodeConfig>> {
@@ -438,63 +414,49 @@ pub fn configure_postgres_primary_rules(
     Ok(())
 }
 
-pub fn configure_postgres_users(
-    user_configs: &mut std::collections::HashMap<String, PostgresUserConfig>,
-    pg_map: &std::collections::HashMap<String, toml::Value>,
-) {
-    if let Some(users_val) = pg_map.get("users") {
-        // Parse users array
-        if let Some(users_arr) = users_val.as_array() {
-            for u_val in users_arr {
-                if let Some(u_table) = u_val.as_table() {
-                    let user = u_table
-                        .get("user")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
+// Parses database and user configs from TOML structure
+pub fn get_postgres_configs(
+    config: &crate::config::Config,
+) -> (Vec<PostgresDbConfig>, Vec<PostgresUserConfig>) {
+    let mut db_configs = Vec::new();
+    let mut user_configs = std::collections::HashMap::new();
 
-                    if !user.is_empty() {
-                        let password = u_table
-                            .get("password")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string());
+    if let Some(ref db) = config.db {
+        if let Some(ref pg) = db.postgres {
+            // 1. Parse databases
+            for (key, val) in &pg.databases {
+                db_configs.push(PostgresDbConfig {
+                    name: key.clone(),
+                    db_name: val.db_name.clone(),
+                });
+            }
 
-                        let state = u_table
-                            .get("state")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string());
-
-                        let mut databases = Vec::new();
-
-                        if let Some(db_list_val) = u_table.get("databases") {
-                            if let Some(db_arr) = db_list_val.as_array() {
-                                for db_item in db_arr {
-                                    if let Some(db_name_str) = db_item.as_str() {
-                                        databases.push(db_name_str.to_string());
-                                    }
-                                }
-                            }
-                        }
-
-                        let user_entry = user_configs.entry(user.clone()).or_insert_with(|| {
-                            PostgresUserConfig {
-                                user: user.clone(),
-                                password,
+            // 2. config postgres users
+            if let Some(ref users_list) = pg.users {
+                for u in users_list {
+                    let user_entry =
+                        user_configs
+                            .entry(u.user.clone())
+                            .or_insert_with(|| PostgresUserConfig {
+                                user: u.user.clone(),
+                                password: u.password.clone(),
                                 databases: Vec::new(),
-                                state,
-                            }
-                        });
+                                state: u.state.clone(),
+                            });
 
-                        for db_name in databases {
-                            if !user_entry.databases.contains(&db_name) {
-                                user_entry.databases.push(db_name);
-                            }
+                    for db_name in &u.databases {
+                        if !user_entry.databases.contains(db_name) {
+                            user_entry.databases.push(db_name.clone());
                         }
                     }
                 }
             }
         }
     }
+
+    let users = user_configs.into_values().collect();
+
+    (db_configs, users)
 }
 
 pub fn configure_postgres_backup(
@@ -502,13 +464,12 @@ pub fn configure_postgres_backup(
     version: &str,
     replica_pass: &str,
     config: &config::Config,
-    dot_env: &std::collections::HashMap<String, String>,
 ) -> anyhow::Result<()> {
     if let Some(schedule) = get_postgres_backup_schedule(config) {
         println!("\n\tSetting up automated cron backups...");
 
         // Resolve S3Config
-        let s3_config = crate::s3::get_s3_config(config, dot_env)?;
+        let s3_config = crate::s3::get_s3_config(config)?;
 
         // Ensure directories exist
         interactor.cmd("sudo mkdir -p /etc/crane /opt/crane /var/lib/postgresql/backups")?;
@@ -566,46 +527,4 @@ pub fn configure_postgres_backup(
     }
 
     Ok(())
-}
-
-// Parses database and user configs from TOML structure
-pub fn get_postgres_configs(
-    config: &crate::config::Config,
-) -> (Vec<PostgresDbConfig>, Vec<PostgresUserConfig>) {
-    let mut db_configs = Vec::new();
-    let mut user_configs = std::collections::HashMap::new();
-
-    if let Some(ref db) = config.db {
-        if let Some(ref pg_map) = db.postgres {
-            // 1. Parse databases
-            for (key, val) in pg_map {
-                if key == "enabled" || key == "version" || key == "users" || key == "backup" {
-                    continue;
-                }
-
-                if let Some(table) = val.as_table() {
-                    let db_name = table
-                        .get("db_name")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-
-                    if !db_name.is_empty() {
-                        db_configs.push(PostgresDbConfig {
-                            name: key.clone(),
-                            db_name,
-                        });
-                    }
-                }
-            }
-
-            // 2. config postgres users
-            // println!("\tConfigure postgres users");
-            configure_postgres_users(&mut user_configs, pg_map);
-        }
-    }
-
-    let users = user_configs.into_values().collect();
-
-    (db_configs, users)
 }

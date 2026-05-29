@@ -9,7 +9,11 @@ use crate::ssh::SSHSession;
 use std::path::Path;
 
 /// deploy app commands
-pub fn run(config: crate::config::Config, config_path: &Path, no_dns_update: bool) -> anyhow::Result<()> {
+pub fn run(
+    config: &crate::config::Config,
+    config_path: &Path,
+    no_dns_update: bool,
+) -> anyhow::Result<()> {
     println!("Loading configuration from {:?}\n", config_path);
 
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
@@ -71,8 +75,7 @@ pub fn run(config: crate::config::Config, config_path: &Path, no_dns_update: boo
         .db
         .as_ref()
         .and_then(|db| db.postgres.as_ref())
-        .and_then(|pg| pg.get("enabled"))
-        .and_then(|val| val.as_bool())
+        .map(|pg| pg.enabled)
         .unwrap_or(false);
 
     if pg_enabled {

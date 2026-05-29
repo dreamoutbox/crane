@@ -4,7 +4,7 @@ use crate::postgres_unit::{
 };
 
 pub fn get_postgres_status_wrapper(
-    config: crate::config::Config,
+    config: &crate::config::Config,
 ) -> anyhow::Result<PostgresStatusOutput> {
     let pg_nodes: Vec<_> = config
         .nodes
@@ -24,8 +24,7 @@ pub fn get_postgres_status_wrapper(
         .db
         .as_ref()
         .and_then(|db| db.postgres.as_ref())
-        .and_then(|pg| pg.get("version"))
-        .and_then(|val| val.as_str())
+        .map(|pg| pg.version.as_str())
         .unwrap_or("16")
         .to_string();
 
@@ -130,7 +129,7 @@ pub fn get_postgres_status_wrapper(
     Ok(status_output)
 }
 
-pub fn run_postgres_status_command(config: crate::config::Config) -> anyhow::Result<()> {
+pub fn run_postgres_status_command(config: &crate::config::Config) -> anyhow::Result<()> {
     let status = get_postgres_status_wrapper(config)?;
 
     // Print expected output format

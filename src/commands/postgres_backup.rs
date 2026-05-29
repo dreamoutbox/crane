@@ -13,7 +13,7 @@ use crate::{
 };
 
 pub fn backup_from_config_wrapper(
-    config: crate::config::Config,
+    config: &crate::config::Config,
     config_path: &Path,
     backup_type: &str,
 ) -> anyhow::Result<BackupMetadata> {
@@ -21,7 +21,7 @@ pub fn backup_from_config_wrapper(
     let env_path = config_dir.join(".env");
     let dot_env = config::load_env_file(&env_path).unwrap_or_default();
 
-    let s3_config = get_s3_config(&config, &dot_env)?;
+    let s3_config = get_s3_config(&config)?;
     let primary_node = postgres_get_leader(&config)?
         .ok_or_else(|| anyhow::anyhow!("No active PostgreSQL leader found in the cluster."))?;
 
@@ -51,7 +51,7 @@ pub fn backup_from_config_wrapper(
 }
 
 pub fn run_backup_cmd(
-    config: crate::config::Config,
+    config: &crate::config::Config,
     config_path: &Path,
     backup_type: &str,
 ) -> anyhow::Result<()> {

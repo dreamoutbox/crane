@@ -8,7 +8,7 @@ fn test_user_state() {
         std::path::Path::new("tests/postgres/crane.postgres_user_present.toml");
     let user_present_config = crane::config::read_config_toml_file(user_present_config_path)
         .expect("Failed to load config");
-    crane::commands::deploy::run(user_present_config, user_present_config_path, true)
+    crane::commands::deploy::run(&user_present_config, user_present_config_path, true)
         .expect("deploy failed");
 
     // Allow host machine connection to Docker container
@@ -27,7 +27,7 @@ fn test_user_state() {
         std::path::Path::new("tests/postgres/crane.postgres_user_absent.toml");
     let user_absent_config = crane::config::read_config_toml_file(user_absent_config_path)
         .expect("Failed to load config");
-    crane::commands::deploy::run(user_absent_config, user_absent_config_path, true)
+    crane::commands::deploy::run(&user_absent_config, user_absent_config_path, true)
         .expect("deploy failed");
 
     // Allow host machine connection again since configuration was redeployed

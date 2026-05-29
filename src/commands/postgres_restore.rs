@@ -1,7 +1,4 @@
-use std::path::Path;
-
 use crate::{
-    config,
     postgres_unit::{
         entity::BackupRegistry,
         helper::{connect_to_node, get_backups_from_s3, get_pg_version, postgres_get_leader},
@@ -10,18 +7,12 @@ use crate::{
 };
 
 pub fn run_restore_cmd(
-    config: crate::config::Config,
-    config_path: &Path,
+    config: &crate::config::Config,
     target_backup_id: &str,  // <id>: targetb backup ID
     base_id: Option<&str>,   // --base: stop chain walk here (inclusive)
     pitr_time: Option<&str>, // --pitr "YYYY-MM-DD HH:MM:SS" UTC
 ) -> anyhow::Result<()> {
-
-    let config_dir = config_path.parent().unwrap_or(Path::new("."));
-    let env_path = config_dir.join(".env");
-    let dot_env = config::load_env_file(&env_path).unwrap_or_default();
-
-    let s3_config = get_s3_config(&config, &dot_env)?;
+    let s3_config = get_s3_config(&config)?;
     let primary_node = match postgres_get_leader(&config)? {
         Some(node) => node,
         None => config

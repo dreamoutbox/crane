@@ -121,6 +121,9 @@ version = "17"
 full_backup_every = "1d"
 incremental_backup_every = "1h"
 
+[db.postgres.mydb]
+db_name = "mydb"
+
 [[db.postgres.users]]
 # state = "present" / "absent"
 state = "present"
@@ -133,9 +136,6 @@ state = "present"
 user = "u2"
 password = "u2"
 databases = ["mydb"]
-
-[db.postgres.mydb]
-db_name = "mydb"
 
 
 #TODO: implement redis cluster deploy later

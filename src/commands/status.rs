@@ -42,7 +42,7 @@ pub struct NodeStatusResult {
 }
 
 pub fn run(
-    config: crate::config::Config,
+    config: &crate::config::Config,
     config_path: &Path,
     app_name: &str,
 ) -> anyhow::Result<()> {

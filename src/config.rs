@@ -70,19 +70,36 @@ pub struct DomainConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct DbConfig {
-    pub postgres: Option<HashMap<String, toml::Value>>,
-    pub redis: Option<HashMap<String, toml::Value>>,
+    pub postgres: Option<PostgresConfig>,
+    pub redis: Option<RedisConfig>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct PostgresConfig {
+    pub enabled: bool,
+    pub version: String,
+    pub backup: Option<PostgresBackupSchedule>,
+    pub users: Option<Vec<PostgresUserConfig>>,
+    #[serde(flatten)]
+    pub databases: HashMap<String, PostgresDbConfig>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct RedisConfig {
+    pub enabled: bool,
+    pub version: String,
+    pub bind: Option<String>,
 }
 
 // Postgres database config mapping
-#[derive(Debug, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct PostgresDbConfig {
     pub name: String,
     pub db_name: String,
 }
 
 // Postgres user config mapping
-#[derive(Debug, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct PostgresUserConfig {
     pub user: String,
     pub password: Option<String>,
@@ -92,10 +109,19 @@ pub struct PostgresUserConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct BackupConfig {
-    pub s3: Option<HashMap<String, toml::Value>>,
+    pub s3: Option<S3BackupConfig>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Deserialize, Clone)]
+pub struct S3BackupConfig {
+    pub bucket: String,
+    pub region: Option<String>,
+    pub endpoint: Option<String>,
+    pub access_key_id: String,
+    pub secret_access_key: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct PostgresBackupSchedule {
     pub full_backup_every: String,
     pub incremental_backup_every: String,

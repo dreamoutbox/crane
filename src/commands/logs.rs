@@ -4,7 +4,7 @@ use crate::ssh::SSHSession;
 use std::io::{BufRead, BufReader};
 
 pub fn run(
-    config: crate::config::Config,
+    config: &crate::config::Config,
     app_target: &str,
     lines: u32,
     since: Option<&str>,

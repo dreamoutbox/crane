@@ -20,8 +20,7 @@ pub fn postgres_setup_wrapper(
         .db
         .as_ref()
         .and_then(|db| db.postgres.as_ref())
-        .and_then(|pg| pg.get("version"))
-        .and_then(|val| val.as_str())
+        .map(|pg| pg.version.as_str())
         .unwrap_or("16")
         .to_string();
     let replica_pass = dot_env
@@ -289,7 +288,6 @@ postgresql:
         &db_configs,
         &user_configs,
         config,
-        dot_env,
     )?;
 
     // 4. Setup HAProxy on all app nodes
@@ -305,7 +303,6 @@ pub fn setup_postgres_primary(
     db_configs: &[PostgresDbConfig],
     user_configs: &[PostgresUserConfig],
     config: &crate::config::Config,
-    dot_env: &std::collections::HashMap<String, String>,
 ) -> anyhow::Result<()> {
     println!("\tProvisioning PostgreSQL databases and users on Patroni leader...");
 
@@ -411,7 +408,7 @@ pub fn setup_postgres_primary(
         }
     }
 
-    configure_postgres_backup(interactor, version, replica_pass, config, dot_env)?;
+    configure_postgres_backup(interactor, version, replica_pass, config)?;
 
     Ok(())
 }

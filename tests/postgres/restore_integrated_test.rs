@@ -13,7 +13,7 @@ fn test_restore_integrated_workflow() {
         crane::config::read_config_toml_file(config_path).expect("Failed to load crane.toml");
 
     //Deploy
-    crane::commands::deploy::run(config.clone(), config_path, true).expect("deploy failed");
+    crane::commands::deploy::run(&config, config_path, true).expect("deploy failed");
 
     // Retrieve leader node and connect
     let primary_node = postgres_get_leader(&config)
@@ -45,8 +45,8 @@ fn test_restore_integrated_workflow() {
     // FULL BACKUP #1
     // ============================================================
     println!("Step 4: create full backup");
-    let full_backup = backup_from_config_wrapper(config.clone(), config_path, "full")
-        .expect("Full backup failed");
+    let full_backup =
+        backup_from_config_wrapper(&config, config_path, "full").expect("Full backup failed");
     assert_eq!(full_backup.backup_type, "FULL");
 
     // ============================================================
@@ -65,8 +65,7 @@ fn test_restore_integrated_workflow() {
     // RESTORE FROM FULL BACKUP
     // ============================================================
     println!("Step 7: restore from full backup");
-    run_restore_cmd(config.clone(), config_path, &full_backup.id, None, None)
-        .expect("Restore from full backup failed");
+    run_restore_cmd(&config, &full_backup.id, None, None).expect("Restore from full backup failed");
 
     // ============================================================
     //  ASSERT DATA FROM FULL BACKUP
@@ -103,7 +102,7 @@ fn test_restore_integrated_workflow() {
     // ============================================================
     println!("Step 10: create incremental backup #1");
     std::thread::sleep(std::time::Duration::from_secs(2));
-    let incr_backup_1 = backup_from_config_wrapper(config.clone(), config_path, "incr")
+    let incr_backup_1 = backup_from_config_wrapper(&config, config_path, "incr")
         .expect("Incremental backup #1 failed");
     assert_eq!(incr_backup_1.backup_type, "INCR");
 
@@ -147,7 +146,7 @@ fn test_restore_integrated_workflow() {
     // ============================================================
     println!("Step 12: create incremental backup #2");
     std::thread::sleep(std::time::Duration::from_secs(2));
-    let incr_backup_2 = backup_from_config_wrapper(config.clone(), config_path, "incr")
+    let incr_backup_2 = backup_from_config_wrapper(&config, config_path, "incr")
         .expect("Incremental backup #2 failed");
     assert_eq!(incr_backup_2.backup_type, "INCR");
 
@@ -168,14 +167,8 @@ fn test_restore_integrated_workflow() {
         "Step 15: restore from incremental backup #1 with --pitr {}",
         pitr_time_insert_3
     );
-    run_restore_cmd(
-        config.clone(),
-        config_path,
-        &incr_backup_1.id,
-        None,
-        Some(&pitr_time_insert_3),
-    )
-    .expect("PITR restore to SQL `INSERT 3` failed");
+    run_restore_cmd(&config, &incr_backup_1.id, None, Some(&pitr_time_insert_3))
+        .expect("PITR restore to SQL `INSERT 3` failed");
 
     // ============================================================
     // ASSERT DATA FROM INCREMENTAL BACKUP TEST #1
@@ -211,8 +204,7 @@ fn test_restore_integrated_workflow() {
         pitr_time_before_drop
     );
     run_restore_cmd(
-        config.clone(),
-        config_path,
+        &config,
         &incr_backup_2.id,
         None,
         Some(&pitr_time_before_drop),
