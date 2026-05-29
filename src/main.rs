@@ -1,6 +1,7 @@
 use clap::{Arg, Command};
+use crane::config::read_config_toml_file;
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let matches = Command::new("crane")
         .version("0.1.0")
         .about("crane — CLI Deployment Tool")
@@ -192,12 +193,14 @@ fn main() {
 
     let config_file = matches.get_one::<String>("config").unwrap();
     let config_path = std::path::Path::new(config_file);
+    let config = read_config_toml_file(config_path)?;
 
     match matches.subcommand() {
         Some(("deploy", sub_m)) => {
             let no_dns_update = sub_m.get_flag("no-dns-update");
 
-            if let Err(e) = crane::commands::deploy::run(config_path, no_dns_update) {
+            if let Err(e) = crane::commands::deploy::run(config.clone(), config_path, no_dns_update)
+            {
                 eprintln!("Deployment failed: {}", e);
                 std::process::exit(1);
             }
@@ -208,7 +211,7 @@ fn main() {
                 Some(("promote", sub_sub_m)) => {
                     let target_node = sub_sub_m.get_one::<String>("node").unwrap();
                     if let Err(e) =
-                        crane::commands::postgres::run_promote_cmd(config_path, target_node)
+                        crane::commands::postgres::run_promote_cmd(config.clone(), target_node)
                     {
                         eprintln!("Promotion failed: {}", e);
                         std::process::exit(1);
@@ -218,7 +221,7 @@ fn main() {
                 Some(("demote", sub_sub_m)) => {
                     let target_node = sub_sub_m.get_one::<String>("node").unwrap();
                     if let Err(e) =
-                        crane::commands::postgres::run_demote_cmd(config_path, target_node)
+                        crane::commands::postgres::run_demote_cmd(config.clone(), target_node)
                     {
                         eprintln!("Demotion failed: {}", e);
                         std::process::exit(1);
@@ -226,7 +229,9 @@ fn main() {
                 }
 
                 Some(("status", _)) => {
-                    if let Err(e) = crane::commands::postgres::run_status_cmd(config_path) {
+                    if let Err(e) = crane::commands::postgres_status::run_postgres_status_command(
+                        config.clone(),
+                    ) {
                         eprintln!("Status check failed: {}", e);
                         std::process::exit(1);
                     }
@@ -241,16 +246,20 @@ fn main() {
                         std::process::exit(1);
                     }
 
-                    if let Err(e) =
-                        crane::commands::postgres_backup::run_backup_cmd(config_path, backup_type)
-                    {
+                    if let Err(e) = crane::commands::postgres_backup::run_backup_cmd(
+                        config.clone(),
+                        config_path,
+                        backup_type,
+                    ) {
                         eprintln!("Backup failed: {}", e);
                         std::process::exit(1);
                     }
                 }
 
                 Some(("list", _)) => {
-                    if let Err(e) = crane::commands::postgres::run_list_backups_cmd(config_path) {
+                    if let Err(e) =
+                        crane::commands::postgres::run_list_backups_cmd(config.clone(), config_path)
+                    {
                         eprintln!("Listing backups failed: {}", e);
                         std::process::exit(1);
                     }
@@ -261,6 +270,7 @@ fn main() {
                     let base_id = sub_sub_m.get_one::<String>("base").map(|s| s.as_str());
                     let pitr_time = sub_sub_m.get_one::<String>("pitr").map(|s| s.as_str());
                     if let Err(e) = crane::commands::postgres_restore::run_restore_cmd(
+                        config.clone(),
                         config_path,
                         target_id,
                         base_id,
@@ -280,7 +290,7 @@ fn main() {
                     let sql = sub_sub_m.get_one::<String>("sql").map(|s| s.as_str());
 
                     if let Err(e) = crane::commands::postgres::run_postgres_logs_cmd(
-                        config_path,
+                        config.clone(),
                         target_node,
                         since,
                         until,
@@ -299,7 +309,7 @@ fn main() {
 
         Some(("status", sub_m)) => {
             let app_name = sub_m.get_one::<String>("app").unwrap();
-            if let Err(e) = crane::commands::status::run(config_path, app_name) {
+            if let Err(e) = crane::commands::status::run(config.clone(), config_path, app_name) {
                 eprintln!("Status check failed: {}", e);
                 std::process::exit(1);
             }
@@ -316,7 +326,7 @@ fn main() {
             let no_app_instance_id = sub_m.get_flag("no-app-instance-id");
 
             if let Err(e) = crane::commands::logs::run(
-                config_path,
+                config.clone(),
                 app_target,
                 lines,
                 since,
@@ -333,13 +343,6 @@ fn main() {
         Some(("dns", sub_m)) => match sub_m.subcommand() {
             Some(("update", sub_sub_m)) => {
                 let app_name = sub_sub_m.get_one::<String>("app").map(|s| s.as_str());
-                let config = match crane::config::load_config(config_path) {
-                    Ok(cfg) => cfg,
-                    Err(e) => {
-                        eprintln!("Failed to load configuration: {}", e);
-                        std::process::exit(1);
-                    }
-                };
 
                 if let Err(e) =
                     crane::cloudflare_unit::setup::update_dns_blocking(&config, app_name, false)
@@ -352,5 +355,7 @@ fn main() {
         },
 
         _ => unreachable!(),
-    }
+    };
+
+    Ok(())
 }

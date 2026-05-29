@@ -9,10 +9,9 @@ use crate::ssh::SSHSession;
 use std::path::Path;
 
 /// deploy app commands
-pub fn run(config_path: &Path, no_dns_update: bool) -> anyhow::Result<()> {
+pub fn run(config: crate::config::Config, config_path: &Path, no_dns_update: bool) -> anyhow::Result<()> {
     println!("Loading configuration from {:?}\n", config_path);
 
-    let config = config::load_config(config_path)?;
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
     let env_path = config_dir.join(".env");
     let dot_env = config::load_env_file(&env_path).unwrap_or_default();

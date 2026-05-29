@@ -117,7 +117,7 @@ pub struct AutoscaleConfig {
     pub cooldown: Option<u32>,
 }
 
-pub fn load_config<P: AsRef<Path>>(path: P) -> anyhow::Result<Config> {
+pub fn read_config_toml_file<P: AsRef<Path>>(path: P) -> anyhow::Result<Config> {
     let content = std::fs::read_to_string(path)?;
     let config: Config = toml::from_str(&content)?;
     Ok(config)
@@ -128,12 +128,14 @@ pub fn load_env_file<P: AsRef<Path>>(path: P) -> anyhow::Result<HashMap<String, 
     if !path.as_ref().exists() {
         return Ok(map);
     }
+
     let content = std::fs::read_to_string(path)?;
     for line in content.lines() {
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
         }
+
         if let Some((key, val)) = trimmed.split_once('=') {
             let key = key.trim().to_string();
             let mut val = val.trim().to_string();
@@ -143,8 +145,10 @@ pub fn load_env_file<P: AsRef<Path>>(path: P) -> anyhow::Result<HashMap<String, 
                 val.remove(0);
                 val.pop();
             }
+
             map.insert(key, val);
         }
     }
+
     Ok(map)
 }

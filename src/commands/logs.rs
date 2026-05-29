@@ -2,10 +2,9 @@ use crate::config;
 use crate::helper::keys::find_private_key_for_user;
 use crate::ssh::SSHSession;
 use std::io::{BufRead, BufReader};
-use std::path::Path;
 
 pub fn run(
-    config_path: &Path,
+    config: crate::config::Config,
     app_target: &str,
     lines: u32,
     since: Option<&str>,
@@ -23,9 +22,6 @@ pub fn run(
     } else {
         (app_target.to_string(), None)
     };
-
-    // 2. Load configuration
-    let config = config::load_config(config_path)?;
 
     // 3. Find the app config
     let (_app_id, app) = config
@@ -129,6 +125,7 @@ pub fn run(
                 let stdout = child.stdout.take().ok_or_else(|| {
                     anyhow::anyhow!("Failed to open stdout for instance {}", instance_id)
                 })?;
+
                 let reader = BufReader::new(stdout);
                 for line in reader.lines() {
                     let line = line?;
@@ -138,8 +135,10 @@ pub fn run(
                         println!("[{}@{}] {}", app_name, instance_id, line);
                     }
                 }
+
                 Ok(())
             });
+
             handles.push(handle);
         }
 
@@ -191,9 +190,11 @@ pub fn run(
                         }
                     }
                 }
+
                 Ok(Err(e)) => {
                     eprintln!("Error fetching logs for instance {}: {}", instance_id, e);
                 }
+
                 Err(_) => {
                     eprintln!(
                         "Thread panicked while fetching logs for instance {}",

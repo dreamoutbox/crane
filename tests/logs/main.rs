@@ -7,9 +7,10 @@ static TEST_MUTEX: Mutex<()> = Mutex::new(());
 fn test_logs_command_single_instance() {
     let _guard = TEST_MUTEX.lock().unwrap();
     let config_path = Path::new("demo/crane.toml");
+    let config = crane::config::read_config_toml_file(config_path).unwrap();
 
     let result = crane::commands::logs::run(
-        config_path,
+        config,
         "myapp@1",
         50,
         Some("1h ago"),
@@ -26,9 +27,10 @@ fn test_logs_command_single_instance() {
 fn test_logs_command_all_instances() {
     let _guard = TEST_MUTEX.lock().unwrap();
     let config_path = Path::new("demo/crane.toml");
+    let config = crane::config::read_config_toml_file(config_path).unwrap();
 
     let result = crane::commands::logs::run(
-        config_path,
+        config,
         "myapp",
         100,
         None,
@@ -45,18 +47,11 @@ fn test_logs_command_all_instances() {
 fn test_logs_command_invalid_instance() {
     let _guard = TEST_MUTEX.lock().unwrap();
     let config_path = Path::new("demo/crane.toml");
-    let result = crane::commands::logs::run(
-        config_path,
-        "myapp@99",
-        100,
-        None,
-        None,
-        false,
-        false,
-        false,
-    );
+    let config = crane::config::read_config_toml_file(config_path).unwrap();
+    let result =
+        crane::commands::logs::run(config, "myapp@99", 100, None, None, false, false, false);
 
     assert!(result.is_err());
     let err_msg = result.unwrap_err().to_string();
-    assert!(err_msg.contains("Instance ID 99 is invalid. Total instances: 2"));
+    assert!(err_msg.contains("Instance ID 99 is invalid. Total instances: 3"));
 }

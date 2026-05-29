@@ -10,12 +10,13 @@ use crate::{
 };
 
 pub fn run_restore_cmd(
+    config: crate::config::Config,
     config_path: &Path,
     target_backup_id: &str,  // <id>: targetb backup ID
     base_id: Option<&str>,   // --base: stop chain walk here (inclusive)
     pitr_time: Option<&str>, // --pitr "YYYY-MM-DD HH:MM:SS" UTC
 ) -> anyhow::Result<()> {
-    let config = config::load_config(config_path)?;
+
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
     let env_path = config_dir.join(".env");
     let dot_env = config::load_env_file(&env_path).unwrap_or_default();

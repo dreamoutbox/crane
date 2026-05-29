@@ -13,10 +13,10 @@ use crate::{
 };
 
 pub fn backup_from_config_wrapper(
+    config: crate::config::Config,
     config_path: &Path,
     backup_type: &str,
 ) -> anyhow::Result<BackupMetadata> {
-    let config = config::load_config(config_path)?;
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
     let env_path = config_dir.join(".env");
     let dot_env = config::load_env_file(&env_path).unwrap_or_default();
@@ -50,8 +50,12 @@ pub fn backup_from_config_wrapper(
     )
 }
 
-pub fn run_backup_cmd(config_path: &Path, backup_type: &str) -> anyhow::Result<()> {
-    let meta = backup_from_config_wrapper(config_path, backup_type)?;
+pub fn run_backup_cmd(
+    config: crate::config::Config,
+    config_path: &Path,
+    backup_type: &str,
+) -> anyhow::Result<()> {
+    let meta = backup_from_config_wrapper(config, config_path, backup_type)?;
 
     println!("\nBackup successful!\n");
     println!("ID: {}", meta.id);

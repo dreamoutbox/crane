@@ -41,8 +41,11 @@ pub struct NodeStatusResult {
     pub status: Result<(NodeResourceStatus, Vec<InstanceStatus>), String>,
 }
 
-pub fn run(config_path: &Path, app_name: &str) -> anyhow::Result<()> {
-    let config = config::load_config(config_path)?;
+pub fn run(
+    config: crate::config::Config,
+    config_path: &Path,
+    app_name: &str,
+) -> anyhow::Result<()> {
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
     let env_path = config_dir.join(".env");
     let _dot_env = config::load_env_file(&env_path).unwrap_or_default();
@@ -135,6 +138,7 @@ pub fn run(config_path: &Path, app_name: &str) -> anyhow::Result<()> {
                                     if let Ok(port) = port_str.parse::<u16>() {
                                         let active_state = parts[2].to_string();
                                         let sub_state = parts[3].to_string();
+
                                         systemd_units.push(SystemdUnitState {
                                             port,
                                             active_state,

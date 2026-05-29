@@ -22,7 +22,8 @@ fn test_deploy() {
 
     // 2. Deploy app configuration to VPS nodes
     let config_path = Path::new("demo/crane.toml");
-    crane::commands::deploy::run(config_path, true).expect("deploy failed");
+    let config = crane::config::read_config_toml_file(config_path).expect("Failed to load config");
+    crane::commands::deploy::run(config.clone(), config_path, true).expect("deploy failed");
 
     // ASSERT this machine can curl at myapp.example.com
     let curl_myapp = Command::new("curl")
@@ -143,7 +144,6 @@ fn test_deploy() {
     //(IP 10.0.0.1 on docker bridge network 10.0.0.0/24),
     // we need to temporarily add a pg_hba.conf entry
     // to the deployed primary postgres database and reload.
-    let config = crane::config::load_config(config_path).expect("Failed to load crane.toml");
 
     let primary_node = postgres_get_leader(&config)
         .expect("Failed to get leader node")

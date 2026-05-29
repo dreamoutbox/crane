@@ -20,5 +20,16 @@ pub struct PostgresNode {
     pub address: String,
     pub role: String,
     pub version: String,
-    pub health: String,
+    pub status: String,
+}
+
+pub struct HAProxyNode {
+    pub status: String,
+    pub primary: String,
+    pub replicas: Vec<String>,
+}
+
+pub struct PostgresStatusOutput {
+    pub haproxy: HAProxyNode,
+    pub postgres: Vec<PostgresNode>,
 }

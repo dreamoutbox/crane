@@ -19,7 +19,7 @@ fn try_connect(user: &str, password: &str, db: &str) -> Result<String, String> {
 fn allow_host_connection(config_path: &std::path::Path) {
     use crane::postgres_unit::helper::postgres_get_leader;
 
-    let config = crane::config::load_config(config_path).expect("Failed to load config");
+    let config = crane::config::read_config_toml_file(config_path).expect("Failed to load config");
     let primary_node = postgres_get_leader(&config)
         .expect("Failed to get leader node")
         .expect("No active PostgreSQL leader found");
