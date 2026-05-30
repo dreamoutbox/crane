@@ -27,7 +27,7 @@ services:
       - /run/lock
       - /tmp
     stop_signal: SIGRTMIN+3 # clean systemd shutdown
-    mem_limit: 2G
+    mem_limit: 3G
     cpu_count: 4
     restart: always
     environment:
@@ -55,7 +55,7 @@ services:
       - /run/lock
       - /tmp
     stop_signal: SIGRTMIN+3
-    mem_limit: 2G
+    mem_limit: 3G
     cpu_count: 4
     restart: always
     environment:
@@ -83,7 +83,7 @@ services:
       - /run/lock
       - /tmp
     stop_signal: SIGRTMIN+3
-    mem_limit: 2G
+    mem_limit: 3G
     cpu_count: 4
     restart: always
     environment:

@@ -14,6 +14,8 @@ pub fn run(
     config_path: &Path,
     no_dns_update: bool,
 ) -> anyhow::Result<()> {
+    let now = std::time::Instant::now();
+
     println!("Loading configuration from {:?}\n", config_path);
 
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
@@ -432,7 +434,8 @@ pub fn run(
     //         .map_err(|e| anyhow::anyhow!("Thread panicked: {:?}", e))??;
     // }
 
-    println!("\nDEPLOY COMPLETE\n");
+    let deploy_elapse = now.elapsed();
+    println!("\nDEPLOY COMPLETE ({} secs)\n", deploy_elapse.as_secs());
 
     if !no_dns_update {
         if let Err(e) = crate::cloudflare_unit::setup::update_dns_blocking(&config, None, true) {

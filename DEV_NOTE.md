@@ -39,3 +39,7 @@ curl -w "\n" -L -k -i myapp.localhost/curl?to=myapp2
 curl -w "\n" -L -k -i myapp2.localhost/curl?to=myapp
 ```
 
+## fix can't ssh into vps
+```sh
+docker exec vps1 rm -f /run/nologin && docker exec vps1 systemctl restart systemd-user-sessions.service
+```
