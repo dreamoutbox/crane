@@ -61,8 +61,8 @@ pub fn postgres_setup_wrapper(
 
         // Stop & disable standard postgresql systemd service
         println!("\tStopping and disabling standard PostgreSQL service...");
-        let stop_res = interactor.cmd("sudo systemctl stop postgresql");
-        dbg!(&stop_res);
+        let _stop_res = interactor.cmd("sudo systemctl stop postgresql");
+        // dbg!(&stop_res);
 
         // let stop2_res = interactor.cmd(&format!(
         //     "sudo systemctl stop postgresql@{}-main",
@@ -203,7 +203,7 @@ pub fn postgres_setup_wrapper(
         .filter(|n| n.internal_ip != leader.internal_ip)
         .map(|n| n.internal_ip.clone())
         .collect();
-    println!("\tFollower: {:#?}", follower_ips);
+    println!("\tFollower: {:?}", follower_ips);
 
     // 3. Provision database schema and users on the dynamic leader
     let leader_interactor = connect_to_node(&leader, config)?;
@@ -307,7 +307,7 @@ pub fn setup_postgres_primary(
             let tmp_sql = format!("/tmp/crane_user_{}.sql", user.user);
             interactor.create_file(&tmp_sql, &user_sql)?;
             interactor.cmd(&format!("sudo -u postgres psql -f '{}'", tmp_sql))?;
-            interactor.cmd(&format!("sudo -u postgres rm -f '{}'", tmp_sql))?;
+            interactor.cmd(&format!("sudo rm -f '{}'", tmp_sql))?;
 
             for db_ref in &user.databases {
                 let db_name = db_configs

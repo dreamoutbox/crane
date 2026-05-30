@@ -154,12 +154,17 @@ fn test_restore_integrated_workflow() {
     // ============================================================
     // RESTORE FROM INCREMENTAL BACKUP #1
     // ============================================================
+    let pitr_arg = if incr_backup_1.backup_type == "FULL" {
+        None
+    } else {
+        Some(pitr_time_insert_3.as_str())
+    };
     println!(
-        "Step 15: restore from incremental backup #1 with --pitr {}",
-        pitr_time_insert_3
+        "Step 15: restore from backup #1 (type: {}) with pitr: {:?}",
+        incr_backup_1.backup_type, pitr_arg
     );
-    run_restore_cmd(&config, &incr_backup_1.id, None, Some(&pitr_time_insert_3))
-        .expect("PITR restore to SQL `INSERT 3` failed");
+    run_restore_cmd(&config, &incr_backup_1.id, None, pitr_arg)
+        .expect("Restore from backup #1 failed");
 
     // ============================================================
     // ASSERT DATA FROM INCREMENTAL BACKUP TEST #1

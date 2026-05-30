@@ -343,6 +343,8 @@ pub fn postgres_restore(
         pgdata_dir, pgdata_dir, pgdata_dir
     ));
 
+    let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", pg_version);
+
     if let Some(target_time) = pitr_time {
         // Write PITR settings to postgresql.auto.conf in pgdata_dir
         let pitr_conf_path = format!("{}/postgresql.auto.conf", pgdata_dir);
@@ -364,6 +366,53 @@ pub fn postgres_restore(
             interactor,
             &format!("sudo -u postgres touch {}/recovery.signal", pgdata_dir),
         )?;
+
+        // Start PostgreSQL directly using pg_ctl to perform the archive recovery (PITR).
+        // This prevents Patroni from overwriting our recovery configuration on startup.
+        // We use -l /tmp/pg_start.log to prevent open stdout/stderr from hanging the SSH session.
+        println!("Performing Point-in-Time Recovery via direct PostgreSQL start...");
+        let pg_start_out = interactor.cmd(&format!(
+            "sudo -u postgres {} -D {} -l /tmp/pg_start.log start",
+            pg_ctl, pgdata_dir
+        ))?;
+        if pg_start_out.exit_code != 0 {
+            anyhow::bail!(
+                "Failed to start PostgreSQL directly for PITR: {}",
+                pg_start_out.stderr
+            );
+        }
+
+        // Poll pg_is_in_recovery() until it returns 'f' (meaning it has reached the recovery target and promoted).
+        let start_time = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(60);
+        let mut recovery_complete = false;
+
+        while start_time.elapsed() < timeout {
+            let check_res =
+                interactor.cmd("sudo -u postgres psql -t -A -c \"SELECT pg_is_in_recovery();\"");
+            if let Ok(out) = check_res {
+                if out.stdout.trim() == "f" {
+                    recovery_complete = true;
+                    break;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+
+        // Stop PostgreSQL directly
+        println!("Stopping direct PostgreSQL instance...");
+        let _ = interactor.cmd(&format!(
+            "sudo -u postgres {} -D {} stop -m fast",
+            pg_ctl, pgdata_dir
+        ));
+        let _ = interactor.cmd("sudo rm -f /tmp/pg_start.log");
+
+        if !recovery_complete {
+            anyhow::bail!(
+                "Timeout waiting for Point-in-Time Recovery to complete and promote database."
+            );
+        }
+        println!("PITR recovery complete and database promoted!");
     }
 
     // Start Patroni on the primary node only
@@ -439,7 +488,7 @@ pub fn postgres_restore(
                 let mut all_running = true;
                 for node in &pg_nodes {
                     let node_line = output.lines().find(|l| l.contains(&node.name));
-                    dbg!(&node_line);
+                    // dbg!(&node_line);
 
                     match node_line {
                         Some(line) => {

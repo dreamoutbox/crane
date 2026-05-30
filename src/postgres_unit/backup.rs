@@ -97,66 +97,87 @@ pub fn postgres_backup(
                 )?;
                 cmdw(interactor, &format!("sudo chmod 644 {}", parent_manifest))?;
             }
-            pgbasebackup_cmd.push_str(&format!(" --incremental={}", parent_manifest));
+
+            // Check parent's timeline vs current database's timeline
+            let parent_tli_out = interactor.cmd(&format!(
+                "sudo -u postgres python3 -c \"import json; m=json.load(open('{}')); print(next(iter(m.get('WAL-Ranges', [])), {{}}).get('Timeline', 0))\"",
+                parent_manifest
+            ))?;
+            let parent_tli = parent_tli_out.stdout.trim();
+
+            let db_tli_out = interactor.cmd(
+                r#"sudo -u postgres psql -t -A -c "SELECT timeline_id FROM pg_control_checkpoint();""#
+            )?;
+            let db_tli = db_tli_out.stdout.trim();
+
+            if !parent_tli.is_empty() && !db_tli.is_empty() && parent_tli != db_tli {
+                println!(
+                    "\n!!!!!!!!!!!!!!!\nTimeline mismatch detected: parent backup timeline is {}, but current database timeline is {}. \
+                     Falling back to a full backup.\n!!!!!!!!!!!!!!!\n",
+                    parent_tli, db_tli
+                );
+
+                is_incr = false;
+                base_id = None;
+
+                // Rebuild pgbasebackup_cmd without --incremental
+                pgbasebackup_cmd = format!(
+                    "sudo -u postgres PGPASSWORD='{}' {} -h localhost -U replicator -D {} -F t -X s -c fast --manifest-checksums=sha256",
+                    replica_pass, pg_basebackup, local_path
+                );
+            } else {
+                pgbasebackup_cmd.push_str(&format!(" --incremental={}", parent_manifest));
+            }
         } else {
             anyhow::bail!("Cannot perform incremental backup: no previous backup found.");
         }
     }
 
-    // After a restore/PITR, PostgreSQL switches to a new timeline. Incremental backups
-    // referencing a parent from a different timeline will fail because the WAL summarizer
-    // cannot bridge timeline gaps. Detect this and auto-fallback to a full backup.
     if is_incr && pg_version.parse::<i32>().unwrap_or(0) >= 17 {
-        // Force a WAL switch so the active segment is closed for summarization.
-        let _ = interactor.cmd(r#"sudo -u postgres psql -c "SELECT pg_switch_wal();""#);
+        // Get the current WAL LSN before switching, to use as the synchronization target.
+        let lsn_out =
+            interactor.cmd(r#"sudo -u postgres psql -t -A -c "SELECT pg_current_wal_lsn();""#)?;
+        let target_lsn = lsn_out.stdout.trim().to_string();
 
-        // Check if WAL summarizer's timeline matches the current DB timeline.
-        let tl_check = interactor.cmd(
-            r#"sudo -u postgres psql -t -A -c "SELECT (SELECT timeline_id FROM pg_control_checkpoint()), summarized_tli FROM pg_get_wal_summarizer_state();""#,
-        )?;
-        let tl_output = tl_check.stdout.trim();
-        // Output: "current_tli|summarized_tli" e.g. "2|1"
-        let tl_parts: Vec<&str> = tl_output.split('|').collect();
+        // Force a WAL switch so the active segment is closed for summarization, and CHECKPOINT to flush summaries.
+        let _ = interactor.cmd(r#"sudo -u postgres psql -c "SELECT pg_switch_wal(); CHECKPOINT;""#);
 
-        if tl_parts.len() == 2 && tl_parts[0] != tl_parts[1] {
-            println!(
-                "Timeline mismatch detected (db={}, summarizer={}). \
-                 Falling back to full backup.",
-                tl_parts[0], tl_parts[1]
-            );
-            // Reset to full backup: remove --incremental flag and clear base_id
-            pgbasebackup_cmd = format!(
-                "sudo -u postgres PGPASSWORD='{}' {} -h localhost -U replicator -D {} -F t -X s -c fast --manifest-checksums=sha256",
-                replica_pass, pg_basebackup, local_path
-            );
-            is_incr = false;
-            base_id = None;
-        } else {
-            // Same timeline — poll WAL summarizer until it catches up.
-            let max_retries = 30;
-            for attempt in 1..=max_retries {
-                let state = interactor.cmd(
-                    r#"sudo -u postgres psql -t -A -c "SELECT summarized_lsn, pending_lsn FROM pg_get_wal_summarizer_state();""#,
-                )?;
-                let output = state.stdout.trim();
-                let parts: Vec<&str> = output.split('|').collect();
-                if parts.len() == 2 && parts[0] == parts[1] {
-                    println!("WAL summarizer caught up: {} (attempt {})", output, attempt);
-                    break;
-                }
-                if attempt == max_retries {
-                    anyhow::bail!(
-                        "WAL summarizer did not catch up after {}s. State: {}",
-                        max_retries,
-                        output
-                    );
-                }
+        // Poll WAL summarizer until summarized_lsn >= target_lsn.
+        let max_retries = 30;
+        let query = format!(
+            r#"sudo -u postgres psql -t -A -c "SELECT summarized_lsn >= '{}'::pg_lsn FROM pg_get_wal_summarizer_state();""#,
+            target_lsn
+        );
+        for attempt in 1..=max_retries {
+            let state = interactor.cmd(&query)?;
+            let output = state.stdout.trim();
+            if output == "t" {
                 println!(
-                    "Waiting for WAL summarizer... {} (attempt {}/{})",
-                    output, attempt, max_retries
+                    "WAL summarizer caught up to target LSN {} (attempt {})",
+                    target_lsn, attempt
                 );
-                std::thread::sleep(std::time::Duration::from_secs(1));
+                break;
             }
+
+            if attempt == max_retries {
+                // Get current full state for debugging info on failure
+                let debug_state = interactor.cmd(
+                    r#"sudo -u postgres psql -t -A -c "SELECT summarized_lsn, pending_lsn FROM pg_get_wal_summarizer_state();""#
+                )?;
+                anyhow::bail!(
+                    "WAL summarizer did not catch up to target {} after {}s. State: {}",
+                    target_lsn,
+                    max_retries,
+                    debug_state.stdout.trim()
+                );
+            }
+
+            println!(
+                "Waiting for WAL summarizer to reach {}... (attempt {}/{})",
+                target_lsn, attempt, max_retries
+            );
+
+            std::thread::sleep(std::time::Duration::from_secs(1));
         }
     }
 
