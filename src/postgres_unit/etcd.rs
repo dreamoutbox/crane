@@ -27,6 +27,7 @@ pub fn setup_etcd(
     let _ = interactor.cmd("sudo systemctl stop etcd");
     std::thread::sleep(std::time::Duration::from_secs(1));
     let _ = interactor.cmd("sudo rm -rf /var/lib/etcd/");
+
     // Recreate with correct ownership so the etcd service user can write to it
     interactor.cmd("sudo mkdir -p /var/lib/etcd")?;
     interactor.cmd("sudo chown etcd:etcd /var/lib/etcd")?;

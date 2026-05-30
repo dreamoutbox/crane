@@ -7,7 +7,7 @@ use crate::{
     server_interactor::server_interactor_trait::ServerInteractor,
 };
 
-pub fn run_backup(
+pub fn postgres_backup(
     interactor: &dyn ServerInteractor,
     s3_client: &dyn S3Client,
     pg_version: &str,

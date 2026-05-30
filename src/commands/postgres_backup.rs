@@ -39,7 +39,7 @@ pub fn backup_from_config_wrapper(
         backup_type.to_uppercase()
     );
 
-    crate::postgres_unit::backup::run_backup(
+    crate::postgres_unit::backup::postgres_backup(
         &*interactor,
         &s3_client,
         &pg_version,

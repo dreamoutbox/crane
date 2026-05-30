@@ -1,9 +1,11 @@
+use crane::postgres_unit::backup::postgres_backup;
+
 #[test]
 fn test_backup_full() {
     let interactor = MockInteractor::new(vec!["20251211152749155 2025-12-11 15:27:49".to_string()]);
     let s3_client = MockS3Client::new();
 
-    let result = run_backup(
+    let result = postgres_backup(
         &interactor,
         &s3_client,
         "17",
@@ -46,7 +48,7 @@ fn test_backup_incremental() {
     let s3_client = MockS3Client::new();
 
     // 1. Run full backup
-    let result_full = run_backup(
+    let result_full = postgres_backup(
         &interactor,
         &s3_client,
         "17",
@@ -63,7 +65,7 @@ fn test_backup_incremental() {
     let meta_full = result_full.unwrap();
 
     // 2. Run incremental backup
-    let result_incr = run_backup(
+    let result_incr = postgres_backup(
         &interactor,
         &s3_client,
         "17",

@@ -1,4 +1,4 @@
-use crane::postgres_unit::restore::run_restore;
+use crane::postgres_unit::restore::postgres_restore;
 
 #[test]
 fn test_restore_full() {
@@ -26,7 +26,7 @@ fn test_restore_full() {
         )
         .unwrap();
 
-    let result = run_restore(
+    let result = postgres_restore(
         &interactor,
         &s3_client,
         "17",
@@ -100,7 +100,7 @@ fn test_restore_incremental() {
         )
         .unwrap();
 
-    let result = run_restore(
+    let result = postgres_restore(
         &interactor,
         &s3_client,
         "17",
@@ -151,7 +151,7 @@ fn test_restore_pitr() {
         .unwrap();
 
     let pitr = "2025-12-11 16:00:00";
-    let result = run_restore(
+    let result = postgres_restore(
         &interactor,
         &s3_client,
         "17",
@@ -213,7 +213,7 @@ fn test_restore_pitr_before_backup_fails() {
     let backup = registry.backups[0].clone();
 
     // PITR time before the backup taken_at
-    let result = run_restore(
+    let result = postgres_restore(
         &interactor,
         &s3_client,
         "17",
@@ -270,7 +270,7 @@ fn test_restore_base_override() {
         .unwrap();
 
     // Restore incr with full chain (2 items) — should call pg_combinebackup
-    let result_full_chain = run_restore(
+    let result_full_chain = postgres_restore(
         &interactor,
         &s3_client,
         "17",

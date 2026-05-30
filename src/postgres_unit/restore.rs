@@ -8,7 +8,7 @@ use crate::{
     server_interactor::server_interactor_trait::ServerInteractor,
 };
 
-pub fn run_restore(
+pub fn postgres_restore(
     interactor: &dyn ServerInteractor,
     s3_client: &dyn S3Client,
     pg_version: &str,

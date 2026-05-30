@@ -1,0 +1,75 @@
+// RUN:
+// RUST_BACKTRACE=1 cargo nextest run --test postgres -- test_failover --no-capture
+
+#[test]
+fn test_failover() {
+    let config_path = std::path::Path::new("tests/postgres/crane.toml");
+    let config =
+        crane::config::read_config_toml_file(config_path).expect("Failed to load crane.toml");
+
+    //Deploy
+    crane::commands::deploy::run(&config, config_path, true).expect("deploy failed");
+
+    // get existing postgres cluster status
+    let status = crane::commands::postgres_status::get_postgres_status_wrapper(&config)
+        .expect("Failed to get postgres status");
+
+    // get primary node
+    let primary = status
+        .postgres
+        .iter()
+        .find(|node| node.role == "Leader")
+        .expect("No leader node found in the cluster status");
+
+    // find primary node config in configuration
+    let primary_node_config = config
+        .nodes
+        .iter()
+        .find(|n| {
+            n.host == primary.hostname
+                || n.name == primary.hostname
+                || n.internal_ip == primary.hostname
+                || n.public_ip == primary.hostname
+        })
+        .expect("Failed to find primary node config in nodes list");
+
+    // stop service of primary node
+    let primary_interactor =
+        crane::postgres_unit::helper::connect_to_node(primary_node_config, &config)
+            .expect("Failed to connect to primary node");
+    primary_interactor
+        .cmd("sudo systemctl stop patroni")
+        .expect("Failed to stop patroni service on primary node");
+
+    // wait for patroni leader election
+    let mut new_leader_elected = false;
+    let mut new_status = None;
+    for _ in 0..20 {
+        if let Ok(st) = crane::commands::postgres_status::get_postgres_status_wrapper(&config) {
+            let active_leader = st.postgres.iter().find(|n| n.role == "Leader");
+            if let Some(leader) = active_leader {
+                if leader.hostname != primary.hostname {
+                    new_leader_elected = true;
+                    new_status = Some(st);
+                    break;
+                }
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+
+    // assert new leader
+    assert!(
+        new_leader_elected,
+        "Expected a new leader to be elected after old leader '{}' stopped, but it was not",
+        primary.hostname
+    );
+
+    // assert haproxy point to new leader
+    let ns = new_status.unwrap();
+    let new_leader = ns.postgres.iter().find(|n| n.role == "Leader").unwrap();
+    assert_eq!(
+        ns.haproxy.primary, new_leader.hostname,
+        "HAProxy primary should point to the newly elected leader node"
+    );
+}

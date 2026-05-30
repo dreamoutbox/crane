@@ -108,7 +108,7 @@ pub fn run_restore_cmd(
         println!("Point-in-time recovery target: {}", t);
     }
 
-    crate::postgres_unit::restore::run_restore(
+    crate::postgres_unit::restore::postgres_restore(
         &*interactor,
         &s3_client,
         &pg_version,

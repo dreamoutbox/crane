@@ -1,4 +1,3 @@
-use crane::postgres_unit::backup::run_backup;
 use crane::postgres_unit::entity::BackupMetadata;
 use crane::s3::s3_client::S3Client;
 use crane::server_interactor::server_interactor_trait::ServerInteractor;
@@ -21,4 +20,6 @@ mod postgres {
     include!("restore_integrated_test.rs");
     include!("user_change_password_test.rs");
     include!("user_state_test.rs");
+    include!("promote_test.rs");
+    include!("failover_test.rs");
 }
