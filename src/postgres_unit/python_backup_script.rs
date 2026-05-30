@@ -145,6 +145,12 @@ def main():
     if is_incr and base_id:
         pgbasebackup_cmd += f" --incremental=/var/lib/postgresql/backups/{base_id}/backup_manifest"
 
+    if is_incr and int(pg_version) >= 17:
+        # Force a WAL switch to ensure the active WAL segment is closed and summarized by the walsummarizer.
+        os.system("sudo -u postgres psql -c 'SELECT pg_switch_wal();'")
+        import time
+        time.sleep(1)
+
     print(f"Running pg_basebackup command: {pgbasebackup_cmd}")
     ret = os.system(pgbasebackup_cmd)
     if ret != 0:

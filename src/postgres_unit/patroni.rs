@@ -18,10 +18,17 @@ pub fn install_patroni(
     } else {
         println!("\tPatroni is already installed.");
     }
+
     let mut etcd_hosts_yaml = String::new();
     for n in pg_nodes {
         etcd_hosts_yaml.push_str(&format!("    - {}:2379\n", n.internal_ip));
     }
+
+    let mut summarize_wal_line = String::new();
+    if pg_version.parse::<i32>().unwrap_or(0) >= 17 {
+        summarize_wal_line = "summarize_wal: \"on\"".to_string();
+    }
+
     let patroni_yaml = format!(
         r#"scope: postgres-cluster
 namespace: /service
@@ -54,6 +61,7 @@ bootstrap:
         shared_buffers: 128MB
         archive_mode: "on"
         archive_command: "cp %p /var/lib/postgresql/wal_archive/%f"
+        {}
   initdb:
     - encoding: UTF8
     - data-checksums
@@ -83,17 +91,26 @@ postgresql:
         node.name,
         etcd_hosts_yaml,
         node.internal_ip,
+        summarize_wal_line,
         node.internal_ip,
         *pg_version,
         *pg_version,
         *replica_pass,
         *replica_pass
     );
+
+    println!("========== BEGIN PATRONI YAML ==========");
+    println!("{}", patroni_yaml);
+    println!("========== END PATRONI YAML ==========");
+
     interactor.cmd("sudo mkdir -p /etc/patroni")?;
     interactor.create_file("/etc/patroni/config.yml", &patroni_yaml)?;
+    println!("create patroni config at /etc/patroni/config.yml");
+
     interactor.cmd("sudo chown -R postgres:postgres /etc/patroni")?;
     interactor.cmd("sudo chmod 600 /etc/patroni/config.yml")?;
     interactor.cmd("sudo systemctl daemon-reload")?;
     interactor.cmd("sudo systemctl enable patroni")?;
+
     Ok(())
 }

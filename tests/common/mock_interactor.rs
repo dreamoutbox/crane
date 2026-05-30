@@ -33,6 +33,10 @@ impl ServerInteractor for MockInteractor {
                 .unwrap_or_else(|| "20251211152749155 2025-12-11 15:27:49".to_string())
         } else if command.contains("pg_is_in_recovery") {
             "f".to_string()
+        } else if command.contains("/primary") {
+            "200".to_string()
+        } else if command.contains("patronictl") && command.contains("list") {
+            "vps1 running".to_string()
         } else if command.contains("lsb_release") {
             "distro=debian".to_string()
         } else if command.contains("test -f") {

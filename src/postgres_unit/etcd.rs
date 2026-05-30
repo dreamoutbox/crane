@@ -13,6 +13,7 @@ pub fn install_etcd(interactor: &dyn ServerInteractor) -> anyhow::Result<()> {
     } else {
         println!("\tetcd is already installed.");
     }
+
     Ok(())
 }
 
@@ -67,6 +68,7 @@ ETCD_ADVERTISE_CLIENT_URLS="http://{}:2379"
     interactor.cmd(&format!("sudo chmod 644 '{}'", etcd_default_path))?;
 
     interactor.cmd("sudo systemctl daemon-reload")?;
+
     interactor.cmd("sudo systemctl enable etcd")?;
 
     Ok(())
@@ -75,8 +77,10 @@ ETCD_ADVERTISE_CLIENT_URLS="http://{}:2379"
 /// Start etcd non-blocking. Call after all nodes are configured so the cluster forms together.
 pub fn start_etcd(interactor: &dyn ServerInteractor) -> anyhow::Result<()> {
     println!("\tStarting etcd service...");
-    let start_etcd_output = interactor.cmd("sudo systemctl restart etcd --no-block")?;
-    dbg!(start_etcd_output);
+
+    let _start_etcd_output = interactor.cmd("sudo systemctl restart etcd --no-block")?;
+    // dbg!(start_etcd_output);
+
     Ok(())
 }
 

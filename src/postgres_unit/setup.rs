@@ -61,22 +61,35 @@ pub fn postgres_setup_wrapper(
 
         // Stop & disable standard postgresql systemd service
         println!("\tStopping and disabling standard PostgreSQL service...");
-        let _ = interactor.cmd("sudo systemctl stop postgresql");
-        let _ = interactor.cmd(&format!(
-            "sudo systemctl stop postgresql@{}-main",
-            pg_version
-        ));
-        let _ = interactor.cmd("sudo pkill -u postgres -f postgres");
+        let stop_res = interactor.cmd("sudo systemctl stop postgresql");
+        dbg!(&stop_res);
+
+        // let stop2_res = interactor.cmd(&format!(
+        //     "sudo systemctl stop postgresql@{}-main",
+        //     pg_version
+        // ));
+        // dbg!(&stop2_res);
+
+        // let kill_res = interactor.cmd("sudo pkill -u postgres -f postgres");
+        // dbg!(&kill_res);
+
         std::thread::sleep(std::time::Duration::from_millis(500));
-        let _ = interactor.cmd("sudo systemctl disable postgresql");
-        let _ = interactor.cmd(&format!(
+
+        let _disable_pg_res = interactor.cmd("sudo systemctl disable postgresql");
+        // dbg!(&disable_pg_res);
+
+        let _disable2_pg_res = interactor.cmd(&format!(
             "sudo systemctl disable postgresql@{}-main",
             pg_version
         ));
+        // dbg!(&disable2_pg_res);
 
         // Stop and kill Patroni before cleaning up config and bootstrapping
-        let _ = interactor.cmd("sudo systemctl stop patroni");
-        let _ = interactor.cmd("sudo pkill -f patroni");
+        let _stop_patroni_res = interactor.cmd("sudo systemctl stop patroni");
+        // dbg!(&stop_patroni_res);
+
+        // let kill_patroni_res = interactor.cmd("sudo pkill -f patroni");
+        // dbg!(&kill_patroni_res);
 
         // Backup existing postgres main directory
         //or failed boot directory if present
@@ -121,6 +134,8 @@ pub fn postgres_setup_wrapper(
 
     // Phase 3: Start Patroni on all nodes simultaneously
     println!("\tStarting Patroni on all nodes...");
+    // dbg!(&pg_nodes);
+
     for node in &pg_nodes {
         let private_key = find_private_key_for_user(&node.user, config)?;
         let ssh = SSHSession::new(
@@ -132,6 +147,39 @@ pub fn postgres_setup_wrapper(
         let interactor = get_server_interactor(ssh)?;
         println!("\tStarting Patroni on node {}...", node.name);
         interactor.cmd("sudo systemctl restart patroni --no-block")?;
+
+        // Check if Patroni is running (with a 10s timeout since it can be "activating" initially)
+        let start_time = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(10);
+        let mut is_active = false;
+
+        while start_time.elapsed() < timeout {
+            let active_out = interactor.cmd("sudo systemctl is-active patroni")?;
+            // dbg!(&active_out);
+
+            if active_out.stdout.trim() == "active" {
+                is_active = true;
+                break;
+            }
+
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+
+        if !is_active {
+            println!(
+                "Error: patroni is not running on node {}. Fetching logs...",
+                node.name
+            );
+            let log_out = interactor.cmd("sudo journalctl -xeu patroni.service -n 100 -o cat")?;
+
+            println!("\n===BEGIN PATRONI LOGS ON {}===\n", node.name);
+            println!("{}", log_out.stdout);
+            println!("\n===END PATRONI LOGS ON {}===\n", node.name);
+
+            anyhow::bail!("Patroni failed to start on node {}", node.name);
+        } else {
+            println!("\n====Patroni started successfully on node {}\n", node.name);
+        }
     }
 
     // 2. Wait for Patroni leader election
@@ -259,7 +307,7 @@ pub fn setup_postgres_primary(
             let tmp_sql = format!("/tmp/crane_user_{}.sql", user.user);
             interactor.create_file(&tmp_sql, &user_sql)?;
             interactor.cmd(&format!("sudo -u postgres psql -f '{}'", tmp_sql))?;
-            interactor.cmd(&format!("rm -f '{}'", tmp_sql))?;
+            interactor.cmd(&format!("sudo -u postgres rm -f '{}'", tmp_sql))?;
 
             for db_ref in &user.databases {
                 let db_name = db_configs
@@ -308,26 +356,24 @@ pub fn backup_postgres_dir(
         unix_timestamp, *pg_version
     );
 
-    // let old_main_dir = format!("/var/lib/postgresql/{}/main", *pg_version);
-    // let backup_main_dir = format!("{}/main", backup_parent);
+    let old_main_dir = format!("/var/lib/postgresql/{}/main", *pg_version);
+    let backup_main_dir = format!("{}/main", backup_parent);
+    let dir_exists = interactor
+        .cmd(&format!("test -d {}", old_main_dir))
+        .map(|out| out.exit_code == 0)
+        .unwrap_or(false);
+
+    if dir_exists {
+        println!(
+            "\tBacking up existing data directory {} to {}",
+            old_main_dir, backup_main_dir
+        );
+        interactor.cmd(&format!("sudo mkdir -p {}", backup_parent))?;
+        interactor.cmd(&format!("sudo mv {} {}", old_main_dir, backup_main_dir))?;
+    }
 
     let failed_main_dir = format!("/var/lib/postgresql/{}/main.failed", *pg_version);
     let backup_failed_dir = format!("{}/main.failed", backup_parent);
-
-    // let dir_exists = interactor
-    //     .cmd(&format!("test -d {}", old_main_dir))
-    //     .map(|out| out.exit_code == 0)
-    //     .unwrap_or(false);
-
-    // if dir_exists {
-    //     println!(
-    //         "\tBacking up existing data directory {} to {}",
-    //         old_main_dir, backup_main_dir
-    //     );
-    //     interactor.cmd(&format!("sudo mkdir -p {}", backup_parent))?;
-    //     interactor.cmd(&format!("sudo mv {} {}", old_main_dir, backup_main_dir))?;
-    // }
-
     let failed_exists = interactor
         .cmd(&format!("test -d {}", failed_main_dir))
         .map(|out| out.exit_code == 0)

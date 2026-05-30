@@ -64,14 +64,14 @@ impl ServerInteractor for DebianInteractor {
                 || out.stderr.contains("not loaded")
             {
             } else {
-                println!("=========================\n");
+                println!("=========================");
                 println!(
-                    "Error DebianInteractor#cmd executing command:\n{}\n(exit code: {})\n",
+                    "Error DebianInteractor#cmd executing command:\n{}\n(exit code: {})",
                     cmd, out.exit_code
                 );
-                println!("DebianInteractor#cmd STDOUT:\n{}\n", out.stdout);
-                println!("DebianInteractor#cmd STDERR:\n{}\n", out.stderr);
-                println!("=========================\n");
+                println!("DebianInteractor#cmd STDOUT:\n{}", out.stdout);
+                println!("DebianInteractor#cmd STDERR:\n{}", out.stderr);
+                println!("=========================");
             }
         }
 

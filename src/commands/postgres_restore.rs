@@ -109,6 +109,8 @@ pub fn run_restore_cmd(
     }
 
     crate::postgres_unit::restore::postgres_restore(
+        config,
+        &primary_node,
         &*interactor,
         &s3_client,
         &pg_version,

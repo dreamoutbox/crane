@@ -1,5 +1,28 @@
 use crane::postgres_unit::restore::postgres_restore;
 
+fn get_dummy_config() -> (crane::config::Config, crane::config::NodeConfig) {
+    let node = crane::config::NodeConfig {
+        name: "vps1".to_string(),
+        host: "localhost".to_string(),
+        public_ip: "10.0.0.11".to_string(),
+        internal_ip: "10.0.0.11".to_string(),
+        port: 22,
+        user: "postgres".to_string(),
+        roles: vec!["postgres".to_string()],
+        private_key: "".to_string(),
+    };
+    let config = crane::config::Config {
+        nodes: vec![node.clone()],
+        users: None,
+        app: std::collections::HashMap::new(),
+        domain: None,
+        db: None,
+        backup: None,
+        monitor: None,
+    };
+    (config, node)
+}
+
 #[test]
 fn test_restore_full() {
     let interactor = MockInteractor::new(vec![]);
@@ -26,7 +49,10 @@ fn test_restore_full() {
         )
         .unwrap();
 
+    let (config, node) = get_dummy_config();
     let result = postgres_restore(
+        &config,
+        &node,
         &interactor,
         &s3_client,
         "17",
@@ -46,10 +72,7 @@ fn test_restore_full() {
         cmds.iter()
             .any(|c| c.contains("tar -xf") && c.contains("/var/lib/postgresql/17/main"))
     );
-    assert!(
-        cmds.iter()
-            .any(|c| c.contains("start") && c.contains("/var/lib/postgresql/17/main"))
-    );
+    assert!(cmds.iter().any(|c| c.contains("systemctl restart patroni")));
     // Regular restore must NOT create recovery.signal
     assert!(!cmds.iter().any(|c| c.contains("recovery.signal")));
 }
@@ -100,7 +123,10 @@ fn test_restore_incremental() {
         )
         .unwrap();
 
+    let (config, node) = get_dummy_config();
     let result = postgres_restore(
+        &config,
+        &node,
         &interactor,
         &s3_client,
         "17",
@@ -118,10 +144,7 @@ fn test_restore_incremental() {
             && c.contains("/var/lib/postgresql/backups/20251211152849281_extracted")
             && c.contains("-o /var/lib/postgresql/backups/combined")
     }));
-    assert!(
-        cmds.iter()
-            .any(|c| c.contains("start") && c.contains("/var/lib/postgresql/17/main"))
-    );
+    assert!(cmds.iter().any(|c| c.contains("systemctl restart patroni")));
 }
 
 #[test]
@@ -151,7 +174,10 @@ fn test_restore_pitr() {
         .unwrap();
 
     let pitr = "2025-12-11 16:00:00";
+    let (config, node) = get_dummy_config();
     let result = postgres_restore(
+        &config,
+        &node,
         &interactor,
         &s3_client,
         "17",
@@ -213,7 +239,10 @@ fn test_restore_pitr_before_backup_fails() {
     let backup = registry.backups[0].clone();
 
     // PITR time before the backup taken_at
+    let (config, node) = get_dummy_config();
     let result = postgres_restore(
+        &config,
+        &node,
         &interactor,
         &s3_client,
         "17",
@@ -270,7 +299,10 @@ fn test_restore_base_override() {
         .unwrap();
 
     // Restore incr with full chain (2 items) — should call pg_combinebackup
+    let (config, node) = get_dummy_config();
     let result_full_chain = postgres_restore(
+        &config,
+        &node,
         &interactor,
         &s3_client,
         "17",

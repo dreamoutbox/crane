@@ -52,8 +52,8 @@ pub fn run(
 
     for node in &app_nodes {
         println!(
-            "Installing dependencies on {}@{} (port: {})...",
-            node.user, node.name, node.port
+            "Installing dependencies on {}@{} (port: {}) {:?}",
+            node.user, node.name, node.port, all_deps
         );
         let private_key = find_private_key_for_user(&node.user, &config)?;
 

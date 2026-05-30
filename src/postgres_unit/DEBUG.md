@@ -74,5 +74,11 @@ docker exec vps1 journalctl -u etcd -n 50
 
 ### check patroni logs journalctl
 ```sh
-docker exec vps1 journalctl -xeu patroni.service -n 50
+docker exec vps1 journalctl -xeu patroni.service -n 50 -ocat
+```
+
+### check summarize_wal on
+
+```sh
+docker exec vps1 sudo -u postgres psql -t -c "select name, setting, source, sourcefile, sourceline from pg_settings where name = 'summarize_wal';"
 ```

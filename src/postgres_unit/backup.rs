@@ -53,7 +53,7 @@ pub fn postgres_backup(
     )?;
 
     // 4. Build pg_basebackup command
-    let is_incr =
+    let mut is_incr =
         backup_type.to_lowercase() == "incr" || backup_type.to_lowercase() == "incremental";
     let mut pgbasebackup_cmd = format!(
         "sudo -u postgres PGPASSWORD='{}' {} -h localhost -U replicator -D {} -F t -X s -c fast --manifest-checksums=sha256",
@@ -100,6 +100,63 @@ pub fn postgres_backup(
             pgbasebackup_cmd.push_str(&format!(" --incremental={}", parent_manifest));
         } else {
             anyhow::bail!("Cannot perform incremental backup: no previous backup found.");
+        }
+    }
+
+    // After a restore/PITR, PostgreSQL switches to a new timeline. Incremental backups
+    // referencing a parent from a different timeline will fail because the WAL summarizer
+    // cannot bridge timeline gaps. Detect this and auto-fallback to a full backup.
+    if is_incr && pg_version.parse::<i32>().unwrap_or(0) >= 17 {
+        // Force a WAL switch so the active segment is closed for summarization.
+        let _ = interactor.cmd(r#"sudo -u postgres psql -c "SELECT pg_switch_wal();""#);
+
+        // Check if WAL summarizer's timeline matches the current DB timeline.
+        let tl_check = interactor.cmd(
+            r#"sudo -u postgres psql -t -A -c "SELECT (SELECT timeline_id FROM pg_control_checkpoint()), summarized_tli FROM pg_get_wal_summarizer_state();""#,
+        )?;
+        let tl_output = tl_check.stdout.trim();
+        // Output: "current_tli|summarized_tli" e.g. "2|1"
+        let tl_parts: Vec<&str> = tl_output.split('|').collect();
+
+        if tl_parts.len() == 2 && tl_parts[0] != tl_parts[1] {
+            println!(
+                "Timeline mismatch detected (db={}, summarizer={}). \
+                 Falling back to full backup.",
+                tl_parts[0], tl_parts[1]
+            );
+            // Reset to full backup: remove --incremental flag and clear base_id
+            pgbasebackup_cmd = format!(
+                "sudo -u postgres PGPASSWORD='{}' {} -h localhost -U replicator -D {} -F t -X s -c fast --manifest-checksums=sha256",
+                replica_pass, pg_basebackup, local_path
+            );
+            is_incr = false;
+            base_id = None;
+        } else {
+            // Same timeline — poll WAL summarizer until it catches up.
+            let max_retries = 30;
+            for attempt in 1..=max_retries {
+                let state = interactor.cmd(
+                    r#"sudo -u postgres psql -t -A -c "SELECT summarized_lsn, pending_lsn FROM pg_get_wal_summarizer_state();""#,
+                )?;
+                let output = state.stdout.trim();
+                let parts: Vec<&str> = output.split('|').collect();
+                if parts.len() == 2 && parts[0] == parts[1] {
+                    println!("WAL summarizer caught up: {} (attempt {})", output, attempt);
+                    break;
+                }
+                if attempt == max_retries {
+                    anyhow::bail!(
+                        "WAL summarizer did not catch up after {}s. State: {}",
+                        max_retries,
+                        output
+                    );
+                }
+                println!(
+                    "Waiting for WAL summarizer... {} (attempt {}/{})",
+                    output, attempt, max_retries
+                );
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            }
         }
     }
 

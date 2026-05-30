@@ -2,13 +2,15 @@ use crate::{
     helper::base64::base64_encode,
     postgres_unit::{
         entity::BackupMetadata,
-        helper::{cmdw, debug_get_postgres_logs, is_postgres_running},
+        helper::{cmdw, connect_to_node},
     },
     s3::s3_client::S3Client,
     server_interactor::server_interactor_trait::ServerInteractor,
 };
 
 pub fn postgres_restore(
+    config: &crate::config::Config,
+    primary_node: &crate::config::NodeConfig,
     interactor: &dyn ServerInteractor,
     s3_client: &dyn S3Client,
     pg_version: &str,
@@ -49,21 +51,85 @@ pub fn postgres_restore(
         backup = chain.last().unwrap().clone();
     }
 
-    let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", pg_version);
+    // let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", pg_version);
+
     let pg_combinebackup = format!("/usr/lib/postgresql/{}/bin/pg_combinebackup", pg_version);
     let pg_verifybackup = format!("/usr/lib/postgresql/{}/bin/pg_verifybackup", pg_version);
     let pgdata_dir = format!("/var/lib/postgresql/{}/main", pg_version);
 
-    // 1. Stop PostgreSQL service
-    let _ = interactor.cmd("sudo systemctl stop postgresql --no-block");
-    let _ = interactor.cmd(&format!(
-        "sudo systemctl stop postgresql@{}-main --no-block",
-        pg_version
-    ));
-    let _ = interactor.cmd(&format!(
-        "sudo -u postgres {} -D {} stop -m immediate",
-        pg_ctl, pgdata_dir
-    ));
+    // Gather all PostgreSQL nodes
+    let pg_nodes: Vec<_> = config
+        .nodes
+        .iter()
+        .filter(|n| n.roles.contains(&"postgres".to_string()))
+        .cloned()
+        .collect();
+
+    // 1. Stop Patroni and PostgreSQL on all nodes
+    for node in &pg_nodes {
+        println!(
+            "Stopping Patroni/PostgreSQL on node {} for restore",
+            node.name
+        );
+
+        let node_interactor = if node.internal_ip == primary_node.internal_ip {
+            None
+        } else {
+            match connect_to_node(node, config) {
+                Ok(int) => Some(int),
+                Err(e) => {
+                    println!("Warning: failed to connect to node {}: {}", node.name, e);
+                    None
+                }
+            }
+        };
+
+        let interactor = node_interactor.as_deref().unwrap_or(interactor);
+        let _ = interactor.cmd("sudo systemctl stop patroni");
+        let _ = interactor.cmd("sudo systemctl stop postgresql --no-block");
+        // let _ = int.cmd("sudo pkill -f patroni");
+
+        // let _ = int.cmd(&format!(
+        //     "sudo systemctl stop postgresql@{}-main --no-block",
+        //     pg_version
+        // ));
+
+        // let _ = int.cmd(&format!(
+        //     "sudo -u postgres {} -D {} stop -m immediate",
+        //     pg_ctl, pgdata_dir
+        // ));
+
+        // let _ = int.cmd("sudo pkill -u postgres -f postgres");
+    }
+
+    // 2. Clear DCS (etcd) keys for the cluster to prevent conflicts
+    println!("Clearing DCS cluster state...");
+    let _ = interactor.cmd("sudo env ETCDCTL_API=3 etcdctl del /service/postgres-cluster --prefix");
+
+    // 3. Clear existing data directory on all nodes
+    for node in &pg_nodes {
+        println!("Clearing data directory on node {}...", node.name);
+        let node_interactor = if node.internal_ip == primary_node.internal_ip {
+            None
+        } else {
+            match connect_to_node(node, config) {
+                Ok(int) => Some(int),
+                Err(e) => {
+                    println!("Warning: failed to connect to node {}: {}", node.name, e);
+                    None
+                }
+            }
+        };
+
+        let interactor = node_interactor.as_deref().unwrap_or(interactor);
+
+        let _ = interactor.cmd(&format!("sudo rm -rf {}", pgdata_dir));
+        cmdw(
+            interactor,
+            &format!("sudo -u postgres mkdir -p {}", pgdata_dir),
+        )?;
+        cmdw(interactor, &format!("sudo chmod 700 {}", pgdata_dir))?;
+    }
 
     // 2. Download all backups in the chain from S3 to VPS local backups dir
     cmdw(interactor, "sudo mkdir -p /var/lib/postgresql/backups")?;
@@ -236,6 +302,7 @@ pub fn postgres_restore(
                 interactor,
                 &format!("sudo -u postgres mkdir -p {}/pg_wal", combined_dir),
             )?;
+
             cmdw(
                 interactor,
                 &format!(
@@ -270,15 +337,19 @@ pub fn postgres_restore(
     )?;
     cmdw(interactor, &format!("sudo chmod 700 {}", pgdata_dir))?;
 
+    // Remove old signals and dynamic JSON on primary node
+    let _ = interactor.cmd(&format!(
+        "sudo -u postgres rm -f {}/recovery.signal {}/standby.signal {}/patroni.dynamic.json",
+        pgdata_dir, pgdata_dir, pgdata_dir
+    ));
+
     if let Some(target_time) = pitr_time {
-        // Write PITR settings to postgresql.auto.conf in pgdata_dir to avoid quoting issues
+        // Write PITR settings to postgresql.auto.conf in pgdata_dir
         let pitr_conf_path = format!("{}/postgresql.auto.conf", pgdata_dir);
         let pitr_conf_content = format!(
             "restore_command = 'cp /var/lib/postgresql/wal_archive/%f %p'\nrecovery_target_time = '{}'\nrecovery_target_action = promote\nrecovery_target_inclusive = on\nrecovery_target_timeline = 'current'\n",
             target_time
         );
-        // Write via base64 to avoid any shell quoting issues with single quotes
-        println!("writing PITR config at: {}", pitr_conf_path);
         let b64 = base64_encode(&pitr_conf_content);
         cmdw(
             interactor,
@@ -289,91 +360,107 @@ pub fn postgres_restore(
         )?;
 
         // Create recovery.signal (PG12+ triggers archive recovery mode)
-        println!("writing recovery signal at: {}", pgdata_dir);
         cmdw(
             interactor,
             &format!("sudo -u postgres touch {}/recovery.signal", pgdata_dir),
         )?;
+    }
 
-        // Start postgres; log to file so we can read errors
-        let log_file = "/tmp/crane-pitr-pg-start.log";
-        let start_cmd = format!(
-            "sudo -u postgres {} -D {} -l {} -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf\" start",
-            pg_ctl, pgdata_dir, log_file, pg_version
-        );
+    // Start Patroni on the primary node only
+    println!("Starting Patroni on primary node {}...", primary_node.name);
+    cmdw(interactor, "sudo systemctl restart patroni")?;
 
-        let out = interactor.cmd(&start_cmd)?;
-        if out.exit_code != 0 {
-            // Capture pg log for diagnosis
-            // let mut log = interactor
-            //     .cmd(&format!("sudo cat {} 2>/dev/null || true", log_file))
-            //     .map(|o| o.stdout)
-            //     .unwrap_or_default();
+    // Wait for primary node to become the Patroni leader
+    println!("Waiting for primary node to become Patroni leader...");
+    let mut primary_ready = false;
+    let check_leader_cmd = "curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8008/primary";
+    let start_time = std::time::Instant::now();
+    let timeout = std::time::Duration::from_secs(300); // 5 minutes
 
-            // let extra_logs = get_last_postgres_logs(interactor, pg_version);
-            // if !extra_logs.is_empty() {
-            //     log.push_str(&extra_logs);
-            // }
-
-            // Clean up: try to restore/clean postgresql.auto.conf
-            let _ = interactor.cmd(&format!(
-                "sudo -u postgres sed -i '/restore_command/d;/recovery_target/d' {}",
-                pitr_conf_path
-            ));
-
-            println!("\nstart command: {}\n", start_cmd);
-            println!("stdout: {}\n", out.stdout);
-            println!("stderr: {}\n\n", out.stderr);
-
-            anyhow::bail!(
-                "Failed to start PostgreSQL with PITR (exit code {})",
-                out.exit_code
-            );
-        }
-
-        // Wait for recovery to complete (postgres promotes itself)
-        let mut ready = false;
-        for _ in 0..30 {
-            std::thread::sleep(std::time::Duration::from_millis(500));
-
-            if is_postgres_running(interactor, pg_version) {
-                ready = true;
+    while start_time.elapsed() < timeout {
+        if let Ok(out) = interactor.cmd(check_leader_cmd) {
+            if out.stdout.trim() == "200" {
+                primary_ready = true;
                 break;
             }
         }
-        // Clean up PITR settings from postgresql.auto.conf
+
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+
+    if !primary_ready {
+        let logs = interactor
+            .cmd("sudo journalctl -u patroni -n 100 --no-pager")
+            .map(|o| o.stdout)
+            .unwrap_or_default();
+
+        anyhow::bail!(
+            "Timeout waiting for primary node to become Patroni leader. Logs:\n{}",
+            logs
+        );
+    }
+    println!(
+        "Primary node {} is now the Patroni leader.",
+        primary_node.name
+    );
+
+    if pitr_time.is_some() {
+        // Clean up PITR settings from postgresql.auto.conf on primary
+        let pitr_conf_path = format!("{}/postgresql.auto.conf", pgdata_dir);
         let _ = interactor.cmd(&format!(
             "sudo -u postgres sed -i '/restore_command/d;/recovery_target/d' {}",
             pitr_conf_path
         ));
+        let _ = interactor.cmd("sudo -u postgres psql -c \"SELECT pg_reload_conf();\"");
+    }
 
-        if !ready {
-            let mut log = interactor
-                .cmd(&format!("sudo cat {} 2>/dev/null || true", log_file))
-                .map(|o| o.stdout)
-                .unwrap_or_default();
+    // Start Patroni on replica nodes
+    for node in &pg_nodes {
+        if node.internal_ip == primary_node.internal_ip {
+            continue;
+        }
 
-            let extra_logs = debug_get_postgres_logs(interactor, pg_version);
-            if !extra_logs.is_empty() {
-                log.push_str(&extra_logs);
+        println!("Starting Patroni on replica node {}...", node.name);
+        let node_interactor = connect_to_node(node, config)?;
+        cmdw(&*node_interactor, "sudo systemctl restart patroni")?;
+    }
+
+    // Wait for all replica nodes to join and reach "running" state
+    if pg_nodes.len() > 1 {
+        println!("Waiting for replica nodes to join the cluster...");
+        let replica_start_time = std::time::Instant::now();
+        let replica_timeout = std::time::Duration::from_secs(30);
+
+        let list_cmd = "sudo -u postgres patronictl -c /etc/patroni/config.yml list";
+
+        while replica_start_time.elapsed() < replica_timeout {
+            if let Ok(out) = interactor.cmd(list_cmd) {
+                let output = out.stdout;
+                let mut all_running = true;
+                for node in &pg_nodes {
+                    let node_line = output.lines().find(|l| l.contains(&node.name));
+                    dbg!(&node_line);
+
+                    match node_line {
+                        Some(line) => {
+                            // if not `streaming` or `running` it means that the node is not healthy
+                            if !line.contains("streaming") && !line.contains("running") {
+                                all_running = false;
+                            }
+                        }
+
+                        None => {
+                            all_running = false;
+                        }
+                    }
+                }
+
+                if all_running {
+                    break;
+                }
             }
 
-            anyhow::bail!("PostgreSQL did not become ready after PITR:\n{}", log);
-        }
-    } else {
-        // Regular restore: suppress archive recovery with restore_command=false
-        let start_cmd = format!(
-            "sudo -u postgres {} -D {} -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf -c restore_command=false\" start > /dev/null 2>&1 < /dev/null",
-            pg_ctl, pgdata_dir, pg_version
-        );
-        let out = interactor.cmd(&start_cmd)?;
-
-        if out.exit_code != 0 {
-            anyhow::bail!(
-                "Failed to start PostgreSQL (exit code {}): {}",
-                out.exit_code,
-                out.stderr
-            );
+            std::thread::sleep(std::time::Duration::from_secs(1));
         }
     }
 

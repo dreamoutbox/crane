@@ -166,9 +166,12 @@ pub fn postgres_get_leader(config: &config::Config) -> anyhow::Result<Option<con
     for node in pg_nodes {
         if let Ok(interactor) = connect_to_node(&node, config) {
             // First check via Patroni REST API
-            let patroni_cmd =
+            let curl_patroni_primary_cmd =
                 "curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8008/primary";
-            if let Ok(output) = interactor.cmd(patroni_cmd) {
+            let curl_patroni_get_primary = interactor.cmd(curl_patroni_primary_cmd);
+            // dbg!(&curl_patroni_get_primary);
+
+            if let Ok(output) = curl_patroni_get_primary {
                 if output.stdout.trim() == "200" {
                     return Ok(Some(node));
                 }
@@ -206,7 +209,8 @@ pub fn cmdw(
 ) -> anyhow::Result<crate::ssh::CmdOutput> {
     let out = interactor.cmd(command)?;
     if out.exit_code != 0 {
-        println!("Command {}\n\nSTDERR:\n{}\n\n", command, out.stderr.trim());
+        println!("Command: {}\n", command);
+        println!("STDERR:\n{}\n", out.stderr.trim());
 
         anyhow::bail!(
             "Command '{}' failed with exit code {}: {}",

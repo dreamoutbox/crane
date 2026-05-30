@@ -1,16 +1,16 @@
 // RUN:
-// RUST_BACKTRACE=1 cargo nextest run --test postgres -- test_restore_integrated_workflow --no-capture
+// RUST_BACKTRACE=1 cargo nextest run test_restore_integrated_workflow -- --no-capture
 
 use crane::{
     commands::{postgres_backup::backup_from_config_wrapper, postgres_restore::run_restore_cmd},
+    config::read_config_toml_file,
     postgres_unit::helper::postgres_get_leader,
 };
 
 #[test]
 fn test_restore_integrated_workflow() {
-    let config_path = std::path::Path::new("demo/crane.toml");
-    let config =
-        crane::config::read_config_toml_file(config_path).expect("Failed to load crane.toml");
+    let config_path = std::path::Path::new("tests/postgres/crane.toml");
+    let config = read_config_toml_file(config_path).expect("Failed to load crane.toml");
 
     //Deploy
     crane::commands::deploy::run(&config, config_path, true).expect("deploy failed");
@@ -98,13 +98,14 @@ fn test_restore_integrated_workflow() {
     println!("STORE pitr_time_insert_3: {}", pitr_time_insert_3);
 
     // ============================================================
-    // CREATE INCREMENTAL BACKUP #1
+    // CREATE INCREMENTAL BACKUP #1 (will auto-fallback to FULL after timeline change)
     // ============================================================
-    println!("Step 10: create incremental backup #1");
+    println!("Step 10: create incremental backup #1 (expects FULL fallback after restore)");
     std::thread::sleep(std::time::Duration::from_secs(2));
     let incr_backup_1 = backup_from_config_wrapper(&config, config_path, "incr")
         .expect("Incremental backup #1 failed");
-    assert_eq!(incr_backup_1.backup_type, "INCR");
+    // After restore, timeline changes so incremental auto-falls back to FULL
+    assert_eq!(incr_backup_1.backup_type, "FULL");
 
     // ============================================================
     // PREPARE DATA FOR PITR RESTORE #2
@@ -142,23 +143,13 @@ fn test_restore_integrated_workflow() {
     run_sql(&*interactor, "DROP TABLE integrated_test_table;");
 
     // ============================================================
-    // CREATE INCREMENTAL BACKUP #2
+    // CREATE INCREMENTAL BACKUP #2 (same timeline as backup #1, should be real INCR)
     // ============================================================
     println!("Step 12: create incremental backup #2");
     std::thread::sleep(std::time::Duration::from_secs(2));
     let incr_backup_2 = backup_from_config_wrapper(&config, config_path, "incr")
         .expect("Incremental backup #2 failed");
     assert_eq!(incr_backup_2.backup_type, "INCR");
-
-    //REMOVED: because already DROP above!
-    // println!("Step 13: DROP table");
-    // run_sql(&*interactor, "DROP TABLE integrated_test_table;");
-    // println!("Step 14: assert table is DROP");
-    // let exists = run_sql(
-    //     &*interactor,
-    //     "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'integrated_test_table');",
-    // );
-    // assert_eq!(exists, "f");
 
     // ============================================================
     // RESTORE FROM INCREMENTAL BACKUP #1

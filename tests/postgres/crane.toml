@@ -10,6 +10,26 @@ roles = ["app", "traefik", "postgres", "redis"]
 user = "crane"
 private_key = "keys/id_ed25519"
 
+[[nodes]]
+name = "vps2"
+host = "localhost"
+public_ip = "10.0.0.12"
+internal_ip = "10.0.0.12"
+port = 2222
+roles = ["postgres", "redis"]
+user = "crane"
+private_key = "keys/id_ed25519"
+
+[[nodes]]
+name = "vps3"
+host = "localhost"
+public_ip = "10.0.0.13"
+internal_ip = "10.0.0.13"
+port = 2223
+roles = ["postgres", "redis"]
+user = "crane"
+private_key = "keys/id_ed25519"
+
 [db.postgres]
 enabled = true
 version = "17"
