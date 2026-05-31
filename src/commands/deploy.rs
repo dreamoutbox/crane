@@ -50,26 +50,39 @@ pub async fn run(
         .cloned()
         .collect();
 
+    let mut handles = vec![];
     for node in &app_nodes {
-        println!(
-            "Installing dependencies on {}@{} (port: {}) {:?}",
-            node.user, node.name, node.port, all_deps
-        );
-        let private_key = find_private_key_for_user(&node.user, &config)?;
+        let node = node.clone();
+        let config = config.clone();
+        let all_deps = all_deps.clone();
 
-        let ssh = SSHSession::new(
-            node.host.clone(),
-            node.user.clone(),
-            private_key,
-            Some(node.port),
-        );
+        let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+            println!(
+                "Installing dependencies on {}@{} (port: {}) {:?}",
+                node.user, node.name, node.port, all_deps
+            );
+            let private_key = find_private_key_for_user(&node.user, &config)?;
 
-        //install required dependencies
-        let interactor = get_server_interactor(ssh)?;
-        interactor.install_dependencies(all_deps.clone())?;
+            let ssh = SSHSession::new(
+                node.host.clone(),
+                node.user.clone(),
+                private_key,
+                Some(node.port),
+            );
 
-        // install haproxy
-        crate::haproxy_unit::haproxy::install_haproxy(&*interactor)?;
+            //install required dependencies
+            let interactor = get_server_interactor(ssh)?;
+            interactor.install_dependencies(all_deps.clone())?;
+
+            // install haproxy
+            crate::haproxy_unit::haproxy::install_haproxy(&*interactor)?;
+
+            Ok(())
+        });
+        handles.push(handle);
+    }
+    for handle in handles {
+        handle.await??;
     }
 
     // Install postgres database cluster if enabled

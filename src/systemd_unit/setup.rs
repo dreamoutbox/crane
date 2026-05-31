@@ -44,7 +44,8 @@ WantedBy=multi-user.target
 
     interactor.cmd(&format!("sudo chown root:root '{}'", service_file_path))?;
     interactor.cmd(&format!("sudo chmod 644 '{}'", service_file_path))?;
-    interactor.cmd("sudo systemctl daemon-reload")?;
+
+    let _ = interactor.cmd("sudo systemctl daemon-reload")?;
 
     let _ = interactor.cmd(&format!("sudo systemctl enable '{}@'", app_name));
 

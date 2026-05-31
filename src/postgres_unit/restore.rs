@@ -8,7 +8,7 @@ use crate::{
     server_interactor::server_interactor_trait::ServerInteractor,
 };
 
-pub fn postgres_restore(
+pub async fn postgres_restore(
     config: &crate::config::Config,
     primary_node: &crate::config::NodeConfig,
     interactor: &dyn ServerInteractor,
@@ -65,41 +65,34 @@ pub fn postgres_restore(
         .cloned()
         .collect();
 
-    // 1. Stop Patroni and PostgreSQL on all nodes
+    // 1. Stop all Patroni and PostgreSQL on all nodes
+    let mut handles = vec![];
     for node in &pg_nodes {
-        println!(
-            "Stopping Patroni/PostgreSQL on node {} for restore",
-            node.name
-        );
+        let node = node.clone();
+        let config = config.clone();
 
-        let node_interactor = if node.internal_ip == primary_node.internal_ip {
-            None
-        } else {
-            match connect_to_node(node, config) {
-                Ok(int) => Some(int),
+        let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+            println!(
+                "Stopping Patroni/PostgreSQL on node {} for restore",
+                node.name
+            );
+
+            match connect_to_node(&node, &config) {
+                Ok(interactor) => {
+                    let _ = interactor.cmd("sudo systemctl stop patroni");
+                    let _ = interactor.cmd("sudo systemctl stop postgresql --no-block");
+                }
                 Err(e) => {
                     println!("Warning: failed to connect to node {}: {}", node.name, e);
-                    None
                 }
             }
-        };
+            Ok(())
+        });
 
-        let interactor = node_interactor.as_deref().unwrap_or(interactor);
-        let _ = interactor.cmd("sudo systemctl stop patroni");
-        let _ = interactor.cmd("sudo systemctl stop postgresql --no-block");
-        // let _ = int.cmd("sudo pkill -f patroni");
-
-        // let _ = int.cmd(&format!(
-        //     "sudo systemctl stop postgresql@{}-main --no-block",
-        //     pg_version
-        // ));
-
-        // let _ = int.cmd(&format!(
-        //     "sudo -u postgres {} -D {} stop -m immediate",
-        //     pg_ctl, pgdata_dir
-        // ));
-
-        // let _ = int.cmd("sudo pkill -u postgres -f postgres");
+        handles.push(handle);
+    }
+    for handle in handles {
+        handle.await??;
     }
 
     // 2. Clear DCS (etcd) keys for the cluster to prevent conflicts
@@ -107,31 +100,37 @@ pub fn postgres_restore(
     let _ = interactor.cmd("sudo env ETCDCTL_API=3 etcdctl del /service/postgres-cluster --prefix");
 
     // 3. Clear existing data directory on all nodes
+    let mut handles = vec![];
     for node in &pg_nodes {
-        println!("Clearing postgres data directory on node {}", node.name);
+        let node = node.clone();
+        let config = config.clone();
+        let pgdata_dir = pgdata_dir.clone();
 
-        let node_interactor = if node.internal_ip == primary_node.internal_ip {
-            None
-        } else {
-            match connect_to_node(node, config) {
-                Ok(int) => Some(int),
+        let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+            println!("Clearing postgres data directory on node {}", node.name);
+            match connect_to_node(&node, &config) {
+                Ok(interactor) => {
+                    let _ = interactor.cmd(&format!("sudo rm -rf {}", pgdata_dir));
+
+                    cmdw(
+                        &*interactor,
+                        &format!("sudo -u postgres mkdir -p {}", pgdata_dir),
+                    )?;
+
+                    cmdw(&*interactor, &format!("sudo chmod 700 {}", pgdata_dir))?;
+                    println!("Cleared postgres data directory on node {}", node.name);
+                }
                 Err(e) => {
                     println!("Warning: failed to connect to node {}: {}", node.name, e);
-                    None
                 }
             }
-        };
+            Ok(())
+        });
 
-        let interactor = node_interactor.as_deref().unwrap_or(interactor);
-
-        let _ = interactor.cmd(&format!("sudo rm -rf {}", pgdata_dir));
-        cmdw(
-            interactor,
-            &format!("sudo -u postgres mkdir -p {}", pgdata_dir),
-        )?;
-        cmdw(interactor, &format!("sudo chmod 700 {}", pgdata_dir))?;
-
-        println!("Cleared postgres data directory on node {}", node.name);
+        handles.push(handle);
+    }
+    for handle in handles {
+        handle.await??;
     }
 
     // 2. Download all backups in the chain from S3 to VPS local backups dir
@@ -333,7 +332,7 @@ pub fn postgres_restore(
         }
     }
 
-    // 6. Set ownership and start service
+    // 6. Set ownership
     cmdw(
         interactor,
         &format!("sudo chown -R postgres:postgres {}", pgdata_dir),
@@ -356,6 +355,7 @@ pub fn postgres_restore(
             target_time
         );
         let b64 = base64_encode(&pitr_conf_content);
+
         cmdw(
             interactor,
             &format!(
@@ -447,7 +447,7 @@ pub fn postgres_restore(
             .unwrap_or_default();
 
         anyhow::bail!(
-            "Timeout waiting for primary node to become Patroni leader. Logs:\n{}",
+            "Timeout waiting for primary node to become Patroni leader. Logs:\n\n{}",
             logs
         );
     }
@@ -467,14 +467,25 @@ pub fn postgres_restore(
     }
 
     // Start Patroni on replica nodes
+    let mut handles = vec![];
     for node in &pg_nodes {
         if node.internal_ip == primary_node.internal_ip {
             continue;
         }
+        let node = node.clone();
+        let config = config.clone();
 
-        println!("Starting Patroni on replica node {}...", node.name);
-        let node_interactor = connect_to_node(node, config)?;
-        cmdw(&*node_interactor, "sudo systemctl restart patroni")?;
+        let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+            println!("Starting Patroni on replica node {}...", node.name);
+            let node_interactor = connect_to_node(&node, &config)?;
+            cmdw(&*node_interactor, "sudo systemctl restart patroni")?;
+            Ok(())
+        });
+
+        handles.push(handle);
+    }
+    for handle in handles {
+        handle.await??;
     }
 
     // Wait for all replica nodes to join and reach "running" state
@@ -489,6 +500,7 @@ pub fn postgres_restore(
             if let Ok(out) = interactor.cmd(list_cmd) {
                 let output = out.stdout;
                 let mut all_running = true;
+
                 for node in &pg_nodes {
                     let node_line = output.lines().find(|l| l.contains(&node.name));
                     // dbg!(&node_line);

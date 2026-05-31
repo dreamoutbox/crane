@@ -40,67 +40,59 @@ pub async fn postgres_setup_wrapper(
     }
 
     // Phase 1: Install & configure etcd and Patroni on all postgres nodes (no starts yet)
+    let mut handles = vec![];
     for node in &pg_nodes {
-        println!("Configuring node {}...", node.name);
+        let node = node.clone();
+        let config = config.clone();
+        let pg_nodes = pg_nodes.clone();
+        let pg_version = pg_version.clone();
+        let replica_pass = replica_pass.clone();
 
-        let private_key = find_private_key_for_user(&node.user, config)?;
-        let ssh = SSHSession::new(
-            node.host.clone(),
-            node.user.clone(),
-            private_key,
-            Some(node.port),
-        );
-        let interactor = get_server_interactor(ssh)?;
+        let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+            println!("Configuring node {}...", node.name);
 
-        // Ensure postgres binaries are installed first
-        install_postgres(&*interactor, &pg_version)?;
+            let private_key = find_private_key_for_user(&node.user, &config)?;
+            let ssh = SSHSession::new(
+                node.host.clone(),
+                node.user.clone(),
+                private_key,
+                Some(node.port),
+            );
+            let interactor = get_server_interactor(ssh)?;
 
-        // Install & configure etcd (configure only, do NOT start yet)
-        etcd::install_etcd(&*interactor)?;
-        etcd::setup_etcd(&*interactor, node, &pg_nodes)?;
+            // Ensure postgres binaries are installed first
+            install_postgres(&*interactor, &pg_version)?;
 
-        // Stop & disable standard postgresql systemd service
-        println!("\tStopping and disabling standard PostgreSQL service...");
-        let _stop_res = interactor.cmd("sudo systemctl stop postgresql");
-        // dbg!(&stop_res);
+            // Install & configure etcd (configure only, do NOT start yet)
+            etcd::install_etcd(&*interactor)?;
+            etcd::setup_etcd(&*interactor, &node, &pg_nodes)?;
 
-        // let stop2_res = interactor.cmd(&format!(
-        //     "sudo systemctl stop postgresql@{}-main",
-        //     pg_version
-        // ));
-        // dbg!(&stop2_res);
+            // Stop & disable standard postgresql systemd service
+            println!("\tStopping and disabling standard PostgreSQL service...");
+            let _stop_res = interactor.cmd("sudo systemctl stop postgresql");
+            let _disable_pg_res = interactor.cmd("sudo systemctl disable postgresql");
 
-        // let kill_res = interactor.cmd("sudo pkill -u postgres -f postgres");
-        // dbg!(&kill_res);
+            // Stop and kill Patroni before cleaning up config and bootstrapping
+            let _stop_patroni_res = interactor.cmd("sudo systemctl stop patroni");
 
-        // std::thread::sleep(std::time::Duration::from_millis(500));
+            // Backup existing postgres main directory
+            //or failed boot directory if present
+            backup_postgres_dir(&pg_version, &interactor)?;
 
-        let _disable_pg_res = interactor.cmd("sudo systemctl disable postgresql");
-        // dbg!(&disable_pg_res);
+            // Configure WAL archive directory
+            interactor.cmd("sudo mkdir -p /var/lib/postgresql/wal_archive")?;
+            interactor.cmd("sudo chown postgres:postgres /var/lib/postgresql/wal_archive")?;
+            interactor.cmd("sudo chmod 700 /var/lib/postgresql/wal_archive")?;
 
-        // let _disable2_pg_res = interactor.cmd(&format!(
-        //     "sudo systemctl disable postgresql@{}-main",
-        //     pg_version
-        // ));
-        // dbg!(&disable2_pg_res);
+            install_patroni(&pg_version, &replica_pass, &pg_nodes, &node, interactor)?;
 
-        // Stop and kill Patroni before cleaning up config and bootstrapping
-        let _stop_patroni_res = interactor.cmd("sudo systemctl stop patroni");
-        // dbg!(&stop_patroni_res);
+            Ok(())
+        });
 
-        // let kill_patroni_res = interactor.cmd("sudo pkill -f patroni");
-        // dbg!(&kill_patroni_res);
-
-        // Backup existing postgres main directory
-        //or failed boot directory if present
-        backup_postgres_dir(&pg_version, &interactor)?;
-
-        // Configure WAL archive directory
-        interactor.cmd("sudo mkdir -p /var/lib/postgresql/wal_archive")?;
-        interactor.cmd("sudo chown postgres:postgres /var/lib/postgresql/wal_archive")?;
-        interactor.cmd("sudo chmod 700 /var/lib/postgresql/wal_archive")?;
-
-        install_patroni(&pg_version, &replica_pass, &pg_nodes, node, interactor)?;
+        handles.push(handle);
+    }
+    for handle in handles {
+        handle.await??;
     }
 
     // Phase 2: Start etcd on all nodes simultaneously so they form quorum together
@@ -110,6 +102,7 @@ pub async fn postgres_setup_wrapper(
     for node in &pg_nodes {
         let node = node.clone();
         let config = config.clone();
+
         let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
             let private_key = find_private_key_for_user(&node.user, &config)?;
             let ssh = SSHSession::new(
@@ -119,9 +112,12 @@ pub async fn postgres_setup_wrapper(
                 Some(node.port),
             );
             let interactor = get_server_interactor(ssh)?;
+
             etcd::start_etcd(&*interactor)?;
+
             Ok(())
         });
+
         handles.push(handle);
     }
 
@@ -155,6 +151,7 @@ pub async fn postgres_setup_wrapper(
     for node in &pg_nodes {
         let node = node.clone();
         let config = config.clone();
+
         let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
             let private_key = find_private_key_for_user(&node.user, &config)?;
             let ssh = SSHSession::new(

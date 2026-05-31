@@ -10,6 +10,9 @@ pub fn install_etcd(interactor: &dyn ServerInteractor) -> anyhow::Result<()> {
         println!("\tInstalling etcd-server and etcd-client...");
         interactor
             .install_dependencies(vec!["etcd-server".to_string(), "etcd-client".to_string()])?;
+
+        interactor.cmd("sudo systemctl daemon-reload")?;
+        interactor.cmd("sudo systemctl enable etcd")?;
     } else {
         println!("\tetcd is already installed.");
     }
@@ -66,10 +69,6 @@ ETCD_ADVERTISE_CLIENT_URLS="http://{}:2379"
     interactor.create_file(etcd_default_path, &etcd_default)?;
     interactor.cmd(&format!("sudo chown root:root '{}'", etcd_default_path))?;
     interactor.cmd(&format!("sudo chmod 644 '{}'", etcd_default_path))?;
-
-    interactor.cmd("sudo systemctl daemon-reload")?;
-
-    interactor.cmd("sudo systemctl enable etcd")?;
 
     Ok(())
 }

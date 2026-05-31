@@ -186,6 +186,7 @@ pub fn postgres_get_leader(config: &config::Config) -> anyhow::Result<Option<con
             }
         }
     }
+
     Ok(None)
 }
 

@@ -11,7 +11,7 @@ async fn test_promote() {
     crane::commands::deploy::run(&config, config_path, true).await.expect("deploy failed");
 
     // get existing postgres cluster status
-    let status = crane::commands::postgres_status::get_postgres_status_wrapper(&config)
+    let status = crane::commands::postgres_status::get_postgres_status_wrapper(&config).await
         .expect("Failed to get postgres status");
 
     // get a follower node
@@ -29,7 +29,7 @@ async fn test_promote() {
     let mut promoted_node_is_leader = false;
     let mut new_status = None;
     for _ in 0..15 {
-        if let Ok(st) = crane::commands::postgres_status::get_postgres_status_wrapper(&config) {
+        if let Ok(st) = crane::commands::postgres_status::get_postgres_status_wrapper(&config).await {
             if let Some(node) = st.postgres.iter().find(|n| n.hostname == follower.hostname) {
                 if node.role == "Leader" && st.haproxy.primary == follower.hostname {
                     promoted_node_is_leader = true;

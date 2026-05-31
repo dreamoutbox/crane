@@ -3,7 +3,7 @@ use crate::postgres_unit::{
     helper::connect_to_node,
 };
 
-pub fn get_postgres_status_wrapper(
+pub async fn get_postgres_status_wrapper(
     config: &crate::config::Config,
 ) -> anyhow::Result<PostgresStatusOutput> {
     let pg_nodes: Vec<_> = config
@@ -34,73 +34,96 @@ pub fn get_postgres_status_wrapper(
     let mut haproxy_status = "Unhealthy".to_string();
     let mut haproxy_active_count = 0;
 
+    let mut handles = vec![];
+
     for node in &pg_nodes {
-        let address = format!("{}:{}", node.public_ip, node.port);
-        let mut hostname = node.host.clone();
-        let mut role = "Unknown".to_string();
-        let mut version = pg_version_config.clone();
-        let mut status = "Unhealthy".to_string();
+        let node = node.clone();
+        let config = config.clone();
+        let pg_version_config = pg_version_config.clone();
 
-        match connect_to_node(node, &config) {
-            Ok(interactor) => {
-                // 1. Get Hostname
-                if let Ok(h) = interactor.cmd("hostname") {
-                    let h_trimmed = h.stdout.trim();
-                    if !h_trimmed.is_empty() {
-                        hostname = h_trimmed.to_string();
+        let handle = tokio::task::spawn_blocking(move || -> (PostgresNode, bool) {
+            let address = format!("{}:{}", node.public_ip, node.port);
+            let mut hostname = node.host.clone();
+            let mut role = "Unknown".to_string();
+            let mut version = pg_version_config;
+            let mut status = "Unhealthy".to_string();
+            let mut haproxy_active = false;
+
+            match connect_to_node(&node, &config) {
+                Ok(interactor) => {
+                    // 1. Get Hostname
+                    if let Ok(h) = interactor.cmd("hostname") {
+                        let h_trimmed = h.stdout.trim();
+                        if !h_trimmed.is_empty() {
+                            hostname = h_trimmed.to_string();
+                        }
                     }
-                }
 
-                // 2. Check Recovery & DB Version
-                let recovery_cmd =
-                    r#"sudo -u postgres psql -t -A -c "select pg_is_in_recovery();""#;
-                let version_cmd = r#"sudo -u postgres psql -t -A -c "show server_version;""#;
+                    // 2. Check Recovery & DB Version
+                    let recovery_cmd =
+                        r#"sudo -u postgres psql -t -A -c "select pg_is_in_recovery();""#;
+                    let version_cmd = r#"sudo -u postgres psql -t -A -c "show server_version;""#;
 
-                let is_recovery = interactor.cmd(recovery_cmd);
-                let db_ver_str = interactor.cmd(version_cmd);
+                    let is_recovery = interactor.cmd(recovery_cmd);
+                    let db_ver_str = interactor.cmd(version_cmd);
 
-                if let Ok(rec) = is_recovery {
-                    let rec_trimmed = rec.stdout.trim();
-                    if rec_trimmed == "f" {
-                        role = "Leader".to_string();
-                        status = "Healthy".to_string();
-
-                        pg_primary_host = hostname.clone();
-                    } else if rec_trimmed == "t" {
-                        role = "Follower".to_string();
-                        status = "Healthy".to_string();
+                    if let Ok(rec) = is_recovery {
+                        let rec_trimmed = rec.stdout.trim();
+                        if rec_trimmed == "f" {
+                            role = "Leader".to_string();
+                            status = "Healthy".to_string();
+                        } else if rec_trimmed == "t" {
+                            role = "Follower".to_string();
+                            status = "Healthy".to_string();
+                        }
                     }
-                }
 
-                if let Ok(v_str) = db_ver_str {
-                    let v_trimmed = v_str.stdout.trim();
-                    if let Some(major) = v_trimmed.split('.').next() {
-                        let major_clean = major.trim();
-                        if !major_clean.is_empty() {
-                            version = major_clean.to_string();
+                    if let Ok(v_str) = db_ver_str {
+                        let v_trimmed = v_str.stdout.trim();
+                        if let Some(major) = v_trimmed.split('.').next() {
+                            let major_clean = major.trim();
+                            if !major_clean.is_empty() {
+                                version = major_clean.to_string();
+                            }
+                        }
+                    }
+
+                    if let Ok(output) = interactor.cmd("systemctl is-active haproxy") {
+                        if output.stdout.trim() == "active" {
+                            haproxy_active = true;
                         }
                     }
                 }
 
-                if let Ok(output) = interactor.cmd("systemctl is-active haproxy") {
-                    if output.stdout.trim() == "active" {
-                        haproxy_active_count += 1;
-                    }
+                Err(_) => {
+                    // SSH connection failure defaults to Unhealthy
                 }
             }
 
-            Err(_) => {
-                // SSH connection failure defaults to Unhealthy
-            }
-        }
-
-        pgs.push(PostgresNode {
-            hostname,
-            address,
-            role,
-            version,
-            status,
+            (
+                PostgresNode {
+                    hostname,
+                    address,
+                    role,
+                    version,
+                    status,
+                },
+                haproxy_active,
+            )
         });
+
+        handles.push(handle);
+    }
+
+    for handle in handles {
+        let (node_info, is_haproxy_active) = handle.await?;
+        if node_info.role == "Leader" {
+            pg_primary_host = node_info.hostname.clone();
+        }
+        if is_haproxy_active {
+            haproxy_active_count += 1;
+        }
+        pgs.push(node_info);
     }
 
     if haproxy_active_count == app_nodes.len() {
@@ -129,8 +152,8 @@ pub fn get_postgres_status_wrapper(
     Ok(status_output)
 }
 
-pub fn run_postgres_status_command(config: &crate::config::Config) -> anyhow::Result<()> {
-    let status = get_postgres_status_wrapper(config)?;
+pub async fn run_postgres_status_command(config: &crate::config::Config) -> anyhow::Result<()> {
+    let status = get_postgres_status_wrapper(config).await?;
 
     // Print expected output format
     println!("\nHAProxy");
