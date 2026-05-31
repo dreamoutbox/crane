@@ -1,18 +1,6 @@
 use s3::{Bucket, creds::Credentials};
 
-#[derive(Debug, Clone)]
-pub struct S3Config {
-    pub bucket: String,
-    pub region: String,
-    pub endpoint: Option<String>,
-    pub access_key: String,
-    pub secret_key: String,
-}
-
-pub trait S3Client {
-    fn put_object(&self, key: &str, data: &[u8]) -> anyhow::Result<()>;
-    fn get_object(&self, key: &str) -> anyhow::Result<Vec<u8>>;
-}
+use crate::s3::{S3Client, S3Config};
 
 pub struct RealS3Client {
     pub bucket: Box<Bucket>,

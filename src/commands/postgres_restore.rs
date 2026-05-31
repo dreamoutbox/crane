@@ -12,6 +12,13 @@ pub fn run_restore_cmd(
     base_id: Option<&str>,   // --base: stop chain walk here (inclusive)
     pitr_time: Option<&str>, // --pitr "YYYY-MM-DD HH:MM:SS" UTC
 ) -> anyhow::Result<()> {
+    println!(
+        "\nStart restore: target_backup_id={} base_id={} pitr_time={}\n",
+        target_backup_id,
+        base_id.as_deref().unwrap_or("NONE"),
+        pitr_time.as_deref().unwrap_or("NONE")
+    );
+
     let s3_config = get_s3_config(&config)?;
     let primary_node = match postgres_get_leader(&config)? {
         Some(node) => node,
@@ -119,7 +126,7 @@ pub fn run_restore_cmd(
         pitr_time,
     )?;
 
-    println!("Restore complete! PostgreSQL is online.");
+    println!("Restore complete!\n");
 
     Ok(())
 }

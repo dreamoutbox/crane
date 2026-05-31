@@ -2,7 +2,7 @@ use crate::config::{self, PostgresBackupSchedule, PostgresDbConfig, PostgresUser
 use crate::helper::cron::interval_to_cron;
 use crate::postgres_unit::entity::{BackupMetadata, BackupRegistry};
 use crate::postgres_unit::python_backup_script::PYTHON_BACKUP_SCRIPT;
-use crate::s3::s3_client::S3Client;
+use crate::s3::S3Client;
 use crate::server_interactor::get_server_interactor;
 use crate::server_interactor::server_interactor_trait::ServerInteractor;
 use crate::ssh::SSHSession;
@@ -469,7 +469,7 @@ pub fn configure_postgres_backup(
     config: &config::Config,
 ) -> anyhow::Result<()> {
     if let Some(schedule) = get_postgres_backup_schedule(config) {
-        println!("\n\tSetting up automated cron backups...");
+        println!("\tSetting up automated cron backups...");
 
         // Resolve S3Config
         let s3_config = crate::s3::get_s3_config(config)?;
@@ -530,4 +530,14 @@ pub fn configure_postgres_backup(
     }
 
     Ok(())
+}
+
+pub fn get_postgres_current_timeline_id(
+    interactor: &dyn ServerInteractor,
+) -> anyhow::Result<String> {
+    let db_tli_out = interactor.cmd(
+        r#"sudo -u postgres psql -t -A -c "SELECT timeline_id FROM pg_control_checkpoint();""#,
+    )?;
+    let current_timeline_id = db_tli_out.stdout.trim().to_string();
+    Ok(current_timeline_id)
 }

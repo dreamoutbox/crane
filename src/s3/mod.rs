@@ -1,6 +1,20 @@
-use crate::{config, s3::s3_client::S3Config};
+use crate::config;
 
 pub mod s3_client;
+
+#[derive(Debug, Clone)]
+pub struct S3Config {
+    pub bucket: String,
+    pub region: String,
+    pub endpoint: Option<String>,
+    pub access_key: String,
+    pub secret_key: String,
+}
+
+pub trait S3Client {
+    fn put_object(&self, key: &str, data: &[u8]) -> anyhow::Result<()>;
+    fn get_object(&self, key: &str) -> anyhow::Result<Vec<u8>>;
+}
 
 pub fn get_s3_config(config: &config::Config) -> anyhow::Result<S3Config> {
     let s3_config = config

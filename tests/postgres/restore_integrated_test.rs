@@ -23,23 +23,17 @@ fn test_restore_integrated_workflow() {
     let interactor = crane::postgres_unit::helper::connect_to_node(&primary_node, &config)
         .expect("Failed to connect to primary node");
 
-    println!("Step 1: DROP and CREATE integrated_test_table");
+    println!("Step 1: DROP and CREATE test_table");
     run_sql(
         &*interactor,
-        "DROP TABLE IF EXISTS integrated_test_table; CREATE TABLE integrated_test_table (id INT);",
+        "DROP TABLE IF EXISTS test_table; CREATE TABLE test_table (id INT);",
     );
 
-    println!("Step 2: insert 1 to integrated_test_table");
-    run_sql(
-        &*interactor,
-        "INSERT INTO integrated_test_table VALUES (1);",
-    );
+    println!("Step 2: insert 1 to test_table");
+    run_sql(&*interactor, "INSERT INTO test_table VALUES (1);");
 
-    println!("Step 3: insert 2 to integrated_test_table");
-    run_sql(
-        &*interactor,
-        "INSERT INTO integrated_test_table VALUES (2);",
-    );
+    println!("Step 3: insert 2 to test_table");
+    run_sql(&*interactor, "INSERT INTO test_table VALUES (2);");
 
     // ============================================================
     // FULL BACKUP #1
@@ -52,12 +46,12 @@ fn test_restore_integrated_workflow() {
     // ============================================================
     // SIMULATE DATA LOSS
     // ============================================================
-    println!("Step 5: DROP integrated_test_table");
-    run_sql(&*interactor, "DROP TABLE integrated_test_table;");
+    println!("Step 5: DROP test_table (SIMULATE DATA LOSS)");
+    run_sql(&*interactor, "DROP TABLE test_table;");
     println!("Step 6: assert table is DROP");
     let exists = run_sql(
         &*interactor,
-        "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'integrated_test_table');",
+        "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'test_table');",
     );
     assert_eq!(exists, "f");
 
@@ -75,10 +69,7 @@ fn test_restore_integrated_workflow() {
         .expect("Failed to reconnect to primary node");
 
     println!("Step 8: assert table have 1,2 in table");
-    let rows = run_sql(
-        &*interactor,
-        "SELECT id FROM integrated_test_table ORDER BY id;",
-    );
+    let rows = run_sql(&*interactor, "SELECT id FROM test_table ORDER BY id;");
     assert_eq!(rows, "1\n2");
 
     // ============================================================
@@ -87,7 +78,7 @@ fn test_restore_integrated_workflow() {
     println!("Step 9: insert 3 to table");
     let pitr_time_insert_3 = run_sql(
         &*interactor,
-        "INSERT INTO integrated_test_table VALUES (3) RETURNING to_char(clock_timestamp() + interval '1 second' , 'YYYY-MM-DD HH24:MI:SS');", //TEMP:clock_timestamp() + interval '1 second'
+        "INSERT INTO test_table VALUES (3) RETURNING to_char(clock_timestamp() + interval '1 second' , 'YYYY-MM-DD HH24:MI:SS');", //TEMP:clock_timestamp() + interval '1 second'
     );
     let pitr_time_insert_3 = pitr_time_insert_3
         .lines()
@@ -113,7 +104,7 @@ fn test_restore_integrated_workflow() {
     println!("Step 11: insert 4 to table");
     let pitr_time_insert_4 = run_sql(
         &*interactor,
-        "INSERT INTO integrated_test_table VALUES (4) RETURNING to_char(clock_timestamp(), 'YYYY-MM-DD HH24:MI:SS');",
+        "INSERT INTO test_table VALUES (4) RETURNING to_char(clock_timestamp(), 'YYYY-MM-DD HH24:MI:SS');",
     );
     let pitr_time_insert_4 = pitr_time_insert_4
         .lines()
@@ -140,7 +131,8 @@ fn test_restore_integrated_workflow() {
     println!("STORE pitr_time_before_drop: {}", pitr_time_before_drop);
 
     std::thread::sleep(std::time::Duration::from_secs(1));
-    run_sql(&*interactor, "DROP TABLE integrated_test_table;");
+    println!("Step 11.5: DROP test_table (SIMULATE DATA LOSS)");
+    run_sql(&*interactor, "DROP TABLE test_table;");
 
     // ============================================================
     // CREATE INCREMENTAL BACKUP #2 (same timeline as backup #1, should be real INCR)
@@ -174,21 +166,18 @@ fn test_restore_integrated_workflow() {
         .expect("Failed to reconnect to primary node");
 
     println!("Step 16: assert table have 1,2,3 in table");
-    let rows = run_sql(
-        &*interactor,
-        "SELECT id FROM integrated_test_table ORDER BY id;",
-    );
+    let rows = run_sql(&*interactor, "SELECT id FROM test_table ORDER BY id;");
     assert_eq!(rows, "1\n2\n3");
 
     // ============================================================
     // SIMULATE DATA LOSS
     // ============================================================
-    println!("Step 17: DROP integrated_test_table");
-    run_sql(&*interactor, "DROP TABLE integrated_test_table;");
+    println!("Step 17: DROP test_table (SIMULATE DATA LOSS)");
+    run_sql(&*interactor, "DROP TABLE test_table;");
     println!("Step 18: assert table is DROP");
     let exists = run_sql(
         &*interactor,
-        "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'integrated_test_table');",
+        "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'test_table');",
     );
     assert_eq!(exists, "f");
 
@@ -215,10 +204,7 @@ fn test_restore_integrated_workflow() {
         .expect("Failed to reconnect to primary node");
 
     println!("Step 20: assert table have 1,2,3,4 in table");
-    let rows = run_sql(
-        &*interactor,
-        "SELECT id FROM integrated_test_table ORDER BY id;",
-    );
+    let rows = run_sql(&*interactor, "SELECT id FROM test_table ORDER BY id;");
     assert_eq!(rows, "1\n2\n3\n4");
 }
 
@@ -228,23 +214,3 @@ pub fn run_sql(interactor: &dyn ServerInteractor, sql: &str) -> String {
     assert_eq!(out.exit_code, 0, "SQL failed: {}", out.stderr);
     out.stdout.trim().to_string()
 }
-
-// ============================================================
-
-// std::thread::sleep(std::time::Duration::from_secs(1));
-// println!("Step 11: insert 5 to table");
-// let pitr_time_insert_5 = run_sql(
-//     &*interactor,
-//     "INSERT INTO integrated_test_table VALUES (5) RETURNING to_char(clock_timestamp(), 'YYYY-MM-DD HH24:MI:SS');",
-// );
-// let pitr_time_insert_5 = pitr_time_insert_5
-//     .lines()
-//     .map(|s| s.trim())
-//     .find(|s| s.len() == 19 && s.chars().nth(4) == Some('-') && s.chars().nth(13) == Some(':'))
-//     .unwrap_or("")
-//     .to_string();
-// println!("STORE pitr_time_insert_5: {}", pitr_time_insert_5);
-
-//forces the database to immediately close the current Write-Ahead Log (WAL) file
-//and start writing to a new one
-// run_sql(&*interactor, "SELECT pg_switch_wal();");

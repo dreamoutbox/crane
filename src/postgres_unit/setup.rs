@@ -145,6 +145,7 @@ pub fn postgres_setup_wrapper(
             Some(node.port),
         );
         let interactor = get_server_interactor(ssh)?;
+
         println!("\tStarting Patroni on node {}...", node.name);
         interactor.cmd("sudo systemctl restart patroni --no-block")?;
 
@@ -178,7 +179,7 @@ pub fn postgres_setup_wrapper(
 
             anyhow::bail!("Patroni failed to start on node {}", node.name);
         } else {
-            println!("\n====Patroni started successfully on node {}\n", node.name);
+            println!("Patroni started successfully on node {}", node.name);
         }
     }
 
@@ -256,7 +257,7 @@ pub fn setup_postgres_primary(
     for user in user_configs {
         let user_state = user.state.as_deref().unwrap_or("present");
 
-        println!("user {} state is {}", user.user, user_state);
+        println!("\tuser {} state is {}", user.user, user_state);
 
         if user_state == "absent" {
             println!("\tRemoving user '{}'...", user.user);

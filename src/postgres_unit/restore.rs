@@ -4,7 +4,7 @@ use crate::{
         entity::BackupMetadata,
         helper::{cmdw, connect_to_node},
     },
-    s3::s3_client::S3Client,
+    s3::S3Client,
     server_interactor::server_interactor_trait::ServerInteractor,
 };
 

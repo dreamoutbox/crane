@@ -1,9 +1,9 @@
 use crate::{
     postgres_unit::{
         entity::{BackupMetadata, BackupRegistry},
-        helper::{cmdw, get_backups_from_s3},
+        helper::{cmdw, get_backups_from_s3, get_postgres_current_timeline_id},
     },
-    s3::s3_client::S3Client,
+    s3::S3Client,
     server_interactor::server_interactor_trait::ServerInteractor,
 };
 
@@ -103,18 +103,21 @@ pub fn postgres_backup(
                 "sudo -u postgres python3 -c \"import json; m=json.load(open('{}')); print(next(iter(m.get('WAL-Ranges', [])), {{}}).get('Timeline', 0))\"",
                 parent_manifest
             ))?;
-            let parent_tli = parent_tli_out.stdout.trim();
+            let parent_timeline_id = parent_tli_out.stdout.trim();
 
-            let db_tli_out = interactor.cmd(
-                r#"sudo -u postgres psql -t -A -c "SELECT timeline_id FROM pg_control_checkpoint();""#
-            )?;
-            let db_tli = db_tli_out.stdout.trim();
+            let current_timeline_id = get_postgres_current_timeline_id(interactor)?;
 
-            if !parent_tli.is_empty() && !db_tli.is_empty() && parent_tli != db_tli {
+            if !parent_timeline_id.is_empty()
+                && !current_timeline_id.is_empty()
+                && parent_timeline_id != current_timeline_id
+            {
                 println!(
-                    "\n!!!!!!!!!!!!!!!\nTimeline mismatch detected: parent backup timeline is {}, but current database timeline is {}. \
-                     Falling back to a full backup.\n!!!!!!!!!!!!!!!\n",
-                    parent_tli, db_tli
+                    "\n!!!!!!!!!!!!!!!\n
+Timeline mismatch detected: parent backup timeline is {},
+but current database timeline is {}. 
+Falling back to a full backup.
+\n!!!!!!!!!!!!!!!\n",
+                    parent_timeline_id, current_timeline_id
                 );
 
                 is_incr = false;
@@ -164,6 +167,7 @@ pub fn postgres_backup(
                 let debug_state = interactor.cmd(
                     r#"sudo -u postgres psql -t -A -c "SELECT summarized_lsn, pending_lsn FROM pg_get_wal_summarizer_state();""#
                 )?;
+
                 anyhow::bail!(
                     "WAL summarizer did not catch up to target {} after {}s. State: {}",
                     target_lsn,
@@ -182,7 +186,7 @@ pub fn postgres_backup(
     }
 
     // 5. Run pg_basebackup
-    println!("\nRunning pg_basebackup command: {}", pgbasebackup_cmd);
+    println!("\nRunning pg_basebackup command: {}\n", pgbasebackup_cmd);
     let pgbasebackup_out = interactor.cmd(&pgbasebackup_cmd)?;
     if pgbasebackup_out.exit_code != 0 {
         let _ = interactor.cmd(&format!("sudo rm -rf {}", local_path));
@@ -237,7 +241,7 @@ pub fn postgres_backup(
     )?;
 
     let verify_cmd = format!("sudo -u postgres {} {}", pg_verifybackup, verify_dir);
-    println!("\nRunning pg_verifybackup command: {}", verify_cmd);
+    println!("Running pg_verifybackup command: {}", verify_cmd);
     let verify_out = interactor.cmd(&verify_cmd)?;
 
     // Clean up verify directory
@@ -245,6 +249,7 @@ pub fn postgres_backup(
 
     if verify_out.exit_code != 0 {
         let _ = interactor.cmd(&format!("sudo rm -rf {}", local_path));
+
         anyhow::bail!(
             "pg_verifybackup verification failed with exit code {}: {}",
             verify_out.exit_code,
@@ -321,7 +326,11 @@ pub fn postgres_backup(
         "sudo chmod 644 /var/lib/postgresql/backups/registry.toml",
     )?;
 
-    println!("\nBACKUP {} {:?} completed\n", id, meta.taken_at);
+    println!(
+        "\nBACKUP {} {} completed\n",
+        id,
+        meta.taken_at.as_deref().unwrap_or("unknown").to_string()
+    );
 
     Ok(meta)
 }

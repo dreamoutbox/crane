@@ -1,5 +1,5 @@
 use crane::postgres_unit::entity::BackupMetadata;
-use crane::s3::s3_client::S3Client;
+use crane::s3::S3Client;
 use crane::server_interactor::server_interactor_trait::ServerInteractor;
 use crane::ssh::CmdOutput;
 

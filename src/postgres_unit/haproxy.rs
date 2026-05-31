@@ -105,7 +105,7 @@ pub fn setup_haproxy_each_nodes_wrapper(
     follower_ips: Vec<String>,
 ) -> Result<(), anyhow::Error> {
     Ok(for app_node in app_nodes {
-        println!("\n\tSetting up HAProxy on app node {}...", app_node.name);
+        println!("\tSetting up HAProxy on app node {}...", app_node.name);
 
         let private_key = find_private_key_for_user(&app_node.user, config)?;
         let ssh = SSHSession::new(
