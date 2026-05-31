@@ -1,12 +1,11 @@
-use crate::ssh::SSHSession;
-
+use crate::{server_interactor::server_interactor_trait::ServerInteractor, ssh::SSHSession};
 pub mod debian;
 pub mod server_interactor_trait;
 
 /// wrapper to get server interactor from ssh session
 pub fn get_server_interactor(
     ssh: SSHSession,
-) -> anyhow::Result<Box<dyn server_interactor_trait::ServerInteractor>> {
+) -> anyhow::Result<Box<dyn ServerInteractor + Send + Sync>> {
     let distro = get_server_distro(&ssh)?;
 
     get_interactor_for_distro(ssh, &distro)
@@ -29,7 +28,7 @@ fn get_server_distro(ssh: &SSHSession) -> anyhow::Result<String> {
 fn get_interactor_for_distro(
     ssh: SSHSession,
     distro: &str,
-) -> anyhow::Result<Box<dyn server_interactor_trait::ServerInteractor>> {
+) -> anyhow::Result<Box<dyn ServerInteractor + Send + Sync>> {
     match distro {
         "debian" | "ubuntu" => Ok(Box::new(debian::DebianInteractor::new(ssh))),
         other => anyhow::bail!("Unsupported server distribution: {}", other),

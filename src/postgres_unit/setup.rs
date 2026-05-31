@@ -4,7 +4,7 @@ use crate::{
     helper::keys::find_private_key_for_user,
     postgres_unit::{
         etcd,
-        helper::{configure_postgres_backup, connect_to_node, get_postgres_configs},
+        helper::{configure_postgres_backup, get_postgres_configs},
         install::install_postgres,
         patroni::install_patroni,
     },
@@ -39,177 +39,129 @@ pub async fn postgres_setup_wrapper(
         return Ok(());
     }
 
-    // Phase 1: Install & configure etcd and Patroni on all postgres nodes (no starts yet)
+    // Phase 1, 2, and 3 coordinated across all postgres nodes concurrently using Barriers
+    let num_nodes = pg_nodes.len();
+    let barrier_installed = std::sync::Arc::new(std::sync::Barrier::new(num_nodes));
+    let barrier_etcd_started = std::sync::Arc::new(std::sync::Barrier::new(num_nodes));
+    let barrier_quorum = std::sync::Arc::new(std::sync::Barrier::new(num_nodes));
+
     let mut handles = vec![];
-    for node in &pg_nodes {
+    for (i, node) in pg_nodes.iter().enumerate() {
         let node = node.clone();
         let config = config.clone();
         let pg_nodes = pg_nodes.clone();
         let pg_version = pg_version.clone();
         let replica_pass = replica_pass.clone();
 
-        let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
-            println!("Configuring node {}...", node.name);
+        let barrier_installed = barrier_installed.clone();
+        let barrier_etcd_started = barrier_etcd_started.clone();
+        let barrier_quorum = barrier_quorum.clone();
+        let is_first = i == 0;
 
-            let private_key = find_private_key_for_user(&node.user, &config)?;
-            let ssh = SSHSession::new(
-                node.host.clone(),
-                node.user.clone(),
-                private_key,
-                Some(node.port),
-            );
-            let interactor = get_server_interactor(ssh)?;
+        let handle = tokio::task::spawn_blocking(
+            move || -> anyhow::Result<(String, Box<dyn ServerInteractor + Send + Sync>)> {
+                println!("Configuring node {}...", node.name);
 
-            // Ensure postgres binaries are installed first
-            install_postgres(&*interactor, &pg_version)?;
+                let private_key = find_private_key_for_user(&node.user, &config)?;
+                let ssh = SSHSession::new(
+                    node.host.clone(),
+                    node.user.clone(),
+                    private_key,
+                    Some(node.port),
+                );
+                let interactor = get_server_interactor(ssh)?;
 
-            // Install & configure etcd (configure only, do NOT start yet)
-            etcd::install_etcd(&*interactor)?;
-            etcd::setup_etcd(&*interactor, &node, &pg_nodes)?;
+                // Ensure postgres binaries are installed first
+                install_postgres(&*interactor, &pg_version)?;
 
-            // Stop & disable standard postgresql systemd service
-            println!("\tStopping and disabling standard PostgreSQL service...");
-            let _stop_res = interactor.cmd("sudo systemctl stop postgresql");
-            let _disable_pg_res = interactor.cmd("sudo systemctl disable postgresql");
+                // Install & configure etcd (configure only, do NOT start yet)
+                etcd::install_etcd(&*interactor)?;
+                etcd::setup_etcd(&*interactor, &node, &pg_nodes)?;
 
-            // Stop and kill Patroni before cleaning up config and bootstrapping
-            let _stop_patroni_res = interactor.cmd("sudo systemctl stop patroni");
+                // Stop & disable standard postgresql systemd service
+                println!("\tStopping and disabling standard PostgreSQL service...");
+                let _stop_res = interactor.cmd("sudo systemctl stop postgresql");
+                let _disable_pg_res = interactor.cmd("sudo systemctl disable postgresql");
 
-            // Backup existing postgres main directory
-            //or failed boot directory if present
-            backup_postgres_dir(&pg_version, &interactor)?;
+                // Stop and kill Patroni before cleaning up config and bootstrapping
+                let _stop_patroni_res = interactor.cmd("sudo systemctl stop patroni");
 
-            // Configure WAL archive directory
-            interactor.cmd("sudo mkdir -p /var/lib/postgresql/wal_archive")?;
-            interactor.cmd("sudo chown postgres:postgres /var/lib/postgresql/wal_archive")?;
-            interactor.cmd("sudo chmod 700 /var/lib/postgresql/wal_archive")?;
+                // Backup existing postgres main directory
+                backup_postgres_dir(&pg_version, &*interactor)?;
 
-            install_patroni(&pg_version, &replica_pass, &pg_nodes, &node, interactor)?;
+                // Configure WAL archive directory
+                interactor.cmd("sudo mkdir -p /var/lib/postgresql/wal_archive")?;
+                interactor.cmd("sudo chown postgres:postgres /var/lib/postgresql/wal_archive")?;
+                interactor.cmd("sudo chmod 700 /var/lib/postgresql/wal_archive")?;
 
-            Ok(())
-        });
+                install_patroni(&pg_version, &replica_pass, &pg_nodes, &node, &*interactor)?;
 
-        handles.push(handle);
-    }
-    for handle in handles {
-        handle.await??;
-    }
+                // Wait for all nodes to finish configuration/installation
+                barrier_installed.wait();
 
-    // Phase 2: Start etcd on all nodes simultaneously so they form quorum together
-    println!("\tStarting etcd on all nodes...");
-    let mut handles = vec![];
+                // --- Phase 2: Start etcd ---
+                println!("\tStarting etcd on node {}...", node.name);
+                etcd::start_etcd(&node, &*interactor)?;
 
-    for node in &pg_nodes {
-        let node = node.clone();
-        let config = config.clone();
+                // Wait for all nodes to start etcd
+                barrier_etcd_started.wait();
 
-        let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
-            let private_key = find_private_key_for_user(&node.user, &config)?;
-            let ssh = SSHSession::new(
-                node.host.clone(),
-                node.user.clone(),
-                private_key,
-                Some(node.port),
-            );
-            let interactor = get_server_interactor(ssh)?;
-
-            etcd::start_etcd(&*interactor)?;
-
-            Ok(())
-        });
-
-        handles.push(handle);
-    }
-
-    let mut results = vec![];
-    for handle in handles {
-        results.push(handle.await);
-    }
-    for res in results {
-        res??;
-    }
-
-    // Give etcd time to elect a leader and form quorum
-    if !pg_nodes.is_empty() {
-        let first_node = &pg_nodes[0];
-        let private_key = find_private_key_for_user(&first_node.user, config)?;
-        let ssh = SSHSession::new(
-            first_node.host.clone(),
-            first_node.user.clone(),
-            private_key,
-            Some(first_node.port),
-        );
-        let interactor = get_server_interactor(ssh)?;
-
-        etcd::wait_for_etcd_quorum(&*interactor, 10)?;
-    }
-
-    // Phase 3: Start Patroni on all nodes simultaneously using tokio tasks
-    println!("\tStarting Patroni on all nodes...");
-    let mut handles = vec![];
-
-    for node in &pg_nodes {
-        let node = node.clone();
-        let config = config.clone();
-
-        let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
-            let private_key = find_private_key_for_user(&node.user, &config)?;
-            let ssh = SSHSession::new(
-                node.host.clone(),
-                node.user.clone(),
-                private_key,
-                Some(node.port),
-            );
-            let interactor = get_server_interactor(ssh)?;
-
-            println!("\tStarting Patroni on node {}...", node.name);
-            interactor.cmd("sudo systemctl restart patroni --no-block")?;
-
-            // Check if Patroni is running (with a 10s timeout since it can be "activating" initially)
-            let start_time = std::time::Instant::now();
-            let timeout = std::time::Duration::from_secs(10);
-            let mut is_active = false;
-
-            while start_time.elapsed() < timeout {
-                let active_out = interactor.cmd("sudo systemctl is-active patroni")?;
-
-                if active_out.stdout.trim() == "active" {
-                    is_active = true;
-                    break;
+                // --- Wait for quorum (only first node runs it) ---
+                if is_first {
+                    etcd::wait_for_etcd_quorum(&*interactor, 10)?;
                 }
 
-                std::thread::sleep(std::time::Duration::from_millis(500));
-            }
+                // Wait for first node to complete quorum check before starting Patroni
+                barrier_quorum.wait();
 
-            if !is_active {
-                println!(
-                    "Error: patroni is not running on node {}. Fetching logs...",
-                    node.name
-                );
-                let log_out =
-                    interactor.cmd("sudo journalctl -xeu patroni.service -n 100 -o cat")?;
+                // --- Phase 3: Start Patroni ---
+                println!("\tStarting Patroni on node {}...", node.name);
+                interactor.cmd("sudo systemctl restart patroni --no-block")?;
 
-                println!("\n===BEGIN PATRONI LOGS ON {}===\n", node.name);
-                println!("{}", log_out.stdout);
-                println!("\n===END PATRONI LOGS ON {}===\n", node.name);
+                // Check if Patroni is running (with a 10s timeout since it can be "activating" initially)
+                let start_time = std::time::Instant::now();
+                let timeout = std::time::Duration::from_secs(10);
+                let mut is_active = false;
 
-                anyhow::bail!("Patroni failed to start on node {}", node.name);
-            } else {
-                println!("\tPatroni started successfully on node {}", node.name);
-            }
+                while start_time.elapsed() < timeout {
+                    let active_out = interactor.cmd("sudo systemctl is-active patroni")?;
 
-            Ok(())
-        });
+                    if active_out.stdout.trim() == "active" {
+                        is_active = true;
+                        break;
+                    }
+
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                }
+
+                if !is_active {
+                    println!(
+                        "Error: patroni is not running on node {}. Fetching logs...",
+                        node.name
+                    );
+                    let log_out =
+                        interactor.cmd("sudo journalctl -xeu patroni.service -n 100 -o cat")?;
+
+                    println!("\n===BEGIN PATRONI LOGS ON {}===\n", node.name);
+                    println!("{}", log_out.stdout);
+                    println!("\n===END PATRONI LOGS ON {}===\n", node.name);
+
+                    anyhow::bail!("Patroni failed to start on node {}", node.name);
+                } else {
+                    println!("\tPatroni started successfully on node {}", node.name);
+                }
+
+                Ok((node.name, interactor))
+            },
+        );
 
         handles.push(handle);
     }
 
-    let mut results = vec![];
+    let mut interactors = std::collections::HashMap::new();
     for handle in handles {
-        results.push(handle.await);
-    }
-    for res in results {
-        res??;
+        let (node_name, interactor) = handle.await??;
+        interactors.insert(node_name, interactor);
     }
 
     // 2. Wait for Patroni leader election
@@ -236,17 +188,21 @@ pub async fn postgres_setup_wrapper(
     println!("\tFollower: {:?}", follower_ips);
 
     // 3. Provision database schema and users on the dynamic leader
-    let leader_interactor = connect_to_node(&leader, config)?;
+    let leader_interactor = interactors
+        .remove(&leader.name)
+        .ok_or_else(|| anyhow::anyhow!("Leader interactor not found in setup map"))?;
+    let leader_interactor = std::sync::Arc::from(leader_interactor);
     let (db_configs, user_configs) = get_postgres_configs(config);
 
     setup_postgres_primary(
-        &*leader_interactor,
+        leader_interactor,
         &pg_version,
         &replica_pass,
         &db_configs,
         &user_configs,
         config,
-    )?;
+    )
+    .await?;
 
     // 4. Setup HAProxy on all app nodes
     setup_haproxy_each_nodes_wrapper(config, app_nodes).await?;
@@ -254,126 +210,153 @@ pub async fn postgres_setup_wrapper(
     Ok(())
 }
 
-pub fn setup_postgres_primary(
-    interactor: &dyn ServerInteractor,
+pub async fn setup_postgres_primary(
+    interactor: std::sync::Arc<dyn ServerInteractor + Send + Sync>,
     version: &str,
     replica_pass: &str,
     db_configs: &[PostgresDbConfig],
     user_configs: &[PostgresUserConfig],
     config: &crate::config::Config,
 ) -> anyhow::Result<()> {
-    println!("\tProvisioning PostgreSQL databases and users on Patroni leader...");
+    println!("\n\tProvisioning PostgreSQL databases and users on Patroni leader...");
 
     // Idempotently create databases
+    let mut db_handles = vec![];
     for db in db_configs {
-        println!("\n\tSetting up database '{}'...", db.name);
+        let db = db.clone();
+        let interactor = interactor.clone();
 
-        let check_db_sql = format!("SELECT 1 FROM pg_database WHERE datname = '{}'", db.name);
-        let db_exists = interactor.cmd(&format!(
-            "sudo -u postgres psql -t -A -c \"{}\"",
-            check_db_sql
-        ))?;
+        let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+            println!("\n\tSetting up database '{}'...", db.name);
 
-        if db_exists.stdout.trim() != "1" {
-            interactor.cmd(&format!(
-                "sudo -u postgres psql -c \"CREATE DATABASE {};\"",
-                db.name
+            let check_db_sql = format!("SELECT 1 FROM pg_database WHERE datname = '{}'", db.name);
+            let db_exists = interactor.cmd(&format!(
+                "sudo -u postgres psql -t -A -c \"{}\"",
+                check_db_sql
             ))?;
-        }
+
+            if db_exists.stdout.trim() != "1" {
+                interactor.cmd(&format!(
+                    "sudo -u postgres psql -c \"CREATE DATABASE {};\"",
+                    db.name
+                ))?;
+            }
+            Ok(())
+        });
+
+        db_handles.push(handle);
+    }
+    for handle in db_handles {
+        handle.await??;
     }
 
     // Idempotently create/remove users and grant/revoke privileges
+    let mut user_handles = vec![];
     for user in user_configs {
-        let user_state = user.state.as_deref().unwrap_or("present");
+        let user = user.clone();
+        let db_configs = db_configs.to_vec();
+        let interactor = interactor.clone();
 
-        println!("\tuser {} state is {}", user.user, user_state);
+        let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+            let user_state = user.state.as_deref().unwrap_or("present");
 
-        if user_state == "absent" {
-            println!("\tRemoving user '{}'...", user.user);
+            println!("\tuser {} state is {}", user.user, user_state);
 
-            for db_ref in &user.databases {
-                let db_name = db_configs
-                    .iter()
-                    .find(|d| &d.name == db_ref || &d.name == db_ref)
-                    .map(|d| d.name.as_str())
-                    .unwrap_or(db_ref);
+            if user_state == "absent" {
+                println!("\tRemoving user '{}'...", user.user);
 
-                println!(
-                    "\tRevoking privileges for user '{}' on database '{}'...",
-                    user.user, db_name
-                );
+                for db_ref in &user.databases {
+                    let db_name = db_configs
+                        .iter()
+                        .find(|d| &d.name == db_ref || &d.name == db_ref)
+                        .map(|d| d.name.as_str())
+                        .unwrap_or(db_ref);
 
-                let _ = interactor.cmd(&format!(
-                    "sudo -u postgres psql -d {} -c \"REVOKE ALL ON SCHEMA public FROM {};\"",
-                    db_name, user.user
-                ));
+                    println!(
+                        "\tRevoking privileges for user '{}' on database '{}'...",
+                        user.user, db_name
+                    );
 
-                let _ = interactor.cmd(&format!(
-                    "sudo -u postgres psql -c \"REVOKE ALL PRIVILEGES ON DATABASE {} FROM {};\"",
-                    db_name, user.user
-                ));
-            }
+                    let _ = interactor.cmd(&format!(
+                        "sudo -u postgres psql -d {} -c \"REVOKE ALL ON SCHEMA public FROM {};\"",
+                        db_name, user.user
+                    ));
 
-            interactor.cmd(&format!(
-                "sudo -u postgres psql -c \"DROP ROLE IF EXISTS {};\"",
-                user.user
-            ))?;
-        } else if user_state == "present" {
-            println!("\tSetting up user '{}'...", user.user);
-
-            // Write SQL to temp file to avoid shell quoting issues with $$ and newlines
-            let password = user.password.as_deref().unwrap_or("").replace('\'', "''");
-            let user_sql = format!(
-                "DO $crane$\n\
-                 BEGIN\n\
-                     IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{}') THEN\n\
-                         CREATE ROLE {} WITH PASSWORD '{}' LOGIN;\n\
-                     ELSE\n\
-                         ALTER ROLE {} WITH PASSWORD '{}';\n\
-                     END IF;\n\
-                 END $crane$;",
-                user.user, user.user, password, user.user, password
-            );
-            let tmp_sql = format!("/tmp/crane_user_{}.sql", user.user);
-            interactor.create_file(&tmp_sql, &user_sql)?;
-            interactor.cmd(&format!("sudo -u postgres psql -f '{}'", tmp_sql))?;
-            interactor.cmd(&format!("sudo rm -f '{}'", tmp_sql))?;
-
-            for db_ref in &user.databases {
-                let db_name = db_configs
-                    .iter()
-                    .find(|d| &d.name == db_ref || &d.name == db_ref)
-                    .map(|d| d.name.as_str())
-                    .unwrap_or(db_ref);
-
-                println!(
-                    "\tGranting access for user '{}' to database '{}'...",
-                    user.user, db_name
-                );
+                    let _ = interactor.cmd(&format!(
+                        "sudo -u postgres psql -c \"REVOKE ALL PRIVILEGES ON DATABASE {} FROM {};\"",
+                        db_name, user.user
+                    ));
+                }
 
                 interactor.cmd(&format!(
-                    "sudo -u postgres psql -c \"GRANT ALL PRIVILEGES ON DATABASE {} TO {};\"",
-                    db_name, user.user
+                    "sudo -u postgres psql -c \"DROP ROLE IF EXISTS {};\"",
+                    user.user
                 ))?;
+            } else if user_state == "present" {
+                println!("\tSetting up user '{}'...", user.user);
 
-                interactor.cmd(&format!(
-                    "sudo -u postgres psql -d {} -c \"GRANT ALL ON SCHEMA public TO {};\"",
-                    db_name, user.user
-                ))?;
+                // Write SQL to temp file to avoid shell quoting issues with $$ and newlines
+                let password = user.password.as_deref().unwrap_or("").replace('\'', "''");
+                let user_sql = format!(
+                    "DO $crane$\n\
+                     BEGIN\n\
+                         IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{}') THEN\n\
+                             CREATE ROLE {} WITH PASSWORD '{}' LOGIN;\n\
+                         ELSE\n\
+                             ALTER ROLE {} WITH PASSWORD '{}';\n\
+                         END IF;\n\
+                     END $crane$;",
+                    user.user, user.user, password, user.user, password
+                );
+                let tmp_sql = format!("/tmp/crane_user_{}.sql", user.user);
+                interactor.create_file(&tmp_sql, &user_sql)?;
+                interactor.cmd(&format!("sudo -u postgres psql -f '{}'", tmp_sql))?;
+                interactor.cmd(&format!("sudo rm -f '{}'", tmp_sql))?;
+
+                for db_ref in &user.databases {
+                    let db_name = db_configs
+                        .iter()
+                        .find(|d| &d.name == db_ref || &d.name == db_ref)
+                        .map(|d| d.name.as_str())
+                        .unwrap_or(db_ref);
+
+                    println!(
+                        "\tGranting access for user '{}' to database '{}'...",
+                        user.user, db_name
+                    );
+
+                    interactor.cmd(&format!(
+                        "sudo -u postgres psql -c \"GRANT ALL PRIVILEGES ON DATABASE {} TO {};\"",
+                        db_name, user.user
+                    ))?;
+
+                    interactor.cmd(&format!(
+                        "sudo -u postgres psql -d {} -c \"GRANT ALL ON SCHEMA public TO {};\"",
+                        db_name, user.user
+                    ))?;
+                }
+            } else {
+                anyhow::bail!("unknown user state: {}", user_state);
             }
-        } else {
-            anyhow::bail!("unknown user state: {}", user_state);
-        }
+
+            Ok(())
+        });
+
+        user_handles.push(handle);
     }
 
-    configure_postgres_backup(interactor, version, replica_pass, config)?;
+    for handle in user_handles {
+        handle.await??;
+    }
+
+    configure_postgres_backup(&*interactor, version, replica_pass, config)?;
 
     Ok(())
 }
 
 pub fn backup_postgres_dir(
     pg_version: &String,
-    interactor: &Box<dyn ServerInteractor>,
+    interactor: &dyn ServerInteractor,
 ) -> Result<(), anyhow::Error> {
     let timestamp_out = interactor.cmd("date +%s")?;
     let unix_timestamp = timestamp_out.stdout.trim().to_string();

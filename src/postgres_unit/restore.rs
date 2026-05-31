@@ -108,6 +108,7 @@ pub async fn postgres_restore(
 
         let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
             println!("Clearing postgres data directory on node {}", node.name);
+
             match connect_to_node(&node, &config) {
                 Ok(interactor) => {
                     let _ = interactor.cmd(&format!("sudo rm -rf {}", pgdata_dir));

@@ -48,7 +48,7 @@ pub fn find_node_config_with_fallback(
 pub fn connect_to_node(
     node: &config::NodeConfig,
     config: &config::Config,
-) -> anyhow::Result<Box<dyn ServerInteractor>> {
+) -> anyhow::Result<Box<dyn ServerInteractor + Send + Sync>> {
     let private_key = crate::helper::keys::find_private_key_for_user(&node.user, config)?;
     let ssh = SSHSession::new(
         node.host.clone(),

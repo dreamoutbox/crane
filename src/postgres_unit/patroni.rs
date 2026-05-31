@@ -6,7 +6,7 @@ pub fn install_patroni(
     replica_pass: &String,
     pg_nodes: &Vec<config::NodeConfig>,
     node: &config::NodeConfig,
-    interactor: Box<dyn ServerInteractor>,
+    interactor: &dyn ServerInteractor,
 ) -> Result<(), anyhow::Error> {
     let patroni_installed = interactor
         .cmd("which patroni")

@@ -8,10 +8,13 @@ async fn test_failover() {
         crane::config::read_config_toml_file(config_path).expect("Failed to load crane.toml");
 
     //Deploy
-    crane::commands::deploy::run(&config, config_path, true).await.expect("deploy failed");
+    crane::commands::deploy::run(&config, config_path, true)
+        .await
+        .expect("deploy failed");
 
     // get existing postgres cluster status
-    let status = crane::commands::postgres_status::get_postgres_status_wrapper(&config).await
+    let status = crane::commands::postgres_status::get_postgres_status_wrapper(&config)
+        .await
         .expect("Failed to get postgres status");
 
     // get primary node
@@ -45,7 +48,8 @@ async fn test_failover() {
     let mut new_leader_elected = false;
     let mut new_status = None;
     for _ in 0..20 {
-        if let Ok(st) = crane::commands::postgres_status::get_postgres_status_wrapper(&config).await {
+        if let Ok(st) = crane::commands::postgres_status::get_postgres_status_wrapper(&config).await
+        {
             let active_leader = st.postgres.iter().find(|n| n.role == "Leader");
             if let Some(leader) = active_leader {
                 if leader.hostname != primary.hostname {
@@ -55,6 +59,7 @@ async fn test_failover() {
                 }
             }
         }
+
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
 
