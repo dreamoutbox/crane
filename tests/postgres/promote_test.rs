@@ -1,14 +1,14 @@
 // RUN:
 // RUST_BACKTRACE=1 cargo nextest run --test postgres -- test_promote --no-capture
 
-#[test]
-fn test_promote() {
+#[tokio::test]
+async fn test_promote() {
     let config_path = std::path::Path::new("tests/postgres/crane.toml");
     let config =
         crane::config::read_config_toml_file(config_path).expect("Failed to load crane.toml");
 
     //Deploy
-    crane::commands::deploy::run(&config, config_path, true).expect("deploy failed");
+    crane::commands::deploy::run(&config, config_path, true).await.expect("deploy failed");
 
     // get existing postgres cluster status
     let status = crane::commands::postgres_status::get_postgres_status_wrapper(&config)

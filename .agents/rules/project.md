@@ -2,21 +2,24 @@
 trigger: always_on
 ---
 
-- we use rust.
+## Project Context
+- Language: Rust
+- Spec: `./SPEC.md` — read before making design decisions
 
-- the project spec at ./SPEC.md
+## Commands
+- Run: `cargo run --bin crane -- -f demo/crane.toml [OPTIONS] <COMMAND>`
+- Test: `cargo nextest run` — read `tests/README.md` before writing or running tests
 
-- write concise comment on code.
+## Infrastructure
+- VPS environment is simulated via Docker
 
-- when need to run command for testing use `cargo run --bin crane -- -f demo/crane.toml [OPTIONS] <COMMAND>`
+## Code Style
+- Comments: concise, only where non-obvious
 
-- we use docker to simulate VPS setup.
-
-- we use cargo nextest to run tests. please read `tests/README.md` about testing.
-
-- you can debugging the command output like this
+## Debugging
+Capture and inspect command output via `dbg!`:
 
 ```rust
-    let restart_etcd_cmd = interactor.cmd("sudo systemctl restart etcd")?;
-    dbg!(&restart_etcd_cmd );
+let output = interactor.cmd("sudo systemctl restart etcd")?;
+dbg!(&output);
 ```

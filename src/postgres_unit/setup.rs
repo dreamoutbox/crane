@@ -12,7 +12,7 @@ use crate::{
     ssh::SSHSession,
 };
 
-pub fn postgres_setup_wrapper(
+pub async fn postgres_setup_wrapper(
     config: &config::Config,
     dot_env: &std::collections::HashMap<String, String>,
     app_nodes: &Vec<config::NodeConfig>,
@@ -105,16 +105,32 @@ pub fn postgres_setup_wrapper(
 
     // Phase 2: Start etcd on all nodes simultaneously so they form quorum together
     println!("\tStarting etcd on all nodes...");
+    let mut handles = vec![];
+
     for node in &pg_nodes {
-        let private_key = find_private_key_for_user(&node.user, config)?;
-        let ssh = SSHSession::new(
-            node.host.clone(),
-            node.user.clone(),
-            private_key,
-            Some(node.port),
-        );
-        let interactor = get_server_interactor(ssh)?;
-        etcd::start_etcd(&*interactor)?;
+        let node = node.clone();
+        let config = config.clone();
+        let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+            let private_key = find_private_key_for_user(&node.user, &config)?;
+            let ssh = SSHSession::new(
+                node.host.clone(),
+                node.user.clone(),
+                private_key,
+                Some(node.port),
+            );
+            let interactor = get_server_interactor(ssh)?;
+            etcd::start_etcd(&*interactor)?;
+            Ok(())
+        });
+        handles.push(handle);
+    }
+
+    let mut results = vec![];
+    for handle in handles {
+        results.push(handle.await);
+    }
+    for res in results {
+        res??;
     }
 
     // Give etcd time to elect a leader and form quorum
@@ -132,55 +148,71 @@ pub fn postgres_setup_wrapper(
         etcd::wait_for_etcd_quorum(&*interactor, 10)?;
     }
 
-    // Phase 3: Start Patroni on all nodes simultaneously
+    // Phase 3: Start Patroni on all nodes simultaneously using tokio tasks
     println!("\tStarting Patroni on all nodes...");
-    // dbg!(&pg_nodes);
+    let mut handles = vec![];
 
     for node in &pg_nodes {
-        let private_key = find_private_key_for_user(&node.user, config)?;
-        let ssh = SSHSession::new(
-            node.host.clone(),
-            node.user.clone(),
-            private_key,
-            Some(node.port),
-        );
-        let interactor = get_server_interactor(ssh)?;
+        let node = node.clone();
+        let config = config.clone();
+        let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+            let private_key = find_private_key_for_user(&node.user, &config)?;
+            let ssh = SSHSession::new(
+                node.host.clone(),
+                node.user.clone(),
+                private_key,
+                Some(node.port),
+            );
+            let interactor = get_server_interactor(ssh)?;
 
-        println!("\tStarting Patroni on node {}...", node.name);
-        interactor.cmd("sudo systemctl restart patroni --no-block")?;
+            println!("\tStarting Patroni on node {}...", node.name);
+            interactor.cmd("sudo systemctl restart patroni --no-block")?;
 
-        // Check if Patroni is running (with a 10s timeout since it can be "activating" initially)
-        let start_time = std::time::Instant::now();
-        let timeout = std::time::Duration::from_secs(10);
-        let mut is_active = false;
+            // Check if Patroni is running (with a 10s timeout since it can be "activating" initially)
+            let start_time = std::time::Instant::now();
+            let timeout = std::time::Duration::from_secs(10);
+            let mut is_active = false;
 
-        while start_time.elapsed() < timeout {
-            let active_out = interactor.cmd("sudo systemctl is-active patroni")?;
-            // dbg!(&active_out);
+            while start_time.elapsed() < timeout {
+                let active_out = interactor.cmd("sudo systemctl is-active patroni")?;
 
-            if active_out.stdout.trim() == "active" {
-                is_active = true;
-                break;
+                if active_out.stdout.trim() == "active" {
+                    is_active = true;
+                    break;
+                }
+
+                std::thread::sleep(std::time::Duration::from_millis(500));
             }
 
-            std::thread::sleep(std::time::Duration::from_millis(500));
-        }
+            if !is_active {
+                println!(
+                    "Error: patroni is not running on node {}. Fetching logs...",
+                    node.name
+                );
+                let log_out =
+                    interactor.cmd("sudo journalctl -xeu patroni.service -n 100 -o cat")?;
 
-        if !is_active {
-            println!(
-                "Error: patroni is not running on node {}. Fetching logs...",
-                node.name
-            );
-            let log_out = interactor.cmd("sudo journalctl -xeu patroni.service -n 100 -o cat")?;
+                println!("\n===BEGIN PATRONI LOGS ON {}===\n", node.name);
+                println!("{}", log_out.stdout);
+                println!("\n===END PATRONI LOGS ON {}===\n", node.name);
 
-            println!("\n===BEGIN PATRONI LOGS ON {}===\n", node.name);
-            println!("{}", log_out.stdout);
-            println!("\n===END PATRONI LOGS ON {}===\n", node.name);
+                anyhow::bail!("Patroni failed to start on node {}", node.name);
+            } else {
+                println!("\tPatroni started successfully on node {}", node.name);
+            }
 
-            anyhow::bail!("Patroni failed to start on node {}", node.name);
-        } else {
-            println!("\tPatroni started successfully on node {}", node.name);
-        }
+            Ok(())
+        });
+
+        handles.push(handle);
+    }
+
+    let mut results = vec![];
+    for handle in handles {
+        results.push(handle.await);
+    }
+    for res in results {
+        res??;
     }
 
     // 2. Wait for Patroni leader election
@@ -220,7 +252,7 @@ pub fn postgres_setup_wrapper(
     )?;
 
     // 4. Setup HAProxy on all app nodes
-    setup_haproxy_each_nodes_wrapper(config, app_nodes)?;
+    setup_haproxy_each_nodes_wrapper(config, app_nodes).await?;
 
     Ok(())
 }

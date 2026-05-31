@@ -9,7 +9,7 @@ use crate::ssh::SSHSession;
 use std::path::Path;
 
 /// deploy app commands
-pub fn run(
+pub async fn run(
     config: &crate::config::Config,
     config_path: &Path,
     no_dns_update: bool,
@@ -81,7 +81,7 @@ pub fn run(
         .unwrap_or(false);
 
     if pg_enabled {
-        postgres_setup_wrapper(&config, &dot_env, &app_nodes)?;
+        postgres_setup_wrapper(&config, &dot_env, &app_nodes).await?;
     }
 
     // let mut handles = vec![];

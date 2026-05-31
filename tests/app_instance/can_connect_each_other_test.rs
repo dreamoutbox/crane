@@ -4,8 +4,8 @@ use std::process::Command;
 // RUN:
 // cargo nextest run --test app_instance --nocapture
 
-#[test]
-fn test_app_instances_can_connect_each_other() {
+#[tokio::test]
+async fn test_app_instances_can_connect_each_other() {
     // 1. Build Go demo app
     let go_build = Command::new("go")
         .arg("build")
@@ -21,7 +21,7 @@ fn test_app_instances_can_connect_each_other() {
     // 2. Deploy app configuration to VPS nodes
     let config_path = Path::new("demo/crane.toml");
     let config = crane::config::read_config_toml_file(config_path).expect("Failed to load config");
-    crane::commands::deploy::run(&config, config_path, true).expect("deploy failed");
+    crane::commands::deploy::run(&config, config_path, true).await.expect("deploy failed");
 
     // 3. Test myapp to myapp2 connectivity
     let curl1 = Command::new("curl")

@@ -203,7 +203,8 @@ async fn main() -> anyhow::Result<()> {
         Some(("deploy", sub_m)) => {
             let no_dns_update = sub_m.get_flag("no-dns-update");
 
-            if let Err(e) = crane::commands::deploy::run(&config, config_path, no_dns_update) {
+            if let Err(e) = crane::commands::deploy::run(&config, config_path, no_dns_update).await
+            {
                 eprintln!("Deployment failed: {}", e);
                 std::process::exit(1);
             }

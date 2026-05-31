@@ -292,23 +292,38 @@ backend {name}_backend
     Ok(())
 }
 
-pub fn setup_haproxy_each_nodes_wrapper(
+pub async fn setup_haproxy_each_nodes_wrapper(
     config: &config::Config,
     app_nodes: &Vec<config::NodeConfig>,
 ) -> Result<(), anyhow::Error> {
+    let mut handles = vec![];
     for app_node in app_nodes {
-        println!("\n\tSetting up HAProxy on app node {}...", app_node.name);
+        let app_node = app_node.clone();
+        let config = config.clone();
+        let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+            println!("\n\tSetting up HAProxy on app node {}...", app_node.name);
 
-        let private_key = find_private_key_for_user(&app_node.user, config)?;
-        let ssh = SSHSession::new(
-            app_node.host.clone(),
-            app_node.user.clone(),
-            private_key,
-            Some(app_node.port),
-        );
-        let interactor = get_server_interactor(ssh)?;
+            let private_key = find_private_key_for_user(&app_node.user, &config)?;
+            let ssh = SSHSession::new(
+                app_node.host.clone(),
+                app_node.user.clone(),
+                private_key,
+                Some(app_node.port),
+            );
+            let interactor = get_server_interactor(ssh)?;
 
-        setup_haproxy_unified(&*interactor, config, app_node, None, None)?;
+            setup_haproxy_unified(&*interactor, &config, &app_node, None, None)?;
+            Ok(())
+        });
+        handles.push(handle);
+    }
+
+    let mut results = vec![];
+    for handle in handles {
+        results.push(handle.await);
+    }
+    for res in results {
+        res??;
     }
     Ok(())
 }

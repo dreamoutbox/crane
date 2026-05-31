@@ -249,13 +249,13 @@ impl ServerInteractor for DebianInteractor {
             ));
 
             match create_result {
-                Ok(_) => println!("User created successfully"),
+                Ok(_) => println!("\tUser {} created successfully", user_register.username),
 
                 Err(e) => {
                     if e.to_string().contains("already exists") {
                         println!("User already exists, no update");
                     } else {
-                        anyhow::bail!("Failed to create user: {}", e);
+                        anyhow::bail!("Failed to create user {}: {}", user_register.username, e);
                     }
                 }
             }

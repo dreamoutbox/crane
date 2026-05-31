@@ -114,7 +114,7 @@ postgresql:
 
     interactor.cmd("sudo mkdir -p /etc/patroni")?;
     interactor.create_file("/etc/patroni/config.yml", &patroni_yaml)?;
-    println!("create patroni config at /etc/patroni/config.yml");
+    println!("\tCreate patroni config at /etc/patroni/config.yml");
 
     interactor.cmd("sudo chown -R postgres:postgres /etc/patroni")?;
     interactor.cmd("sudo chmod 600 /etc/patroni/config.yml")?;

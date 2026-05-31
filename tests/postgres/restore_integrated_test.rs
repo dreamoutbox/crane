@@ -7,13 +7,13 @@ use crane::{
     postgres_unit::helper::postgres_get_leader,
 };
 
-#[test]
-fn test_restore_integrated_workflow() {
+#[tokio::test]
+async fn test_restore_integrated_workflow() {
     let config_path = std::path::Path::new("tests/postgres/crane.toml");
     let config = read_config_toml_file(config_path).expect("Failed to load crane.toml");
 
     //Deploy
-    crane::commands::deploy::run(&config, config_path, true).expect("deploy failed");
+    crane::commands::deploy::run(&config, config_path, true).await.expect("deploy failed");
 
     // Retrieve leader node and connect
     let primary_node = postgres_get_leader(&config)
