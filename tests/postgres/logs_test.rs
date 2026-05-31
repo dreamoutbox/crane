@@ -6,7 +6,7 @@ fn test_postgres_logs_command() {
     let _config_path = std::path::Path::new("demo/crane.toml");
 
     let interactor = MockServerInteractorLogsRecorder;
-    let result = crane::commands::postgres::run_postgres_logs_cmd_internal(
+    let result = crane::commands::postgres_logs::run_postgres_logs_cmd_internal(
         &interactor,
         "vps1",
         Some("2026-05-26 09:00:00"),
@@ -38,7 +38,7 @@ fn test_postgres_logs_command_user_not_exist() {
     let _config_path = std::path::Path::new("demo/crane.toml");
 
     let interactor = MockServerInteractorUserNotExist;
-    let result = crane::commands::postgres::run_postgres_logs_cmd_internal(
+    let result = crane::commands::postgres_logs::run_postgres_logs_cmd_internal(
         &interactor,
         "vps1",
         None,

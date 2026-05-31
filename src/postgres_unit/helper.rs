@@ -75,7 +75,7 @@ pub fn get_replica_pass(config: &config::Config) -> String {
         .as_ref()
         .and_then(|db| db.postgres.as_ref())
         .map(|pg| pg.replica_pass.clone())
-        .unwrap_or_else(|| "repl_password".to_string())
+        .unwrap_or_else(|| "replica".to_string())
 }
 
 pub fn is_postgres_running(interactor: &dyn ServerInteractor, version: &str) -> bool {

@@ -1,0 +1,110 @@
+use crate::postgres_unit::helper::{connect_to_node, find_node_config_with_fallback};
+use crate::postgres_unit::python_parse_pg_log_script::PYTHON_PARSE_PG_LOG_SCRIPT;
+use crate::server_interactor::server_interactor_trait::ServerInteractor;
+
+pub fn run_postgres_logs_cmd(
+    config: &crate::config::Config,
+    target_node_str: &str,
+    since: Option<&str>,
+    until: Option<&str>,
+    user: Option<&str>,
+    db: Option<&str>,
+    sql: Option<&str>,
+) -> anyhow::Result<()> {
+    let target_conf = find_node_config_with_fallback(target_node_str, &config)
+        .ok_or_else(|| anyhow::anyhow!("Node '{}' not found in configuration", target_node_str))?;
+
+    if !target_conf.roles.contains(&"postgres".to_string()) {
+        anyhow::bail!(
+            "Node '{}' does not have the 'postgres' role",
+            target_node_str
+        );
+    }
+
+    let interactor = connect_to_node(&target_conf, &config)?;
+
+    run_postgres_logs_cmd_internal(&*interactor, target_node_str, since, until, user, db, sql)
+}
+
+pub fn run_postgres_logs_cmd_internal(
+    interactor: &dyn ServerInteractor,
+    target_node_str: &str,
+    since: Option<&str>,
+    until: Option<&str>,
+    user: Option<&str>,
+    db: Option<&str>,
+    sql: Option<&str>,
+) -> anyhow::Result<()> {
+    // Check if 'postgres' user exists on the remote node
+    let user_check = interactor.cmd("id postgres")?;
+    if user_check.exit_code != 0 {
+        anyhow::bail!(
+            "PostgreSQL is not installed or the 'postgres' user does not exist on node '{}'. Please run 'crane deploy' first to set up the database.",
+            target_node_str
+        );
+    }
+
+    // 1. Query the current CSV log path dynamically
+    let log_path_cmd = "sudo -u postgres psql -tAc \"SELECT current_setting('data_directory') || '/' || pg_current_logfile('csvlog')\"";
+    let log_path_output = interactor.cmd(log_path_cmd)?;
+    if log_path_output.exit_code != 0 {
+        anyhow::bail!(
+            "Failed to query PostgreSQL log path: {}",
+            log_path_output.stderr
+        );
+    }
+
+    let log_file_path = log_path_output.stdout.trim();
+    if log_file_path.is_empty() {
+        anyhow::bail!(
+            "PostgreSQL returned empty log path. Ensure logging_collector = on and log_destination = csvlog."
+        );
+    }
+
+    // 2. Write the python parser script to the target node
+
+    let script_path = "/tmp/crane_parse_pg_logs.py";
+    interactor.create_file(script_path, PYTHON_PARSE_PG_LOG_SCRIPT)?;
+
+    // 3. Construct and execute the Python command
+    let mut py_cmd = format!(
+        "sudo python3 {} '{}'",
+        script_path,
+        log_file_path.replace('\'', "'\\''")
+    );
+    if let Some(val) = since {
+        py_cmd.push_str(&format!(" --since '{}'", val.replace('\'', "'\\''")));
+    }
+    if let Some(val) = until {
+        py_cmd.push_str(&format!(" --until '{}'", val.replace('\'', "'\\''")));
+    }
+    if let Some(val) = user {
+        py_cmd.push_str(&format!(" --user '{}'", val.replace('\'', "'\\''")));
+    }
+    if let Some(val) = db {
+        py_cmd.push_str(&format!(" --db '{}'", val.replace('\'', "'\\''")));
+    }
+    if let Some(val) = sql {
+        py_cmd.push_str(&format!(" --sql '{}'", val.replace('\'', "'\\''")));
+    }
+
+    let run_output = interactor.cmd(&py_cmd);
+
+    // 4. Always clean up the temporary script
+    let _ = interactor.cmd(&format!("rm -f {}", script_path));
+
+    let output = run_output?;
+    if output.exit_code != 0 {
+        anyhow::bail!(
+            "Failed to execute log parser (exit code {}): {}",
+            output.exit_code,
+            output.stderr
+        );
+    }
+
+    if !output.stdout.trim().is_empty() {
+        println!("{}", output.stdout);
+    }
+
+    Ok(())
+}

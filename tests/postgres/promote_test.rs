@@ -8,10 +8,13 @@ async fn test_promote() {
         crane::config::read_config_toml_file(config_path).expect("Failed to load crane.toml");
 
     //Deploy
-    crane::commands::deploy::run(&config, config_path, true).await.expect("deploy failed");
+    crane::commands::deploy::run(&config, config_path, true)
+        .await
+        .expect("deploy failed");
 
     // get existing postgres cluster status
-    let status = crane::commands::postgres_status::get_postgres_status_wrapper(&config).await
+    let status = crane::commands::postgres_status::get_postgres_status_wrapper(&config)
+        .await
         .expect("Failed to get postgres status");
 
     // get a follower node
@@ -22,15 +25,18 @@ async fn test_promote() {
         .expect("No follower node found in the cluster status");
 
     // run promote function on a follower node
-    crane::commands::postgres::run_promote_cmd(&config, &follower.hostname)
+    crane::commands::postgres_promote::run_promote_cmd(&config, &follower.hostname)
         .expect("Failed to promote follower node");
 
     // poll for status update to reflect promotion
     let mut promoted_node_is_leader = false;
     let mut new_status = None;
     for _ in 0..15 {
-        if let Ok(st) = crane::commands::postgres_status::get_postgres_status_wrapper(&config).await {
+        if let Ok(st) = crane::commands::postgres_status::get_postgres_status_wrapper(&config).await
+        {
             if let Some(node) = st.postgres.iter().find(|n| n.hostname == follower.hostname) {
+                dbg!(&node);
+
                 if node.role == "Leader" && st.haproxy.primary == follower.hostname {
                     promoted_node_is_leader = true;
                     new_status = Some(st);
@@ -38,6 +44,7 @@ async fn test_promote() {
                 }
             }
         }
+
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
 

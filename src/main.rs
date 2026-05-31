@@ -214,7 +214,8 @@ async fn main() -> anyhow::Result<()> {
             match sub_m.subcommand() {
                 Some(("promote", sub_sub_m)) => {
                     let target_node = sub_sub_m.get_one::<String>("node").unwrap();
-                    if let Err(e) = crane::commands::postgres::run_promote_cmd(&config, target_node)
+                    if let Err(e) =
+                        crane::commands::postgres_promote::run_promote_cmd(&config, target_node)
                     {
                         eprintln!("Promotion failed: {}", e);
                         std::process::exit(1);
@@ -223,7 +224,8 @@ async fn main() -> anyhow::Result<()> {
 
                 Some(("demote", sub_sub_m)) => {
                     let target_node = sub_sub_m.get_one::<String>("node").unwrap();
-                    if let Err(e) = crane::commands::postgres::run_demote_cmd(&config, target_node)
+                    if let Err(e) =
+                        crane::commands::postgres_demote::run_demote_cmd(&config, target_node)
                     {
                         eprintln!("Demotion failed: {}", e);
                         std::process::exit(1);
@@ -285,7 +287,7 @@ async fn main() -> anyhow::Result<()> {
                     let db = sub_sub_m.get_one::<String>("db").map(|s| s.as_str());
                     let sql = sub_sub_m.get_one::<String>("sql").map(|s| s.as_str());
 
-                    if let Err(e) = crane::commands::postgres::run_postgres_logs_cmd(
+                    if let Err(e) = crane::commands::postgres_logs::run_postgres_logs_cmd(
                         &config,
                         target_node,
                         since,

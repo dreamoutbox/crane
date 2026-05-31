@@ -4,7 +4,7 @@ use crate::{
     helper::keys::find_private_key_for_user,
     postgres_unit::{
         etcd,
-        helper::{configure_postgres_backup, get_postgres_configs},
+        helper::{configure_postgres_backup, get_postgres_configs, get_replica_pass},
         install::install_postgres,
         patroni::install_patroni,
     },
@@ -23,7 +23,8 @@ pub async fn postgres_setup_wrapper(
         .map(|pg| pg.version.as_str())
         .unwrap_or("16")
         .to_string();
-    let replica_pass = "repl_password".to_string();
+    let replica_pass = get_replica_pass(&config);
+
     let pg_nodes: Vec<_> = config
         .nodes
         .iter()

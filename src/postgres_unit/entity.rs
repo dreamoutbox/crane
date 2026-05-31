@@ -15,6 +15,7 @@ pub struct BackupRegistry {
     pub backups: Vec<BackupMetadata>,
 }
 
+#[derive(Debug)]
 pub struct PostgresNode {
     pub hostname: String,
     pub address: String,
