@@ -1,4 +1,3 @@
-use crate::config;
 use crate::deployer::helper::{deploy_update_etc_hosts, deploy_zip_app};
 use crate::deployer::users::deploy_setup_users;
 use crate::helper::keys::find_private_key_for_user;
@@ -19,8 +18,6 @@ pub async fn run(
     println!("Loading configuration from {:?}\n", config_path);
 
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
-    let env_path = config_dir.join(".env");
-    let dot_env = config::load_env_file(&env_path).unwrap_or_default();
 
     // Get datetime for release
     let output = std::process::Command::new("date")
@@ -94,7 +91,7 @@ pub async fn run(
         .unwrap_or(false);
 
     if pg_enabled {
-        postgres_setup_wrapper(&config, &dot_env, &app_nodes).await?;
+        postgres_setup_wrapper(&config, &app_nodes).await?;
     }
 
     // let mut handles = vec![];
@@ -102,7 +99,6 @@ pub async fn run(
     // Loop Apps in Config and deploy in parallel using threads
     for (_app_id, app) in config.app.clone() {
         let config_dir = config_dir.to_path_buf();
-        let dot_env = dot_env.clone();
         let config = config.clone();
         let datetime = datetime.clone();
 
@@ -135,14 +131,11 @@ pub async fn run(
             let zip_path = deploy_zip_app(&app, &datetime, dir_to_deploy)?;
 
             // Merge environment
-            let mut merged_env = std::collections::HashMap::new();
+            let mut app_env = std::collections::HashMap::new();
             if let Some(ref env_map) = app.env {
                 for (k, v) in env_map {
-                    merged_env.insert(k.clone(), v.clone());
+                    app_env.insert(k.clone(), v.clone());
                 }
-            }
-            for (k, v) in &dot_env {
-                merged_env.insert(k.clone(), v.clone());
             }
 
             if let Some(ref app_db_deps) = app.database {
@@ -179,17 +172,17 @@ pub async fn run(
                     let leader_uri = build_uri(5000);
                     let follower_uri = build_uri(5001);
 
-                    merged_env.insert(
+                    app_env.insert(
                         format!("POSTGRES_{}_LEADER", db_env_key),
                         leader_uri.clone(),
                     );
-                    merged_env.insert(format!("POSTGRES_{}_URI", db_env_key), leader_uri);
-                    merged_env.insert(format!("POSTGRES_{}_FOLLOWER", db_env_key), follower_uri);
+                    app_env.insert(format!("POSTGRES_{}_URI", db_env_key), leader_uri);
+                    app_env.insert(format!("POSTGRES_{}_FOLLOWER", db_env_key), follower_uri);
                 }
             }
 
             let mut env_content = String::new();
-            for (k, v) in &merged_env {
+            for (k, v) in &app_env {
                 env_content.push_str(&format!("{}={}\n", k, v));
             }
 
@@ -393,7 +386,7 @@ pub async fn run(
                     .map(|d| d.domain_name.as_str())
                     .unwrap_or("localhost");
 
-                let mut hosts_entries: Vec<(String, String)> = config
+                let mut etc_hosts: Vec<(String, String)> = config
                     .app
                     .values()
                     .filter_map(|a| {
@@ -410,11 +403,11 @@ pub async fn run(
                     .collect();
 
                 // Dedup by hostnamesetup_traefik
-                hosts_entries.sort_by(|a, b| a.0.cmp(&b.0));
-                hosts_entries.dedup_by(|a, b| a.0 == b.0);
+                etc_hosts.sort_by(|a, b| a.0.cmp(&b.0));
+                etc_hosts.dedup_by(|a, b| a.0 == b.0);
 
                 println!("\tUpdating /etc/hosts on node {}...", node.name);
-                deploy_update_etc_hosts(&*node_interactor, &hosts_entries)?;
+                deploy_update_etc_hosts(&*node_interactor, &etc_hosts)?;
 
                 // No pruning needed for direct /app deployment
             }

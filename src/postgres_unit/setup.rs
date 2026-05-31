@@ -14,7 +14,6 @@ use crate::{
 
 pub async fn postgres_setup_wrapper(
     config: &config::Config,
-    dot_env: &std::collections::HashMap<String, String>,
     app_nodes: &Vec<config::NodeConfig>,
 ) -> Result<(), anyhow::Error> {
     let pg_version = config
@@ -24,10 +23,7 @@ pub async fn postgres_setup_wrapper(
         .map(|pg| pg.version.as_str())
         .unwrap_or("16")
         .to_string();
-    let replica_pass = dot_env
-        .get("POSTGRES_PASSWORD")
-        .cloned()
-        .unwrap_or_else(|| "repl_password".to_string());
+    let replica_pass = "repl_password".to_string();
     let pg_nodes: Vec<_> = config
         .nodes
         .iter()

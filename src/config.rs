@@ -81,6 +81,7 @@ pub struct DbConfig {
 pub struct PostgresConfig {
     pub enabled: bool,
     pub version: String,
+    pub replica_pass: String,
     pub backup: Option<PostgresBackupSchedule>,
     pub users: Option<Vec<PostgresUserConfig>>,
     #[serde(flatten)]
@@ -220,7 +221,7 @@ pub fn resolve_placeholders(
 //     Ok(())
 // }
 
-pub fn load_env_file<P: AsRef<Path>>(path: P) -> anyhow::Result<HashMap<String, String>> {
+fn load_env_file<P: AsRef<Path>>(path: P) -> anyhow::Result<HashMap<String, String>> {
     let mut map = HashMap::new();
     if !path.as_ref().exists() {
         return Ok(map);

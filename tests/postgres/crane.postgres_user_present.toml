@@ -13,6 +13,7 @@ private_key = "keys/id_ed25519"
 [db.postgres]
 enabled = true
 version = "17"
+replica_pass = "replica"
 
 [db.postgres.backup]
 full_backup_every = "1d"

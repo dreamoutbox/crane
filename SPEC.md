@@ -145,6 +145,7 @@ tls_email = "dev@example.com"
 version = "16"
 name = "myapp_db"
 user = "deployman"
+replica_pass = "replica"
 
 [db.redis]
 version = "7"

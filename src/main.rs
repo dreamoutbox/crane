@@ -248,11 +248,9 @@ async fn main() -> anyhow::Result<()> {
                         std::process::exit(1);
                     }
 
-                    if let Err(e) = crane::commands::postgres_backup::run_backup_cmd(
-                        &config,
-                        config_path,
-                        backup_type,
-                    ) {
+                    if let Err(e) =
+                        crane::commands::postgres_backup::run_backup_cmd(&config, backup_type)
+                    {
                         eprintln!("Backup failed: {}", e);
                         std::process::exit(1);
                     }
@@ -307,7 +305,7 @@ async fn main() -> anyhow::Result<()> {
 
         Some(("status", sub_m)) => {
             let app_name = sub_m.get_one::<String>("app").unwrap();
-            if let Err(e) = crane::commands::status::run(&config, config_path, app_name) {
+            if let Err(e) = crane::commands::status::run(&config, app_name) {
                 eprintln!("Status check failed: {}", e);
                 std::process::exit(1);
             }

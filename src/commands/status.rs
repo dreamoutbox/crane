@@ -1,9 +1,7 @@
-use crate::config;
 use crate::helper::keys::find_private_key_for_user;
 use crate::server_interactor::get_server_interactor;
 use crate::ssh::SSHSession;
 use std::collections::{BTreeSet, HashMap};
-use std::path::Path;
 
 struct SystemdUnitState {
     port: u16,
@@ -41,15 +39,7 @@ pub struct NodeStatusResult {
     pub status: Result<(NodeResourceStatus, Vec<InstanceStatus>), String>,
 }
 
-pub fn run(
-    config: &crate::config::Config,
-    config_path: &Path,
-    app_name: &str,
-) -> anyhow::Result<()> {
-    let config_dir = config_path.parent().unwrap_or(Path::new("."));
-    let env_path = config_dir.join(".env");
-    let _dot_env = config::load_env_file(&env_path).unwrap_or_default();
-
+pub fn run(config: &crate::config::Config, app_name: &str) -> anyhow::Result<()> {
     // Find requested app configuration by key or name
     let (_app_id, app) = config
         .app

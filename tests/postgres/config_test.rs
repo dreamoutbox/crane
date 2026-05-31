@@ -24,6 +24,7 @@ fn test_get_postgres_configs() {
             [db.postgres]
             enabled = true
             version = "17"
+            replica_pass = "replica"
 
             [[db.postgres.users]]
             user = "app1"
