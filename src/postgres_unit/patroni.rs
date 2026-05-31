@@ -59,6 +59,8 @@ bootstrap:
         hot_standby: "on"
         wal_keep_size: 1024MB
         shared_buffers: 128MB
+        logging_collector: "on"
+        log_destination: "csvlog"
         archive_mode: "on"
         archive_command: "cp %p /var/lib/postgresql/wal_archive/%f"
         {}
@@ -99,9 +101,16 @@ postgresql:
         *replica_pass
     );
 
-    println!("========== BEGIN PATRONI YAML ==========");
-    println!("{}", patroni_yaml);
-    println!("========== END PATRONI YAML ==========");
+    // println!("========== BEGIN PATRONI YAML ==========");
+    // println!("{}", patroni_yaml);
+    // println!("========== END PATRONI YAML ==========");
+
+    // write for debug at /debug/patroni_node_{node_name}.yaml
+    //to local file that run crane
+    std::fs::write(
+        format!("patroni_node_{}.yaml", node.name),
+        patroni_yaml.clone(),
+    )?;
 
     interactor.cmd("sudo mkdir -p /etc/patroni")?;
     interactor.create_file("/etc/patroni/config.yml", &patroni_yaml)?;
@@ -109,8 +118,11 @@ postgresql:
 
     interactor.cmd("sudo chown -R postgres:postgres /etc/patroni")?;
     interactor.cmd("sudo chmod 600 /etc/patroni/config.yml")?;
-    interactor.cmd("sudo systemctl daemon-reload")?;
-    interactor.cmd("sudo systemctl enable patroni")?;
+
+    if !patroni_installed {
+        interactor.cmd("sudo systemctl daemon-reload")?;
+        interactor.cmd("sudo systemctl enable patroni")?;
+    }
 
     Ok(())
 }

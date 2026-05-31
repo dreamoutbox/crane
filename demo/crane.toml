@@ -52,7 +52,7 @@ health_check_path = "/health"
 health_check_timeout = 30
 health_check_interval = 2
 # Domain
-domain = "myapp.example.com"
+domain = "myapp.localhost"
 # Keep old app versions
 retain_releases = 3
 # Replicas
@@ -90,7 +90,7 @@ health_check_path = "/health"
 health_check_timeout = 30
 health_check_interval = 2
 # Domain
-domain = "myapp2.example.com"
+domain = "myapp2.localhost"
 # Keep old app versions
 retain_releases = 3
 # Replicas
@@ -156,7 +156,7 @@ secret_access_key = "miniominio"
 
 [domain]
 provider = "cloudflare"
-domain_name = "example.com"
+domain_name = "localhost"
 
 
 [monitor]

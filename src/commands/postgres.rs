@@ -1,6 +1,7 @@
 use crate::postgres_unit::helper::connect_to_node;
 use crate::postgres_unit::helper::find_node_config_with_fallback;
 use crate::postgres_unit::helper::postgres_get_leader;
+use crate::postgres_unit::python_parse_pg_log_script::PYTHON_PARSE_PG_LOG_SCRIPT;
 use crate::server_interactor::server_interactor_trait::ServerInteractor;
 
 pub fn run_promote_cmd(
@@ -178,6 +179,7 @@ pub fn run_postgres_logs_cmd_internal(
             log_path_output.stderr
         );
     }
+
     let log_file_path = log_path_output.stdout.trim();
     if log_file_path.is_empty() {
         anyhow::bail!(
@@ -186,78 +188,9 @@ pub fn run_postgres_logs_cmd_internal(
     }
 
     // 2. Write the python parser script to the target node
-    let python_script = r#"import csv
-import sys
-import re
-import argparse
-from datetime import datetime
-
-parser = argparse.ArgumentParser()
-parser.add_argument('logfile')
-parser.add_argument('--since', help='Filter since date (YYYY-MM-DD HH:MM:SS)')
-parser.add_argument('--until', help='Filter until date (YYYY-MM-DD HH:MM:SS)')
-parser.add_argument('--user', help='Filter by user name')
-parser.add_argument('--db', help='Filter by database name')
-parser.add_argument('--sql', help='Filter by SQL statement substring')
-args = parser.parse_args()
-
-dml_pattern = re.compile(r'\b(INSERT|UPDATE|DELETE|TRUNCATE)\b', re.IGNORECASE)
-
-since_dt = None
-if args.since:
-    try:
-        since_dt = datetime.fromisoformat(args.since.replace(' ', 'T'))
-    except Exception:
-        pass
-
-until_dt = None
-if args.until:
-    try:
-        until_dt = datetime.fromisoformat(args.until.replace(' ', 'T'))
-    except Exception:
-        pass
-
-with open(args.logfile, 'r', encoding='utf-8', errors='replace') as f:
-    reader = csv.reader(f)
-    for row in reader:
-        if len(row) < 14:
-            continue
-        
-        log_time_str = row[0]
-        user_name = row[1]
-        database_name = row[2]
-        client = row[4]
-        severity = row[11]
-        message = row[13]
-        
-        if severity == 'LOG' and message.startswith('statement: '):
-            sql = message[len('statement: '):].strip()
-            if not dml_pattern.search(sql):
-                continue
-            
-            if args.user and args.user.lower() != user_name.lower():
-                continue
-            if args.db and args.db.lower() != database_name.lower():
-                continue
-            if args.sql and args.sql.lower() not in sql.lower():
-                continue
-            
-            if since_dt or until_dt:
-                try:
-                    dt_part = log_time_str.split('.')[0]
-                    row_dt = datetime.strptime(dt_part, '%Y-%m-%d %H:%M:%S')
-                    if since_dt and row_dt < since_dt:
-                        continue
-                    if until_dt and row_dt > until_dt:
-                        continue
-                except Exception:
-                    pass
-            
-            print(f"{log_time_str} | user={user_name} db={database_name} client={client} | SQL: {sql}")
-"#;
 
     let script_path = "/tmp/crane_parse_pg_logs.py";
-    interactor.create_file(script_path, python_script)?;
+    interactor.create_file(script_path, PYTHON_PARSE_PG_LOG_SCRIPT)?;
 
     // 3. Construct and execute the Python command
     let mut py_cmd = format!(

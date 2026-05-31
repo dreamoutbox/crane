@@ -108,7 +108,8 @@ pub fn postgres_restore(
 
     // 3. Clear existing data directory on all nodes
     for node in &pg_nodes {
-        println!("Clearing data directory on node {}...", node.name);
+        println!("Clearing postgres data directory on node {}", node.name);
+
         let node_interactor = if node.internal_ip == primary_node.internal_ip {
             None
         } else {
@@ -129,6 +130,8 @@ pub fn postgres_restore(
             &format!("sudo -u postgres mkdir -p {}", pgdata_dir),
         )?;
         cmdw(interactor, &format!("sudo chmod 700 {}", pgdata_dir))?;
+
+        println!("Cleared postgres data directory on node {}", node.name);
     }
 
     // 2. Download all backups in the chain from S3 to VPS local backups dir

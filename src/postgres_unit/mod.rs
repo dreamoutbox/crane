@@ -7,5 +7,6 @@ pub mod helper;
 pub mod install;
 pub mod patroni;
 mod python_backup_script;
+pub mod python_parse_pg_log_script;
 pub mod restore;
 pub mod setup;

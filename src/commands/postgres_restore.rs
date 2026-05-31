@@ -110,7 +110,7 @@ pub fn run_restore_cmd(
 
     let interactor = connect_to_node(&primary_node, &config)?;
 
-    println!("Restoring database to backup ID: {}...", target_backup_id);
+    println!("Restoring database to backup ID: {}\n", target_backup_id);
     if let Some(t) = pitr_time {
         println!("Point-in-time recovery target: {}", t);
     }

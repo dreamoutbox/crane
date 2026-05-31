@@ -73,15 +73,15 @@ pub fn postgres_setup_wrapper(
         // let kill_res = interactor.cmd("sudo pkill -u postgres -f postgres");
         // dbg!(&kill_res);
 
-        std::thread::sleep(std::time::Duration::from_millis(500));
+        // std::thread::sleep(std::time::Duration::from_millis(500));
 
         let _disable_pg_res = interactor.cmd("sudo systemctl disable postgresql");
         // dbg!(&disable_pg_res);
 
-        let _disable2_pg_res = interactor.cmd(&format!(
-            "sudo systemctl disable postgresql@{}-main",
-            pg_version
-        ));
+        // let _disable2_pg_res = interactor.cmd(&format!(
+        //     "sudo systemctl disable postgresql@{}-main",
+        //     pg_version
+        // ));
         // dbg!(&disable2_pg_res);
 
         // Stop and kill Patroni before cleaning up config and bootstrapping
@@ -179,7 +179,7 @@ pub fn postgres_setup_wrapper(
 
             anyhow::bail!("Patroni failed to start on node {}", node.name);
         } else {
-            println!("Patroni started successfully on node {}", node.name);
+            println!("\tPatroni started successfully on node {}", node.name);
         }
     }
 
