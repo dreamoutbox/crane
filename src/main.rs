@@ -41,6 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .subcommand(
             Command::new("postgres")
+                .alias("pg")
                 .about("Manage PostgreSQL cluster topology")
                 .subcommand_required(true)
                 .arg_required_else_help(true)
