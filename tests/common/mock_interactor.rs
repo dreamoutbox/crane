@@ -1,10 +1,13 @@
-struct MockInteractor {
+#[allow(unused)]
+
+pub struct MockInteractor {
     commands: RefCell<Vec<String>>,
     files: RefCell<HashMap<String, String>>,
     simulated_dates: Vec<String>,
 }
 
 impl MockInteractor {
+    #[allow(dead_code)]
     fn new(simulated_dates: Vec<String>) -> Self {
         Self {
             commands: RefCell::new(Vec::new()),

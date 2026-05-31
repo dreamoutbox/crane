@@ -1,8 +1,11 @@
+#[allow(unused)]
+
 struct MockS3Client {
     objects: RefCell<HashMap<String, Vec<u8>>>,
 }
 
 impl MockS3Client {
+    #[allow(dead_code)]
     fn new() -> Self {
         Self {
             objects: RefCell::new(HashMap::new()),

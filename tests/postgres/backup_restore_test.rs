@@ -1,5 +1,5 @@
 // RUN:
-// RUST_BACKTRACE=1 cargo nextest run test_restore_integrated_workflow -- --no-capture
+// RUST_BACKTRACE=1 cargo nextest run test_backup_restore -- --no-capture
 
 use crane::{
     commands::{postgres_backup::backup_from_config_wrapper, postgres_restore::run_restore_cmd},
@@ -8,12 +8,14 @@ use crane::{
 };
 
 #[tokio::test]
-async fn test_restore_integrated_workflow() {
+async fn test_backup_restore() {
     let config_path = std::path::Path::new("tests/postgres/crane.toml");
     let config = read_config_toml_file(config_path).expect("Failed to load crane.toml");
 
     //Deploy
-    crane::commands::deploy::run(&config, config_path, true).await.expect("deploy failed");
+    crane::commands::deploy::run(&config, config_path, true)
+        .await
+        .expect("deploy failed");
 
     // Retrieve leader node and connect
     let primary_node = postgres_get_leader(&config)
@@ -59,7 +61,7 @@ async fn test_restore_integrated_workflow() {
     // RESTORE FROM FULL BACKUP
     // ============================================================
     println!("Step 7: restore from full backup");
-    run_restore_cmd(&config, &full_backup.id, None, None).expect("Restore from full backup failed");
+    run_restore_cmd(&config, &full_backup.id, None, None).await.expect("Restore from full backup failed");
 
     // ============================================================
     //  ASSERT DATA FROM FULL BACKUP
@@ -156,6 +158,7 @@ async fn test_restore_integrated_workflow() {
         incr_backup_1.backup_type, pitr_arg
     );
     run_restore_cmd(&config, &incr_backup_1.id, None, pitr_arg)
+        .await
         .expect("Restore from backup #1 failed");
 
     // ============================================================
@@ -194,6 +197,7 @@ async fn test_restore_integrated_workflow() {
         None,
         Some(&pitr_time_before_drop),
     )
+    .await
     .expect("PITR restore to SQL `INSERT 5` failed");
 
     // ============================================================
