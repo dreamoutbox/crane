@@ -1,5 +1,6 @@
 # crane.toml
 
+
 [[nodes]]
 name = "vps1"
 host = "localhost"
@@ -30,6 +31,7 @@ roles = ["postgres", "redis"]
 user = "crane"
 private_key = "keys/id_ed25519"
 
+
 [db.postgres]
 enabled = true
 version = "17"
@@ -49,6 +51,7 @@ databases = ["mydb"]
 [db.postgres.mydb]
 name = "mydb"
 
+
 [backup.s3]
 bucket = "crane1"
 region = "us-east-1"
@@ -58,9 +61,11 @@ endpoint = "http://s3:9000" # omit for AWS S3
 access_key_id = "miniominio"
 secret_access_key = "miniominio"
 
+
 [domain]
 provider = "cloudflare"
 domain_name = "example.com"
+
 
 [monitor]
 interval = 30

@@ -82,6 +82,7 @@ pub async fn postgres_setup_wrapper(
 
                 // Stop and kill Patroni before cleaning up config and bootstrapping
                 let _stop_patroni_res = interactor.cmd("sudo systemctl stop patroni");
+                let _ = interactor.cmd("sudo pkill -9 -u postgres postgres");
 
                 // Backup existing postgres main directory
                 backup_postgres_dir(&pg_version, &*interactor)?;

@@ -81,6 +81,7 @@ pub async fn postgres_restore(
                 Ok(interactor) => {
                     let _ = interactor.cmd("sudo systemctl stop patroni");
                     let _ = interactor.cmd("sudo systemctl stop postgresql --no-block");
+                    let _ = interactor.cmd("sudo pkill -9 -u postgres postgres");
                 }
                 Err(e) => {
                     println!("Warning: failed to connect to node {}: {}", node.name, e);
