@@ -5,7 +5,7 @@ we use cargo nextest to run tests.
 ## Run tests
 
 ```sh
-cargo nextest run --test traefik -- test_traefik_install_config --nocapture
+cargo nextest run --test haproxy -- test_haproxy_install --nocapture
 ```
 
 ## NOTE:

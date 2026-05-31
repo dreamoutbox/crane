@@ -96,6 +96,7 @@ pub fn wait_for_etcd_quorum(
     while start.elapsed() < duration {
         if let Ok(output) = interactor.cmd("env ETCDCTL_API=3 etcdctl endpoint health") {
             if output.exit_code == 0 {
+                println!("\tEtcd quorum formed.");
                 return Ok(());
             }
         }

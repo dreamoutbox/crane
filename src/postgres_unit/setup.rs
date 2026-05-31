@@ -1,9 +1,9 @@
 use crate::{
     config::{self, PostgresDbConfig, PostgresUserConfig},
+    haproxy_unit::haproxy::setup_haproxy_each_nodes_wrapper,
     helper::keys::find_private_key_for_user,
     postgres_unit::{
         etcd,
-        haproxy::setup_haproxy_each_nodes_wrapper,
         helper::{configure_postgres_backup, connect_to_node, get_postgres_configs},
         install::install_postgres,
         patroni::install_patroni,
@@ -220,7 +220,7 @@ pub fn postgres_setup_wrapper(
     )?;
 
     // 4. Setup HAProxy on all app nodes
-    setup_haproxy_each_nodes_wrapper(config, app_nodes, leader, follower_ips)?;
+    setup_haproxy_each_nodes_wrapper(config, app_nodes)?;
 
     Ok(())
 }

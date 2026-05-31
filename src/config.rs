@@ -49,6 +49,7 @@ pub struct AppConfig {
     pub health_check_interval: Option<u64>,
     pub retain_releases: Option<u32>,
     pub domain: Option<String>,
+    pub ssl_cert: Option<String>,
     pub env: Option<HashMap<String, String>>,
     pub min_replicas: Option<u32>,
     pub max_replicas: Option<u32>,
@@ -66,6 +67,7 @@ pub struct DomainConfig {
     pub provider: String,
     pub domain_name: String,
     pub tls_email: Option<String>,
+    pub ssl_cert: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

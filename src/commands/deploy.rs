@@ -68,8 +68,8 @@ pub fn run(
         let interactor = get_server_interactor(ssh)?;
         interactor.install_dependencies(all_deps.clone())?;
 
-        // install traefik
-        crate::traefik_unit::install::install_traefik(&*interactor)?;
+        // install haproxy
+        crate::haproxy_unit::haproxy::install_haproxy(&*interactor)?;
     }
 
     // Install postgres database cluster if enabled
@@ -362,23 +362,13 @@ pub fn run(
                     println!("\t[{}] instance on port {} is healthy!", app.name, port);
                 }
 
-                // 5. Write Traefik dynamic config
-                let domain = app.domain.clone().unwrap_or_else(|| {
-                    config
-                        .domain
-                        .as_ref()
-                        .map(|d| d.domain_name.clone())
-                        .unwrap_or_else(|| "localhost".to_string())
-                });
-                let health_path = app.health_check_path.as_deref().unwrap_or("/health");
-                crate::traefik_unit::setup::setup_traefik(
+                // 5. Write unified HAProxy config
+                crate::haproxy_unit::haproxy::setup_haproxy_unified(
                     &*node_interactor,
-                    &app.name,
-                    &domain,
-                    app.port_start,
-                    port_end,
-                    health_path,
-                    false, // will reload once at the end
+                    &config,
+                    node,
+                    Some(&app.name),
+                    Some(port_end),
                 )?;
 
                 // 5b. Update /etc/hosts on the VPS so apps can resolve each other by service name
@@ -414,9 +404,6 @@ pub fn run(
                 deploy_update_etc_hosts(&*node_interactor, &hosts_entries)?;
 
                 // No pruning needed for direct /app deployment
-
-                // Reload traefik after all services are deployed on this node
-                crate::traefik_unit::setup::reload_traefik(&*node_interactor)?;
             }
 
             // Clean up local temporary zip file

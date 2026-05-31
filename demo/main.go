@@ -27,7 +27,7 @@ func main() {
 	})
 
 	app.Get("/health", func(c fiber.Ctx) error {
-		return c.SendString("OK!")
+		return c.Status(200).SendString("OK!")
 	})
 
 	app.Get("/pg", func(c fiber.Ctx) error {
@@ -160,7 +160,9 @@ func main() {
 		}
 
 		c.Set("Content-Type", resp.Header.Get("Content-Type"))
-		return c.Status(resp.StatusCode).Send(body)
+		return c.Status(resp.StatusCode).SendString(
+			fmt.Sprintf("Response from %s: %s", to, string(body)),
+		)
 	})
 
 	app.Listen(fmt.Sprintf(":%d", *port))

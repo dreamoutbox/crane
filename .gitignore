@@ -5,3 +5,5 @@ demo/myapp
 *.CONTEXT.MD
 src/cloudflare_unit/response.json
 demo/crane.local.toml
+haproxy_node_*.cfg
+patroni_node_*.yaml

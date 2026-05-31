@@ -3,7 +3,8 @@ use crane::{
     commands::postgres_backup_list::run_postgres_backup_list_cmd, config::read_config_toml_file,
 };
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     let matches = Command::new("crane")
         .version("0.1.0")
         .about("crane — CLI Deployment Tool")
