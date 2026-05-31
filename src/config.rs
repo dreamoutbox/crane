@@ -68,6 +68,7 @@ pub struct DomainConfig {
     pub domain_name: String,
     pub tls_email: Option<String>,
     pub ssl_cert: Option<String>,
+    pub token: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -144,11 +145,80 @@ pub struct AutoscaleConfig {
     pub cooldown: Option<u32>,
 }
 
-pub fn read_config_toml_file<P: AsRef<Path>>(path: P) -> anyhow::Result<Config> {
+pub fn read_config_toml_file_with_env<P: AsRef<Path>, E: AsRef<Path>>(
+    path: P,
+    env_path: Option<E>,
+) -> anyhow::Result<Config> {
+    let resolved_env_path = env_path
+        .map(|p| p.as_ref().to_path_buf())
+        .unwrap_or_else(|| Path::new(".env").to_path_buf());
+
+    let dot_env = load_env_file(&resolved_env_path).unwrap_or_default();
     let content = std::fs::read_to_string(path)?;
-    let config: Config = toml::from_str(&content)?;
+    let resolved_content = resolve_placeholders(&content, &dot_env)?;
+    let config: Config = toml::from_str(&resolved_content)?;
+
     Ok(config)
 }
+
+pub fn read_config_toml_file<P: AsRef<Path>>(path: P) -> anyhow::Result<Config> {
+    read_config_toml_file_with_env(path, Option::<&Path>::None)
+}
+
+pub fn resolve_placeholders(
+    content: &str,
+    dot_env: &HashMap<String, String>,
+) -> anyhow::Result<String> {
+    let mut result = String::new();
+    let mut chars = content.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '$' && chars.peek() == Some(&'{') {
+            chars.next(); // consume '{'
+            let mut var_name = String::new();
+            let mut found_close = false;
+            while let Some(next_c) = chars.next() {
+                if next_c == '}' {
+                    found_close = true;
+                    break;
+                }
+                var_name.push(next_c);
+            }
+            if !found_close {
+                anyhow::bail!("Unclosed placeholder: ${{{}", var_name);
+            }
+            let resolved_value = if let Ok(val) = std::env::var(&var_name) {
+                val
+            } else if let Some(val) = dot_env.get(&var_name) {
+                val.clone()
+            } else {
+                anyhow::bail!(
+                    "Environment variable '{}' not found in either shell environment or env file",
+                    var_name
+                );
+            };
+            result.push_str(&resolved_value);
+        } else {
+            result.push(c);
+        }
+    }
+
+    Ok(result)
+}
+
+// pub fn load_env_into_process<P: AsRef<Path>>(path: P) -> anyhow::Result<()> {
+//     let dot_env = load_env_file(path)?;
+
+//     for (k, v) in dot_env {
+//         if std::env::var(&k).is_err() {
+//             unsafe {
+//                 std::env::set_var(&k, v);
+//             }
+//         }
+//     }
+
+//     Ok(())
+// }
 
 pub fn load_env_file<P: AsRef<Path>>(path: P) -> anyhow::Result<HashMap<String, String>> {
     let mut map = HashMap::new();

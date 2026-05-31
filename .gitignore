@@ -8,3 +8,5 @@ demo/crane.local.toml
 haproxy_node_*.cfg
 patroni_node_*.yaml
 *.log
+.env
+*.env

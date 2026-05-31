@@ -271,7 +271,9 @@ async fn main() -> anyhow::Result<()> {
                     let pitr_time = sub_sub_m.get_one::<String>("pitr").map(|s| s.as_str());
                     if let Err(e) = crane::commands::postgres_restore::run_restore_cmd(
                         &config, target_id, base_id, pitr_time,
-                    ).await {
+                    )
+                    .await
+                    {
                         eprintln!("Restore failed: {}", e);
                         std::process::exit(1);
                     }
