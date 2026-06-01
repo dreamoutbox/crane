@@ -1,32 +1,19 @@
-use crate::postgres_unit::{
-    entity::{HAProxyNode, PostgresNode, PostgresStatusOutput},
-    helper::connect_to_node,
+use crate::{
+    helper::config::config_get_nodes,
+    postgres_unit::{
+        entity::{HAProxyNode, PostgresNode, PostgresStatusOutput},
+        helper::{connect_to_node, get_pg_version},
+    },
 };
 
 pub async fn get_postgres_status_wrapper(
     config: &crate::config::Config,
 ) -> anyhow::Result<PostgresStatusOutput> {
-    let pg_nodes: Vec<_> = config
-        .nodes
-        .iter()
-        .filter(|n| n.roles.contains(&"postgres".to_string()))
-        .cloned()
-        .collect();
+    let pg_nodes = config_get_nodes(&config, "postgres");
 
-    let app_nodes: Vec<_> = config
-        .nodes
-        .iter()
-        .filter(|n| n.roles.contains(&"app".to_string()))
-        .cloned()
-        .collect();
+    let app_nodes = config_get_nodes(&config, "app");
 
-    let pg_version_config = config
-        .db
-        .as_ref()
-        .and_then(|db| db.postgres.as_ref())
-        .map(|pg| pg.version.as_str())
-        .unwrap_or("16")
-        .to_string();
+    let pg_version = get_pg_version(&config);
 
     let mut pgs = Vec::new();
     let mut pg_primary_host = "Unknown".to_string();
@@ -39,13 +26,13 @@ pub async fn get_postgres_status_wrapper(
     for node in &pg_nodes {
         let node = node.clone();
         let config = config.clone();
-        let pg_version_config = pg_version_config.clone();
+        let pg_version = pg_version.clone();
 
         let handle = tokio::task::spawn_blocking(move || -> (PostgresNode, bool) {
             let address = format!("{}:{}", node.public_ip, node.port);
             let mut hostname = node.host.clone();
             let mut role = "Unknown".to_string();
-            let mut version = pg_version_config;
+            let mut version = pg_version;
             let mut status = "Unhealthy".to_string();
             let mut haproxy_active = false;
 
@@ -88,10 +75,8 @@ pub async fn get_postgres_status_wrapper(
                         }
                     }
 
-                    if let Ok(output) = interactor.cmd("systemctl is-active haproxy") {
-                        if output.stdout.trim() == "active" {
-                            haproxy_active = true;
-                        }
+                    if let Ok(started) = interactor.wait_for_service_start("haproxy", 10) {
+                        haproxy_active = started
                     }
                 }
 
@@ -117,12 +102,14 @@ pub async fn get_postgres_status_wrapper(
 
     for handle in handles {
         let (node_info, is_haproxy_active) = handle.await?;
+
         if node_info.role == "Leader" {
             pg_primary_host = node_info.hostname.clone();
         }
         if is_haproxy_active {
             haproxy_active_count += 1;
         }
+
         pgs.push(node_info);
     }
 

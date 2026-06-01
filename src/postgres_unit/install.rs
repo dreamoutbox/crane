@@ -27,7 +27,7 @@ pub fn install_postgres(interactor: &dyn ServerInteractor, version: &str) -> any
         ])?;
 
         println!("\tEnabling PostgreSQL service for boot...");
-        interactor.cmd("sudo systemctl enable postgresql")?;
+        interactor.enable_service("postgresql")?;
 
         println!("\tStarting PostgreSQL cluster...");
         let start_cmd = format!(

@@ -118,9 +118,9 @@ impl ServerInteractor for DebianInteractor {
         Ok(())
     }
 
-    fn mkdir(&self, path: &str, user: &str, group: &str) -> anyhow::Result<()> {
+    fn mkdir(&self, path: &str) -> anyhow::Result<()> {
         self.run_checked(&format!("sudo mkdir -p '{}'", path))?;
-        self.run_checked(&format!("sudo chown '{}:{}' '{}'", user, group, path))?;
+        // self.run_checked(&format!("sudo chown '{}:{}' '{}'", user, group, path))?;
         Ok(())
     }
 
@@ -171,49 +171,39 @@ impl ServerInteractor for DebianInteractor {
         self.run_checked("sudo systemctl daemon-reload")?;
 
         if service_register.auto_start {
-            self.run_checked(&format!(
-                "sudo systemctl enable '{}'",
-                service_register.service_name
-            ))?;
-            self.run_checked(&format!(
-                "sudo systemctl start '{}'",
-                service_register.service_name
-            ))?;
+            self.enable_service(&service_register.service_name)?;
+            self.start_service(&service_register.service_name)?;
         }
 
         Ok(())
     }
 
     fn restart_service(&self, service_name: &str) -> anyhow::Result<()> {
-        self.run_checked(&format!("sudo systemctl restart '{}'", service_name))?;
+        self.run_checked(&format!("sudo systemctl restart {}", service_name))?;
         Ok(())
     }
 
     fn stop_service(&self, service_name: &str) -> anyhow::Result<()> {
-        self.run_checked(&format!("sudo systemctl stop '{}'", service_name))?;
+        self.run_checked(&format!("sudo systemctl stop {}", service_name))?;
         Ok(())
     }
 
     fn start_service(&self, service_name: &str) -> anyhow::Result<()> {
-        self.run_checked(&format!("sudo systemctl start '{}'", service_name))?;
+        self.run_checked(&format!("sudo systemctl start {}", service_name))?;
         Ok(())
     }
 
     fn status_service(&self, service_name: &str) -> anyhow::Result<()> {
-        self.run_checked(&format!("sudo systemctl status '{}'", service_name))?;
+        self.run_checked(&format!("sudo systemctl status {}", service_name))?;
         Ok(())
     }
 
     fn delete_service(&self, service_name: &str) -> anyhow::Result<()> {
         let service_path = format!("/etc/systemd/system/{}.service", service_name);
-        let _ = self
-            .ssh
-            .run_cmd(&format!("sudo systemctl stop '{}'", service_name));
-        let _ = self
-            .ssh
-            .run_cmd(&format!("sudo systemctl disable '{}'", service_name));
+        self.stop_service(service_name)?;
+        self.disable_service(service_name)?;
         self.run_checked(&format!("sudo rm -f '{}'", service_path))?;
-        self.run_checked("sudo systemctl daemon-reload")?;
+        self.service_daemon_reload()?;
         Ok(())
     }
 
@@ -249,7 +239,9 @@ impl ServerInteractor for DebianInteractor {
             ));
 
             match create_result {
-                Ok(_) => println!("\tUser {} created successfully", user_register.username),
+                Ok(_) => {
+                    println!("\tUser {} created successfully", user_register.username)
+                }
 
                 Err(e) => {
                     if e.to_string().contains("already exists") {
@@ -334,5 +326,45 @@ impl ServerInteractor for DebianInteractor {
             .filter(|s| !s.is_empty())
             .collect();
         Ok(users)
+    }
+
+    fn wait_for_service_start(&self, service_name: &str, timeout: u64) -> anyhow::Result<bool> {
+        let start_time = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(timeout);
+        let mut is_active = false;
+
+        while start_time.elapsed() < timeout {
+            let active_out = self.cmd(&format!("sudo systemctl is-active {}", service_name))?;
+
+            if active_out.stdout.trim() == "active" {
+                is_active = true;
+                break;
+            }
+
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+
+        Ok(is_active)
+    }
+
+    fn service_daemon_reload(&self) -> anyhow::Result<()> {
+        self.run_checked("sudo systemctl daemon-reload")?;
+        Ok(())
+    }
+
+    fn enable_service(&self, service_name: &str) -> anyhow::Result<()> {
+        self.run_checked(&format!("sudo systemctl enable {}", service_name))?;
+        Ok(())
+    }
+
+    fn disable_service(&self, service_name: &str) -> anyhow::Result<()> {
+        self.run_checked(&format!("sudo systemctl disable {}", service_name))?;
+        Ok(())
+    }
+
+    fn unzip(&self, zip_path: &str, dest: &str) -> anyhow::Result<()> {
+        self.run_checked(&format!("sudo unzip -o '{}' -d '{}'", zip_path, dest))?;
+
+        Ok(())
     }
 }

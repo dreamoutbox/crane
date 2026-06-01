@@ -42,12 +42,12 @@ WantedBy=multi-user.target
 
     interactor.create_file(&service_file_path, &systemd_data)?;
 
-    interactor.cmd(&format!("sudo chown root:root '{}'", service_file_path))?;
-    interactor.cmd(&format!("sudo chmod 644 '{}'", service_file_path))?;
+    interactor.chown(&service_file_path, "root", "root")?;
+    interactor.chmod(&service_file_path, "644")?;
 
-    let _ = interactor.cmd("sudo systemctl daemon-reload")?;
+    let _ = interactor.service_daemon_reload()?;
 
-    let _ = interactor.cmd(&format!("sudo systemctl enable '{}@'", app_name));
+    let _ = interactor.enable_service(&format!("{}@", app_name));
 
     Ok(())
 }

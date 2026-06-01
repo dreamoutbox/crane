@@ -1,5 +1,5 @@
 use crate::{
-    helper::base64::base64_encode,
+    helper::{base64::base64_encode, config::config_get_nodes},
     postgres_unit::{
         entity::BackupMetadata,
         helper::{cmdw, connect_to_node},
@@ -58,12 +58,7 @@ pub async fn postgres_restore(
     let pgdata_dir = format!("/var/lib/postgresql/{}/main", pg_version);
 
     // Gather all PostgreSQL nodes
-    let pg_nodes: Vec<_> = config
-        .nodes
-        .iter()
-        .filter(|n| n.roles.contains(&"postgres".to_string()))
-        .cloned()
-        .collect();
+    let pg_nodes = config_get_nodes(&config, "postgres");
 
     // 1. Stop all Patroni and PostgreSQL on all nodes
     let mut handles = vec![];
@@ -79,8 +74,8 @@ pub async fn postgres_restore(
 
             match connect_to_node(&node, &config) {
                 Ok(interactor) => {
-                    let _ = interactor.cmd("sudo systemctl stop patroni");
-                    let _ = interactor.cmd("sudo systemctl stop postgresql --no-block");
+                    let _ = interactor.stop_service("patroni");
+                    let _ = interactor.stop_service("postgresql --no-block");
                     let _ = interactor.cmd("sudo pkill -9 -u postgres postgres");
                 }
                 Err(e) => {
@@ -422,7 +417,7 @@ pub async fn postgres_restore(
 
     // Start Patroni on the primary node only
     println!("Starting Patroni on primary node {}...", primary_node.name);
-    cmdw(interactor, "sudo systemctl restart patroni")?;
+    interactor.restart_service("patroni")?;
 
     // Wait for primary node to become the Patroni leader
     println!("Waiting for primary node to become Patroni leader...");
@@ -480,7 +475,7 @@ pub async fn postgres_restore(
         let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
             println!("Starting Patroni on replica node {}...", node.name);
             let node_interactor = connect_to_node(&node, &config)?;
-            cmdw(&*node_interactor, "sudo systemctl restart patroni")?;
+            node_interactor.restart_service("patroni")?;
             Ok(())
         });
 

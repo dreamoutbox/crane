@@ -11,8 +11,8 @@ pub fn install_etcd(interactor: &dyn ServerInteractor) -> anyhow::Result<()> {
         interactor
             .install_dependencies(vec!["etcd-server".to_string(), "etcd-client".to_string()])?;
 
-        interactor.cmd("sudo systemctl daemon-reload")?;
-        interactor.cmd("sudo systemctl enable etcd")?;
+        interactor.service_daemon_reload()?;
+        interactor.enable_service("etcd")?;
     } else {
         println!("\tetcd is already installed.");
     }
@@ -28,7 +28,7 @@ pub fn setup_etcd(
     println!("\tConfiguring etcd cluster on node {}...", node.name);
 
     // Stop etcd cleanly and remove data directory; wait to ensure it is fully stopped
-    let _ = interactor.cmd("sudo systemctl stop etcd");
+    let _ = interactor.stop_service("etcd");
     std::thread::sleep(std::time::Duration::from_secs(1));
     let _ = interactor.cmd("sudo rm -rf /var/lib/etcd/");
 
@@ -44,7 +44,8 @@ pub fn setup_etcd(
         .join(",");
 
     let etcd_default = format!(
-        r#"# Member settings
+        r#"
+# Member settings
 ETCD_NAME="{}"
 ETCD_DATA_DIR="/var/lib/etcd/default.etcd"
 ETCD_LISTEN_PEER_URLS="http://{}:2380"
@@ -80,7 +81,7 @@ pub fn start_etcd(
 ) -> anyhow::Result<()> {
     println!("\tStarting etcd service on node {} ...", node.name);
 
-    let _start_etcd_output = interactor.cmd("sudo systemctl restart etcd --no-block")?;
+    let _start_etcd_output = interactor.restart_service("etcd --no-block")?;
     // dbg!(start_etcd_output);
 
     Ok(())

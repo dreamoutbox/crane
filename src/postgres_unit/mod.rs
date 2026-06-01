@@ -1,7 +1,6 @@
 pub mod backup;
 pub mod demote;
 pub mod entity;
-pub mod etcd;
 pub mod helper;
 pub mod install;
 pub mod patroni;

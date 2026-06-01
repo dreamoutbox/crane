@@ -1,6 +1,7 @@
 use crate::cloudflare_unit::entity::DnsRecordType;
 use crate::cloudflare_unit::{dns::CloudflareDns, entity::CreateDnsRecord};
 use crate::config::Config;
+use crate::helper::config::config_get_nodes;
 use anyhow::{Context, Result};
 
 /// Update DNS records on Cloudflare for the given app or all apps.
@@ -39,11 +40,7 @@ pub async fn update_dns(config: &Config, app_name: Option<&str>, is_deploy: bool
         return Ok(());
     }
 
-    let app_nodes: Vec<_> = config
-        .nodes
-        .iter()
-        .filter(|n| n.roles.contains(&"app".to_string()))
-        .collect();
+    let app_nodes = config_get_nodes(&config, "app");
 
     if app_nodes.is_empty() {
         println!("No nodes with role 'app' configured. Skipping DNS updates.");

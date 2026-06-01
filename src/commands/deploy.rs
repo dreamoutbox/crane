@@ -1,5 +1,6 @@
 use crate::deployer::helper::{deploy_update_etc_hosts, deploy_zip_app};
 use crate::deployer::users::deploy_setup_users;
+use crate::helper::config::config_get_nodes;
 use crate::helper::keys::find_private_key_for_user;
 use crate::postgres_unit::helper::get_postgres_configs;
 use crate::postgres_unit::setup::postgres_setup_wrapper;
@@ -40,12 +41,7 @@ pub async fn run(
         }
     }
 
-    let app_nodes: Vec<_> = config
-        .nodes
-        .iter()
-        .filter(|n| n.roles.contains(&"app".to_string()))
-        .cloned()
-        .collect();
+    let app_nodes = config_get_nodes(&config, "app");
 
     let mut handles = vec![];
     for node in &app_nodes {
@@ -208,31 +204,22 @@ pub async fn run(
                 let app_dir = format!("/app/{}", app.name);
                 let app_config_dir = format!("/app_config/{}", app.name);
 
-                node_interactor.cmd(&format!("sudo mkdir -p '{}'", app_dir))?;
-                node_interactor.cmd(&format!(
-                    "sudo chown -R '{}:{}' '{}'",
-                    app.deploy_user, app.deploy_user, app_dir
-                ))?;
-                node_interactor.cmd(&format!("sudo mkdir -p '{}'", app_config_dir))?;
-                node_interactor.cmd(&format!(
-                    "sudo chown -R '{}:{}' '{}'",
-                    app.deploy_user, app.deploy_user, app_config_dir
-                ))?;
+                // create app dir
+                node_interactor.mkdir(&app_dir)?;
+                node_interactor.chown(&app_dir, &app.deploy_user, &app.deploy_user)?;
+
+                // create app config dir
+                node_interactor.mkdir(&app_config_dir)?;
+                node_interactor.chown(&app_config_dir, &app.deploy_user, &app.deploy_user)?;
 
                 // Upload zip to /tmp to avoid permission issues
                 let temp_zip_path = format!("/tmp/crane-deploy-{}-{}.zip", app.name, datetime);
                 node_interactor.upload(zip_path.to_str().unwrap(), &temp_zip_path)?;
 
                 // Extract zip on server using sudo
-                node_interactor.cmd(&format!(
-                    "sudo unzip -o '{}' -d '{}'",
-                    temp_zip_path, app_dir
-                ))?;
+                node_interactor.unzip(&temp_zip_path, &app_dir)?;
                 // Ensure correct ownership of extracted files
-                node_interactor.cmd(&format!(
-                    "sudo chown -R '{}:{}' '{}'",
-                    app.deploy_user, app.deploy_user, app_dir
-                ))?;
+                node_interactor.chown(&app_dir, &app.deploy_user, &app.deploy_user)?;
                 // Chmod the entrypoint to be executable
                 node_interactor.cmd(&format!(
                     "sudo chmod +x '{}/{}'",
@@ -315,11 +302,8 @@ pub async fn run(
                     // Write env file directly
                     let env_path = format!("{}/.env", app_config_dir);
                     node_interactor.create_file(&env_path, &env_content)?;
-                    node_interactor.cmd(&format!(
-                        "sudo chown '{}:{}' '{}'",
-                        app.deploy_user, app.deploy_user, env_path
-                    ))?;
-                    node_interactor.cmd(&format!("sudo chmod 600 '{}'", env_path))?;
+                    node_interactor.chown(&env_path, &app.deploy_user, &app.deploy_user)?;
+                    node_interactor.chmod(&env_path, "600");
 
                     // Create systemd template unit (admin)
                     crate::systemd_unit::setup::setup_systemd_template(

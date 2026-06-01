@@ -15,8 +15,9 @@ pub trait ServerInteractor {
     fn download(&self, local_path: &str, remote_path: &str) -> anyhow::Result<()>;
     fn chmod(&self, path: &str, permission: &str) -> anyhow::Result<()>;
     fn chown(&self, path: &str, user: &str, group: &str) -> anyhow::Result<()>;
-    fn mkdir(&self, path: &str, user: &str, group: &str) -> anyhow::Result<()>;
+    fn mkdir(&self, path: &str) -> anyhow::Result<()>;
     fn ls(&self, path: &str) -> anyhow::Result<Vec<String>>;
+    fn unzip(&self, zip_path: &str, dest: &str) -> anyhow::Result<()>;
 
     // DEPENDENCIES
     fn install_dependencies(&self, dependencies: Vec<String>) -> anyhow::Result<()>;
@@ -28,6 +29,10 @@ pub trait ServerInteractor {
     fn start_service(&self, service_name: &str) -> anyhow::Result<()>;
     fn status_service(&self, service_name: &str) -> anyhow::Result<()>;
     fn delete_service(&self, service_name: &str) -> anyhow::Result<()>;
+    fn wait_for_service_start(&self, service_name: &str, timeout: u64) -> anyhow::Result<bool>;
+    fn service_daemon_reload(&self) -> anyhow::Result<()>;
+    fn enable_service(&self, service_name: &str) -> anyhow::Result<()>;
+    fn disable_service(&self, service_name: &str) -> anyhow::Result<()>;
 
     // USERS
     fn create_user(&self, user_register: UserRegister) -> anyhow::Result<()>;

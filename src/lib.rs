@@ -2,6 +2,7 @@ pub mod cloudflare_unit;
 pub mod commands;
 pub mod config;
 pub mod deployer;
+pub mod etcd_unit;
 pub mod haproxy_unit;
 pub mod helper;
 pub mod postgres_unit;

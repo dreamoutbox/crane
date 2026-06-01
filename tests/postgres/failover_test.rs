@@ -41,7 +41,7 @@ async fn test_failover() {
         crane::postgres_unit::helper::connect_to_node(primary_node_config, &config)
             .expect("Failed to connect to primary node");
     primary_interactor
-        .cmd("sudo systemctl stop patroni")
+        .stop_service("patroni")
         .expect("Failed to stop patroni service on primary node");
 
     // wait for patroni leader election

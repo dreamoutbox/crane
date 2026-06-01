@@ -1,4 +1,4 @@
-use crate::helper::keys::find_private_key_for_user;
+use crate::helper::{config::config_get_nodes, keys::find_private_key_for_user};
 use crate::server_interactor::get_server_interactor;
 use crate::ssh::SSHSession;
 use std::collections::{BTreeSet, HashMap};
@@ -48,12 +48,7 @@ pub fn run(config: &crate::config::Config, app_name: &str) -> anyhow::Result<()>
         .ok_or_else(|| anyhow::anyhow!("App '{}' not found in configuration", app_name))?;
 
     // Find all app nodes
-    let app_nodes: Vec<_> = config
-        .nodes
-        .iter()
-        .filter(|n| n.roles.contains(&"app".to_string()))
-        .cloned()
-        .collect();
+    let app_nodes = config_get_nodes(&config, "app");
 
     if app_nodes.is_empty() {
         anyhow::bail!("No nodes with the 'app' role found in configuration");

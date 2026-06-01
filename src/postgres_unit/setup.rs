@@ -1,10 +1,12 @@
 use crate::{
     config::{self, PostgresDbConfig, PostgresUserConfig},
-    haproxy_unit::haproxy::setup_haproxy_each_nodes_wrapper,
-    helper::keys::find_private_key_for_user,
+    etcd_unit::{install_etcd, setup_etcd, start_etcd, wait_for_etcd_quorum},
+    haproxy_unit::haproxy::setup_haproxy_on_each_nodes_wrapper,
+    helper::{config::config_get_nodes, keys::find_private_key_for_user},
     postgres_unit::{
-        etcd,
-        helper::{configure_postgres_backup, get_postgres_configs, get_replica_pass},
+        helper::{
+            configure_postgres_backup, get_pg_version, get_postgres_configs, get_replica_pass,
+        },
         install::install_postgres,
         patroni::install_patroni,
     },
@@ -16,21 +18,10 @@ pub async fn postgres_setup_wrapper(
     config: &config::Config,
     app_nodes: &Vec<config::NodeConfig>,
 ) -> Result<(), anyhow::Error> {
-    let pg_version = config
-        .db
-        .as_ref()
-        .and_then(|db| db.postgres.as_ref())
-        .map(|pg| pg.version.as_str())
-        .unwrap_or("16")
-        .to_string();
+    let pg_version = get_pg_version(&config);
     let replica_pass = get_replica_pass(&config);
 
-    let pg_nodes: Vec<_> = config
-        .nodes
-        .iter()
-        .filter(|n| n.roles.contains(&"postgres".to_string()))
-        .cloned()
-        .collect();
+    let pg_nodes = config_get_nodes(&config, "postgres");
 
     if pg_nodes.is_empty() {
         return Ok(());
@@ -72,16 +63,16 @@ pub async fn postgres_setup_wrapper(
                 install_postgres(&*interactor, &pg_version)?;
 
                 // Install & configure etcd (configure only, do NOT start yet)
-                etcd::install_etcd(&*interactor)?;
-                etcd::setup_etcd(&*interactor, &node, &pg_nodes)?;
+                install_etcd(&*interactor)?;
+                setup_etcd(&*interactor, &node, &pg_nodes)?;
 
                 // Stop & disable standard postgresql systemd service
                 println!("\tStopping and disabling standard PostgreSQL service...");
-                let _stop_res = interactor.cmd("sudo systemctl stop postgresql");
-                let _disable_pg_res = interactor.cmd("sudo systemctl disable postgresql");
+                let _stop_res = interactor.stop_service("postgresql");
+                let _disable_pg_res = interactor.disable_service("postgresql");
 
                 // Stop and kill Patroni before cleaning up config and bootstrapping
-                let _stop_patroni_res = interactor.cmd("sudo systemctl stop patroni");
+                let _stop_patroni_res = interactor.stop_service("patroni");
                 let _ = interactor.cmd("sudo pkill -9 -u postgres postgres");
 
                 // Backup existing postgres main directory
@@ -98,15 +89,14 @@ pub async fn postgres_setup_wrapper(
                 barrier_installed.wait();
 
                 // --- Phase 2: Start etcd ---
-                println!("\tStarting etcd on node {}...", node.name);
-                etcd::start_etcd(&node, &*interactor)?;
+                start_etcd(&node, &*interactor)?;
 
                 // Wait for all nodes to start etcd
                 barrier_etcd_started.wait();
 
                 // --- Wait for quorum (only first node runs it) ---
                 if is_first {
-                    etcd::wait_for_etcd_quorum(&*interactor, 10)?;
+                    wait_for_etcd_quorum(&*interactor, 10)?;
                 }
 
                 // Wait for first node to complete quorum check before starting Patroni
@@ -114,23 +104,10 @@ pub async fn postgres_setup_wrapper(
 
                 // --- Phase 3: Start Patroni ---
                 println!("\tStarting Patroni on node {}...", node.name);
-                interactor.cmd("sudo systemctl restart patroni --no-block")?;
+                interactor.restart_service("patroni --no-block")?;
 
                 // Check if Patroni is running (with a 10s timeout since it can be "activating" initially)
-                let start_time = std::time::Instant::now();
-                let timeout = std::time::Duration::from_secs(10);
-                let mut is_active = false;
-
-                while start_time.elapsed() < timeout {
-                    let active_out = interactor.cmd("sudo systemctl is-active patroni")?;
-
-                    if active_out.stdout.trim() == "active" {
-                        is_active = true;
-                        break;
-                    }
-
-                    std::thread::sleep(std::time::Duration::from_millis(500));
-                }
+                let is_active = interactor.wait_for_service_start("patroni", 10)?;
 
                 if !is_active {
                     println!(
@@ -203,7 +180,7 @@ pub async fn postgres_setup_wrapper(
     .await?;
 
     // 4. Setup HAProxy on all app nodes
-    setup_haproxy_each_nodes_wrapper(config, app_nodes).await?;
+    setup_haproxy_on_each_nodes_wrapper(config, app_nodes).await?;
 
     Ok(())
 }

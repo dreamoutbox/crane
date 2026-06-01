@@ -20,6 +20,6 @@ trigger: always_on
 Capture and inspect command output via `dbg!`:
 
 ```rust
-let output = interactor.cmd("sudo systemctl restart etcd")?;
+let output = interactor.cmd("whoami")?;
 dbg!(&output);
 ```

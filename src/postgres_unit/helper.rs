@@ -1,4 +1,5 @@
 use crate::config::{self, PostgresBackupSchedule, PostgresDbConfig, PostgresUserConfig};
+use crate::helper::config::config_get_nodes;
 use crate::helper::cron::interval_to_cron;
 use crate::postgres_unit::entity::{BackupMetadata, BackupRegistry};
 use crate::postgres_unit::python_backup_script::PYTHON_BACKUP_SCRIPT;
@@ -25,12 +26,7 @@ pub fn find_node_config_with_fallback(
     }
 
     // Fallback: connect to pg nodes and check their hostname
-    let pg_nodes: Vec<_> = config
-        .nodes
-        .iter()
-        .filter(|n| n.roles.contains(&"postgres".to_string()))
-        .cloned()
-        .collect();
+    let pg_nodes = config_get_nodes(&config, "postgres");
 
     for node in pg_nodes {
         if let Ok(interactor) = connect_to_node(&node, config) {
@@ -66,7 +62,7 @@ pub fn get_pg_version(config: &config::Config) -> String {
         .as_ref()
         .and_then(|db| db.postgres.as_ref())
         .map(|pg| pg.version.clone())
-        .unwrap_or_else(|| "16".to_string())
+        .unwrap_or_else(|| "17".to_string())
 }
 
 pub fn get_replica_pass(config: &config::Config) -> String {
@@ -158,12 +154,7 @@ pub fn get_postgres_backup_schedule(
 }
 
 pub fn postgres_get_leader(config: &config::Config) -> anyhow::Result<Option<config::NodeConfig>> {
-    let pg_nodes: Vec<_> = config
-        .nodes
-        .iter()
-        .filter(|n| n.roles.contains(&"postgres".to_string()))
-        .cloned()
-        .collect();
+    let pg_nodes = config_get_nodes(config, "postgres");
 
     for node in pg_nodes {
         if let Ok(interactor) = connect_to_node(&node, config) {

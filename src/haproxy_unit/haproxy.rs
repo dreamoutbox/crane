@@ -285,14 +285,14 @@ backend {name}_backend
     interactor.cmd("sudo chmod 644 /etc/haproxy/haproxy.cfg")?;
 
     println!("\tRestarting and enabling HAProxy service...");
-    interactor.cmd("sudo systemctl daemon-reload")?;
-    interactor.cmd("sudo systemctl enable haproxy")?;
-    interactor.cmd("sudo systemctl restart haproxy")?;
+    interactor.service_daemon_reload()?;
+    interactor.enable_service("haproxy")?;
+    interactor.restart_service("haproxy")?;
 
     Ok(())
 }
 
-pub async fn setup_haproxy_each_nodes_wrapper(
+pub async fn setup_haproxy_on_each_nodes_wrapper(
     config: &config::Config,
     app_nodes: &Vec<config::NodeConfig>,
 ) -> Result<(), anyhow::Error> {

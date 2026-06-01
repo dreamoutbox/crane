@@ -120,8 +120,8 @@ postgresql:
     interactor.cmd("sudo chmod 600 /etc/patroni/config.yml")?;
 
     if !patroni_installed {
-        interactor.cmd("sudo systemctl daemon-reload")?;
-        interactor.cmd("sudo systemctl enable patroni")?;
+        interactor.service_daemon_reload()?;
+        interactor.enable_service("patroni")?;
     }
 
     Ok(())
