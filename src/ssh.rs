@@ -34,6 +34,13 @@ impl SSHSession {
         command.arg("-o").arg("StrictHostKeyChecking=no");
         command.arg("-o").arg("UserKnownHostsFile=/dev/null");
 
+        let control_path = format!("/tmp/crane-{}-{}", self.host, self.port.unwrap_or(22));
+        command.arg("-o").arg("ControlMaster=auto");
+        command
+            .arg("-o")
+            .arg(format!("ControlPath={}", control_path));
+        command.arg("-o").arg("ControlPersist=60");
+
         if let Some(port) = self.port {
             command.arg("-p").arg(port.to_string());
         }
@@ -66,6 +73,13 @@ impl SSHSession {
         command.arg("-o").arg("StrictHostKeyChecking=no");
         command.arg("-o").arg("UserKnownHostsFile=/dev/null");
 
+        let control_path = format!("/tmp/crane-{}-{}", self.host, self.port.unwrap_or(22));
+        command.arg("-o").arg("ControlMaster=auto");
+        command
+            .arg("-o")
+            .arg(format!("ControlPath={}", control_path));
+        command.arg("-o").arg("ControlPersist=60");
+
         if let Some(port) = self.port {
             command.arg("-p").arg(port.to_string());
         }
@@ -94,6 +108,13 @@ impl SSHSession {
 
         command.arg("-o").arg("StrictHostKeyChecking=no");
         command.arg("-o").arg("UserKnownHostsFile=/dev/null");
+
+        let control_path = format!("/tmp/crane-{}-{}", self.host, self.port.unwrap_or(22));
+        command.arg("-o").arg("ControlMaster=auto");
+        command
+            .arg("-o")
+            .arg(format!("ControlPath={}", control_path));
+        command.arg("-o").arg("ControlPersist=60");
 
         if let Some(port) = self.port {
             command.arg("-P").arg(port.to_string());
@@ -124,6 +145,13 @@ impl SSHSession {
         let mut command = std::process::Command::new("scp");
         command.arg("-o").arg("StrictHostKeyChecking=no");
         command.arg("-o").arg("UserKnownHostsFile=/dev/null");
+
+        let control_path = format!("/tmp/crane-{}-{}", self.host, self.port.unwrap_or(22));
+        command.arg("-o").arg("ControlMaster=auto");
+        command
+            .arg("-o")
+            .arg(format!("ControlPath={}", control_path));
+        command.arg("-o").arg("ControlPersist=60");
 
         if let Some(port) = self.port {
             command.arg("-P").arg(port.to_string());
