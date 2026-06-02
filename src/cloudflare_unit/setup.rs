@@ -131,16 +131,6 @@ pub async fn update_dns(config: &Config, app_name: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-/// Synchronous wrapper around `update_dns` using a Tokio runtime.
-pub fn update_dns_blocking(config: &Config, app_name: Option<&str>) -> Result<()> {
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .context("Failed to build tokio runtime for DNS update")?;
-
-    rt.block_on(update_dns(config, app_name))
-}
-
 /// Helper to get the Cloudflare zone name (apex domain) from an app domain.
 fn get_zone_name(app_domain: &str, config: &Config) -> String {
     if let Some(ref dom) = config.domain {

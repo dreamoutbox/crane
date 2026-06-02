@@ -344,9 +344,7 @@ async fn main() -> anyhow::Result<()> {
             Some(("update", sub_sub_m)) => {
                 let app_name = sub_sub_m.get_one::<String>("app").map(|s| s.as_str());
 
-                if let Err(e) =
-                    crane::cloudflare_unit::setup::update_dns_blocking(&config, app_name)
-                {
+                if let Err(e) = crane::cloudflare_unit::setup::update_dns(&config, app_name).await {
                     eprintln!("DNS update failed: {}", e);
                     std::process::exit(1);
                 }

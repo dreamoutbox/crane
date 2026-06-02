@@ -406,7 +406,7 @@ pub async fn run_deploy_command(
     println!("\nDEPLOY COMPLETE ({} secs)\n", deploy_elapse.as_secs());
 
     if !no_dns_update {
-        if let Err(e) = crate::cloudflare_unit::setup::update_dns_blocking(&config, None) {
+        if let Err(e) = crate::cloudflare_unit::setup::update_dns(&config, None).await {
             eprintln!("Failed to update DNS records: {}", e);
         }
     }

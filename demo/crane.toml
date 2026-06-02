@@ -63,14 +63,12 @@ retain_releases = 3
 instances = 1
 min_replicas = 1
 max_replicas = 3
-
-# ENV for application
+# ENV for myapp
 [app.myapp.env]
 APP_ENV = "simulation"
 LOG_LEVEL = "debug"
 APP_NAME = "myapp"
-
-# Databases
+# Databases for myapp
 [[app.myapp.database]]
 databases = "mydb"
 user = "u2"
@@ -101,14 +99,12 @@ retain_releases = 3
 instances = 1
 min_replicas = 1
 max_replicas = 3
-
-# ENV for application
+# ENV for myapp2
 [app.myapp2.env]
 APP_ENV = "simulation"
 LOG_LEVEL = "debug"
 APP_NAME = "myapp2"
-
-# Databases
+# Databases for my app2
 [[app.myapp2.database]]
 databases = "mydb"
 user = "u2"
@@ -159,10 +155,12 @@ endpoint = "http://s3:9000" # omit for AWS S3
 access_key_id = "${S3_ACCESS_KEY_ID}"
 secret_access_key = "${S3_SECRET_ACCESS_KEY}"
 
+
 [domain]
 provider = "cloudflare"
 domain_name = "localhost"
 token = "${CLOUDFLARE_TOKEN}"
+
 
 [monitor]
 interval = 30
