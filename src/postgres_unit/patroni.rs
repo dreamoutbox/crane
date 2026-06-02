@@ -31,7 +31,7 @@ pub fn install_patroni(
 
     let mut summarize_wal_line = String::new();
     if pg_version.parse::<i32>().unwrap_or(0) >= 17 {
-        summarize_wal_line = "\n        summarize_wal: \"on\"".to_string();
+        summarize_wal_line = "summarize_wal: \"on\"".to_string();
     }
 
     let patroni_yaml = format!(
@@ -59,8 +59,8 @@ bootstrap:
       parameters:
         listen_addresses: '*'
         wal_level: replica
-        max_wal_senders: 20
-        max_replication_slots: 20
+        max_wal_senders: 10
+        max_replication_slots: 10
         wal_log_hints: "on"
         hot_standby: "on"
         wal_keep_size: 1024MB
@@ -71,7 +71,8 @@ bootstrap:
         log_min_duration_statement: 0
         log_line_prefix: '%t [%p]: user=%u db=%d app=%a client=%h '
         archive_mode: "on"
-        archive_command: "cp %p /var/lib/postgresql/wal_archive/%f"{summarize_wal}
+        archive_command: "cp %p /var/lib/postgresql/wal_archive/%f"
+        {summarize_wal}
   basebackup:
     - checkpoint: fast
     - no-verify-checksums

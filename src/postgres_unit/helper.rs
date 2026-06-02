@@ -474,18 +474,17 @@ pub fn configure_postgres_cron_backup(
         interactor.cmd("sudo chown postgres:postgres /var/lib/postgresql/backups")?;
         interactor.cmd("sudo chmod 755 /var/lib/postgresql/backups")?;
 
-        // Write postgres-backup-config.json
-        let s3_json_str = format!(
-            r#"
-{{
-  "bucket": "{}",
-  "region": "{}",
-  "endpoint": {},
-  "access_key": "{}",
-  "secret_key": "{}",
-  "pg_version": "{}",
-  "replica_pass": "{}"
-}}"#,
+        // Write postgres-backup-config.toml
+        let s3_toml_str = format!(
+            r#"[pg_backup_cron]
+bucket = "{}"
+region = "{}"
+endpoint = {}
+access_key = "{}"
+secret_key = "{}"
+pg_version = "{}"
+replica_pass = "{}"
+"#,
             s3_config.bucket,
             s3_config.region,
             s3_config
@@ -498,10 +497,10 @@ pub fn configure_postgres_cron_backup(
             version,
             replica_pass
         );
-        // Write postgres-backup-config.json directly
-        interactor.create_file("/etc/crane/postgres-backup-config.json", &s3_json_str)?;
-        interactor.cmd("sudo chown root:root /etc/crane/postgres-backup-config.json")?;
-        interactor.cmd("sudo chmod 600 /etc/crane/postgres-backup-config.json")?;
+        // Write postgres-backup-config.toml directly
+        interactor.create_file("/etc/crane/postgres-backup-config.toml", &s3_toml_str)?;
+        interactor.cmd("sudo chown root:root /etc/crane/postgres-backup-config.toml")?;
+        interactor.cmd("sudo chmod 600 /etc/crane/postgres-backup-config.toml")?;
 
         // Write postgres-backup.py directly
         interactor.create_file("/opt/crane/postgres-backup.py", PYTHON_BACKUP_SCRIPT)?;

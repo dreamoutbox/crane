@@ -58,27 +58,34 @@ def dump_metadata_toml(meta):
     lines.append(f's3_path = "{meta["s3_path"]}"')
     return '\n'.join(lines)
 
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: python3 postgres-backup.py [full|incr]")
-        sys.exit(1)
-    
-    backup_type = sys.argv[1].lower()
-    if backup_type not in ('full', 'incr', 'incremental'):
-        print("Invalid backup type. Choose 'full' or 'incr'")
-        sys.exit(1)
-
-    is_incr = backup_type in ('incr', 'incremental')
-
-    config_path = '/etc/crane/postgres-backup-config.json'
+def load_config(config_path):
     if not os.path.exists(config_path):
         print(f"Error: Config file not found at {config_path}")
         sys.exit(1)
 
-    with open(config_path, 'r') as f:
-        config = json.load(f)
+    config = {}
+    try:
+        with open(config_path, 'r') as f:
+            for line in f:
+                line = line.split('#')[0].strip()
+                if not line or '=' not in line:
+                    continue
+                k, v = line.split('=', 1)
+                k = k.strip()
+                v = v.strip()
+                if v.startswith('"') and v.endswith('"'):
+                    v = v[1:-1]
+                elif v.startswith("'") and v.endswith("'"):
+                    v = v[1:-1]
+                elif v == 'null':
+                    v = None
+                config[k] = v
+    except Exception as e:
+        print(f"Error: Failed to read/parse TOML config: {e}")
+        sys.exit(1)
+    return config
 
-    # Assert that localhost is the primary node
+def assert_primary():
     import subprocess
     try:
         is_recovery = subprocess.check_output(
@@ -94,6 +101,21 @@ def main():
     except Exception as e:
         print(f"Error: Failed to verify if database is primary: {e}")
         sys.exit(1)
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: python3 postgres-backup.py [full|incr]")
+        sys.exit(1)
+    
+    backup_type = sys.argv[1].lower()
+    if backup_type not in ('full', 'incr', 'incremental'):
+        print("Invalid backup type. Choose 'full' or 'incr'")
+        sys.exit(1)
+
+    is_incr = backup_type in ('incr', 'incremental')
+
+    config = load_config('/etc/crane/postgres-backup-config.toml')
+    assert_primary()
 
     s3_opts = {
         'region_name': config.get('region', 'us-east-1'),
