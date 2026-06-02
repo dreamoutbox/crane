@@ -78,6 +78,23 @@ def main():
     with open(config_path, 'r') as f:
         config = json.load(f)
 
+    # Assert that localhost is the primary node
+    import subprocess
+    try:
+        is_recovery = subprocess.check_output(
+            ["sudo", "-u", "postgres", "psql", "-t", "-A", "-c", "SELECT pg_is_in_recovery();"],
+            text=True
+        ).strip()
+        if is_recovery == 't':
+            print("Error: localhost is not the primary node (in recovery mode). Backups can only be run on the primary node.")
+            sys.exit(1)
+        elif is_recovery != 'f':
+            print(f"Error: Unexpected response from pg_is_in_recovery(): {is_recovery}")
+            sys.exit(1)
+    except Exception as e:
+        print(f"Error: Failed to verify if database is primary: {e}")
+        sys.exit(1)
+
     s3_opts = {
         'region_name': config.get('region', 'us-east-1'),
         'aws_access_key_id': config['access_key'],
