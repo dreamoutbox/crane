@@ -457,7 +457,7 @@ pub fn get_postgres_configs(
     (db_configs, users)
 }
 
-pub fn configure_postgres_backup(
+pub fn configure_postgres_cron_backup(
     interactor: &dyn ServerInteractor,
     version: &str,
     replica_pass: &str,

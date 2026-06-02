@@ -5,7 +5,7 @@ use crate::{
     helper::config::config_get_nodes,
     postgres_unit::{
         helper::{
-            configure_postgres_backup, get_pg_version, get_postgres_configs, get_replica_pass,
+            configure_postgres_cron_backup, get_pg_version, get_postgres_configs, get_replica_pass,
         },
         install::install_postgres,
         patroni::install_patroni,
@@ -421,7 +421,7 @@ pub async fn setup_postgres_primary(
     })
     .await??;
 
-    configure_postgres_backup(&*interactor, version, replica_pass, config)?;
+    configure_postgres_cron_backup(&*interactor, version, replica_pass, config)?;
 
     Ok(())
 }

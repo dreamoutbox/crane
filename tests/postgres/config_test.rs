@@ -50,11 +50,17 @@ fn test_get_postgres_configs() {
 fn test_interval_to_cron() {
     use crane::helper::cron::interval_to_cron;
 
+    assert_eq!(interval_to_cron("15s"), "* * * * *");
+    assert_eq!(interval_to_cron("120seconds"), "*/2 * * * *");
     assert_eq!(interval_to_cron("1m"), "* * * * *");
     assert_eq!(interval_to_cron("5m"), "*/5 * * * *");
     assert_eq!(interval_to_cron("1h"), "0 * * * *");
     assert_eq!(interval_to_cron("2h"), "0 */2 * * *");
     assert_eq!(interval_to_cron("1d"), "0 0 * * *");
     assert_eq!(interval_to_cron("3d"), "0 0 */3 * *");
+    assert_eq!(interval_to_cron("1w"), "0 0 * * 0");
+    assert_eq!(interval_to_cron("2weeks"), "0 0 */14 * *");
+    assert_eq!(interval_to_cron("1mo"), "0 0 1 * *");
+    assert_eq!(interval_to_cron("3months"), "0 0 1 */3 *");
     assert_eq!(interval_to_cron("invalid"), "0 0 * * *");
 }

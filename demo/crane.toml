@@ -119,8 +119,8 @@ version = "17"
 replica_pass = "replica"
 
 [db.postgres.backup]
-full_backup_every = "1d"
-incremental_backup_every = "1h"
+full_backup_every = "1h"
+incremental_backup_every = "15m"
 
 [db.postgres.mydb]
 name = "mydb"
