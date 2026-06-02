@@ -244,6 +244,7 @@ async fn assert_postgres_cluster_healthy(pg_nodes: Vec<config::NodeConfig>) -> a
                     if let Ok(out) = interactor.cmd(&patronictl_cmd) {
                         let line = out.stdout.trim().to_lowercase();
                         if line.contains("streaming") || line.contains("running") {
+                            //|| line.contains("creating replica")
                             healthy = true;
                             break;
                         }

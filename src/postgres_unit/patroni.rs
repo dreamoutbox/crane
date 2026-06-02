@@ -72,6 +72,10 @@ bootstrap:
         log_line_prefix: '%t [%p]: user=%u db=%d app=%a client=%h '
         archive_mode: "on"
         archive_command: "cp %p /var/lib/postgresql/wal_archive/%f"{summarize_wal}
+  basebackup:
+    - checkpoint: fast
+    - no-verify-checksums
+
   initdb:
     - encoding: UTF8
     - data-checksums
