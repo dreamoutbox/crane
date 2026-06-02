@@ -108,6 +108,11 @@ impl ServerInteractor for DebianInteractor {
         Ok(out)
     }
 
+    fn spawn_cmd(&self, cmd: &str) -> anyhow::Result<std::process::Child> {
+        let cmd_to_run = self.wrap_sudo(cmd);
+        self.ssh.spawn_cmd(&cmd_to_run)
+    }
+
     fn get_os_info(&self) -> anyhow::Result<String> {
         self.run_stdout("uname -a")
     }

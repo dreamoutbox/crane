@@ -160,6 +160,9 @@ pub fn read_config_toml_file_with_env<P: AsRef<Path>, E: AsRef<Path>>(
     let resolved_content = resolve_placeholders(&content, &dot_env)?;
     let config: Config = toml::from_str(&resolved_content)?;
 
+    // Initialize/update the global server interactor registry with the loaded config
+    crate::server_interactor::init_registry(config.clone());
+
     Ok(config)
 }
 

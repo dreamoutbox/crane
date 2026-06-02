@@ -6,6 +6,7 @@ pub trait ServerInteractor {
     // BASIC
     fn whoami(&self) -> anyhow::Result<String>;
     fn cmd(&self, command: &str) -> anyhow::Result<CmdOutput>;
+    fn spawn_cmd(&self, command: &str) -> anyhow::Result<std::process::Child>;
     fn get_os_info(&self) -> anyhow::Result<String>;
 
     // FILES

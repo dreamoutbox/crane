@@ -1,5 +1,3 @@
-use crate::helper::keys::find_private_key_for_user;
-use crate::ssh::SSHSession;
 use crate::{config, helper::config::config_get_nodes};
 use std::io::{BufRead, BufReader};
 
@@ -103,35 +101,13 @@ pub fn run(
 
         for target in targets {
             let cmd = build_cmd(target.port);
-            let cmd_to_run = if let Some(ref pass) = target.node.sudo_pass {
-                let mut escaped = String::new();
-                for c in cmd.chars() {
-                    match c {
-                        '"' | '$' | '\\' | '`' => {
-                            escaped.push('\\');
-                            escaped.push(c);
-                        }
-                        _ => escaped.push(c),
-                    }
-                }
-                format!("echo '{}' | sudo -S sh -c \"{}\"", pass, escaped)
-            } else {
-                cmd
-            };
-
-            let private_key = find_private_key_for_user(&target.node.user, &config)?;
-            let ssh = SSHSession::new(
-                target.node.host.clone(),
-                target.node.user.clone(),
-                private_key,
-                Some(target.node.port),
-            );
+            let interactor = crate::server_interactor::get_server_interactor(&target.node.name)?;
 
             let app_name = app.name.clone();
             let instance_id = target.instance_id;
 
             let handle = std::thread::spawn(move || -> anyhow::Result<()> {
-                let mut child = ssh.spawn_cmd(&cmd_to_run)?;
+                let mut child = interactor.spawn_cmd(&cmd)?;
                 let stdout = child.stdout.take().ok_or_else(|| {
                     anyhow::anyhow!("Failed to open stdout for instance {}", instance_id)
                 })?;
@@ -161,18 +137,11 @@ pub fn run(
 
         for target in targets {
             let cmd = build_cmd(target.port);
-            let private_key = find_private_key_for_user(&target.node.user, &config)?;
-            let ssh = SSHSession::new(
-                target.node.host.clone(),
-                target.node.user.clone(),
-                private_key,
-                Some(target.node.port),
-            );
+
             let instance_id = target.instance_id;
-            let sudo_pass = target.node.sudo_pass.clone();
 
             let handle = std::thread::spawn(move || -> anyhow::Result<Vec<String>> {
-                let interactor = crate::server_interactor::get_server_interactor(ssh, sudo_pass)?;
+                let interactor = crate::server_interactor::get_server_interactor(&target.node.name)?;
 
                 let output = interactor.cmd(&cmd)?;
                 if output.exit_code != 0 {

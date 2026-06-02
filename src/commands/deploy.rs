@@ -1,11 +1,9 @@
 use crate::deployer::helper::{deploy_update_etc_hosts, deploy_zip_app};
 use crate::deployer::users::deploy_setup_app_users;
 use crate::helper::config::config_get_nodes;
-use crate::helper::keys::find_private_key_for_user;
 use crate::postgres_unit::helper::get_postgres_configs;
 use crate::postgres_unit::setup::postgres_setup_wrapper;
 use crate::server_interactor::get_server_interactor;
-use crate::ssh::SSHSession;
 use std::path::Path;
 
 /// deploy app commands
@@ -17,8 +15,7 @@ pub async fn run_deploy_command(
     let now = std::time::Instant::now();
 
     println!("Loading configuration from {:?}\n", config_path);
-
-    dbg!(&config);
+    // dbg!(&config);
 
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
 
@@ -50,7 +47,6 @@ pub async fn run_deploy_command(
     let mut handles = vec![];
     for node in &app_nodes {
         let node = node.clone();
-        let config = config.clone();
         let all_deps = all_deps.clone();
 
         let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
@@ -58,16 +54,8 @@ pub async fn run_deploy_command(
                 "Installing dependencies on {}@{} (port: {}) {:?}",
                 node.user, node.name, node.port, all_deps
             );
-            let private_key = find_private_key_for_user(&node.user, &config)?;
 
-            let ssh = SSHSession::new(
-                node.host.clone(),
-                node.user.clone(),
-                private_key,
-                Some(node.port),
-            );
-
-            let interactor = get_server_interactor(ssh, node.sudo_pass.clone())?;
+            let interactor = get_server_interactor(&node.name)?;
 
             //install required dependencies
             interactor.install_dependencies(all_deps.clone())?;
@@ -91,7 +79,6 @@ pub async fn run_deploy_command(
         .and_then(|db| db.postgres.as_ref())
         .map(|pg| pg.enabled)
         .unwrap_or(false);
-
     if pg_enabled {
         postgres_setup_wrapper(&config, &app_nodes).await?;
     }
@@ -194,14 +181,7 @@ pub async fn run_deploy_command(
                     app.name, node.name, node.user, node.host, node.port
                 );
 
-                let private_key = find_private_key_for_user(&node.user, &config)?;
-                let ssh = SSHSession::new(
-                    node.host.clone(),
-                    node.user.clone(),
-                    private_key,
-                    Some(node.port),
-                );
-                let node_interactor = get_server_interactor(ssh, node.sudo_pass.clone())?;
+                let node_interactor = get_server_interactor(&node.name)?;
 
                 // 1. Setup user if specified
                 deploy_setup_app_users(&app, &config, &*node_interactor)?;
@@ -321,6 +301,9 @@ pub async fn run_deploy_command(
                         &app.deploy_user,
                         &app.entrypoint,
                     )?;
+
+                    // Enable service instance
+                    node_interactor.enable_service(&service_instance)?;
 
                     // Start service
                     node_interactor.start_service(&service_instance)?;

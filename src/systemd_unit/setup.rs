@@ -47,7 +47,5 @@ WantedBy=multi-user.target
 
     let _ = interactor.service_daemon_reload()?;
 
-    let _ = interactor.enable_service(&format!("{}@", app_name));
-
     Ok(())
 }

@@ -1,6 +1,5 @@
-use crate::helper::{config::config_get_nodes, keys::find_private_key_for_user};
+use crate::helper::config::config_get_nodes;
 use crate::server_interactor::get_server_interactor;
-use crate::ssh::SSHSession;
 use std::collections::{BTreeSet, HashMap};
 
 struct SystemdUnitState {
@@ -39,7 +38,8 @@ pub struct NodeStatusResult {
     pub status: Result<(NodeResourceStatus, Vec<InstanceStatus>), String>,
 }
 
-pub fn run(config: &crate::config::Config, app_name: &str) -> anyhow::Result<()> {
+
+pub fn run_status_command(config: &crate::config::Config, app_name: &str) -> anyhow::Result<()> {
     // Find requested app configuration by key or name
     let (_app_id, app) = config
         .app
@@ -82,23 +82,13 @@ pub fn run(config: &crate::config::Config, app_name: &str) -> anyhow::Result<()>
     let mut handles = vec![];
     for node in &app_nodes {
         let node_clone = node.clone();
-        let config_clone = config.clone();
         let app_name_clone = app.name.clone();
         let configured_ports_clone = configured_ports.clone();
         let health_path_clone = health_path.to_string();
 
         let handle = std::thread::spawn(move || -> NodeStatusResult {
             let result = (|| -> anyhow::Result<(NodeResourceStatus, Vec<InstanceStatus>)> {
-                let private_key = find_private_key_for_user(&node_clone.user, &config_clone)?;
-
-                let ssh = SSHSession::new(
-                    node_clone.host.clone(),
-                    node_clone.user.clone(),
-                    private_key,
-                    Some(node_clone.port),
-                );
-
-                let interactor = get_server_interactor(ssh, node_clone.sudo_pass.clone())?;
+                let interactor = get_server_interactor(&node_clone.name)?;
 
                 // Query service instances from systemd to dynamically discover active ports
                 let systemd_cmd = format!(

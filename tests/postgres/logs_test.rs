@@ -155,6 +155,10 @@ impl ServerInteractor for MockServerInteractorUserNotExist {
     fn unzip(&self, _: &str, _: &str) -> Result<(), anyhow::Error> {
         Ok(())
     }
+
+    fn spawn_cmd(&self, _: &str) -> anyhow::Result<std::process::Child> {
+        todo!()
+    }
 }
 
 struct MockServerInteractorLogsRecorder;
@@ -257,5 +261,9 @@ impl ServerInteractor for MockServerInteractorLogsRecorder {
 
     fn unzip(&self, _: &str, _: &str) -> Result<(), anyhow::Error> {
         Ok(())
+    }
+
+    fn spawn_cmd(&self, _: &str) -> anyhow::Result<std::process::Child> {
+        todo!()
     }
 }

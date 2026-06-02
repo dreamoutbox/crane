@@ -2,7 +2,7 @@ use crate::{
     config::{self, PostgresDbConfig, PostgresUserConfig},
     etcd_unit::{install_etcd, setup_etcd, start_etcd, wait_for_etcd_quorum},
     haproxy_unit::haproxy::setup_haproxy_on_each_nodes_wrapper,
-    helper::{config::config_get_nodes, keys::find_private_key_for_user},
+    helper::config::config_get_nodes,
     postgres_unit::{
         helper::{
             configure_postgres_backup, get_pg_version, get_postgres_configs, get_replica_pass,
@@ -11,7 +11,6 @@ use crate::{
         patroni::install_patroni,
     },
     server_interactor::{get_server_interactor, server_interactor_trait::ServerInteractor},
-    ssh::SSHSession,
 };
 
 pub async fn postgres_setup_wrapper(
@@ -36,7 +35,6 @@ pub async fn postgres_setup_wrapper(
     let mut handles = vec![];
     for (i, node) in pg_nodes.iter().enumerate() {
         let node = node.clone();
-        let config = config.clone();
         let pg_nodes = pg_nodes.clone();
         let pg_version = pg_version.clone();
         let replica_pass = replica_pass.clone();
@@ -47,17 +45,10 @@ pub async fn postgres_setup_wrapper(
         let is_first = i == 0;
 
         let handle = tokio::task::spawn_blocking(
-            move || -> anyhow::Result<(String, Box<dyn ServerInteractor + Send + Sync>)> {
+            move || -> anyhow::Result<(String, std::sync::Arc<dyn ServerInteractor + Send + Sync>)> {
                 println!("Configuring node {}...", node.name);
 
-                let private_key = find_private_key_for_user(&node.user, &config)?;
-                let ssh = SSHSession::new(
-                    node.host.clone(),
-                    node.user.clone(),
-                    private_key,
-                    Some(node.port),
-                );
-                let interactor = get_server_interactor(ssh, node.sudo_pass.clone())?;
+                let interactor = get_server_interactor(&node.name)?;
 
                 // Ensure postgres binaries are installed first
                 install_postgres(&*interactor, &pg_version)?;
@@ -166,7 +157,6 @@ pub async fn postgres_setup_wrapper(
     let leader_interactor = interactors
         .remove(&leader.name)
         .ok_or_else(|| anyhow::anyhow!("Leader interactor not found in setup map"))?;
-    let leader_interactor = std::sync::Arc::from(leader_interactor);
     let (db_configs, user_configs) = get_postgres_configs(config);
 
     setup_postgres_primary(
@@ -195,44 +185,39 @@ pub async fn setup_postgres_primary(
 ) -> anyhow::Result<()> {
     println!("\n\tProvisioning PostgreSQL databases and users on Patroni leader...");
 
-    // Idempotently create databases
-    let mut db_handles = vec![];
-    for db in db_configs {
-        let db = db.clone();
-        let interactor = interactor.clone();
+    let interactor_clone = interactor.clone();
+    let db_configs = db_configs.to_vec();
+    let user_configs = user_configs.to_vec();
 
-        let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+    tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+        let run_psql = |cmd: &str| -> anyhow::Result<crate::ssh::CmdOutput> {
+            let out = interactor_clone.cmd(cmd)?;
+            if out.exit_code != 0 {
+                anyhow::bail!("psql command failed: {}\nStderr: {}", cmd, out.stderr);
+            }
+            Ok(out)
+        };
+
+        // Idempotently create databases sequentially
+        for db in &db_configs {
             println!("\n\tSetting up database '{}'...", db.name);
 
             let check_db_sql = format!("SELECT 1 FROM pg_database WHERE datname = '{}'", db.name);
-            let db_exists = interactor.cmd(&format!(
+            let db_exists = run_psql(&format!(
                 "sudo -u postgres psql -t -A -c \"{}\"",
                 check_db_sql
             ))?;
 
             if db_exists.stdout.trim() != "1" {
-                interactor.cmd(&format!(
+                run_psql(&format!(
                     "sudo -u postgres psql -c \"CREATE DATABASE {};\"",
                     db.name
                 ))?;
             }
-            Ok(())
-        });
+        }
 
-        db_handles.push(handle);
-    }
-    for handle in db_handles {
-        handle.await??;
-    }
-
-    // Idempotently create/remove users and grant/revoke privileges
-    let mut user_handles = vec![];
-    for user in user_configs {
-        let user = user.clone();
-        let db_configs = db_configs.to_vec();
-        let interactor = interactor.clone();
-
-        let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+        // Idempotently create/remove users and grant/revoke privileges sequentially
+        for user in &user_configs {
             let user_state = user.state.as_deref().unwrap_or("present");
 
             println!("\tuser {} state is {}", user.user, user_state);
@@ -243,7 +228,7 @@ pub async fn setup_postgres_primary(
                 for db_ref in &user.databases {
                     let db_name = db_configs
                         .iter()
-                        .find(|d| &d.name == db_ref || &d.name == db_ref)
+                        .find(|d| &d.name == db_ref)
                         .map(|d| d.name.as_str())
                         .unwrap_or(db_ref);
 
@@ -252,18 +237,18 @@ pub async fn setup_postgres_primary(
                         user.user, db_name
                     );
 
-                    let _ = interactor.cmd(&format!(
+                    let _ = interactor_clone.cmd(&format!(
                         "sudo -u postgres psql -d {} -c \"REVOKE ALL ON SCHEMA public FROM {};\"",
                         db_name, user.user
                     ));
 
-                    let _ = interactor.cmd(&format!(
+                    let _ = interactor_clone.cmd(&format!(
                         "sudo -u postgres psql -c \"REVOKE ALL PRIVILEGES ON DATABASE {} FROM {};\"",
                         db_name, user.user
                     ));
                 }
 
-                interactor.cmd(&format!(
+                run_psql(&format!(
                     "sudo -u postgres psql -c \"DROP ROLE IF EXISTS {};\"",
                     user.user
                 ))?;
@@ -284,14 +269,15 @@ pub async fn setup_postgres_primary(
                     user.user, user.user, password, user.user, password
                 );
                 let tmp_sql = format!("/tmp/crane_user_{}.sql", user.user);
-                interactor.create_file(&tmp_sql, &user_sql)?;
-                interactor.cmd(&format!("sudo -u postgres psql -f '{}'", tmp_sql))?;
-                interactor.cmd(&format!("sudo rm -f '{}'", tmp_sql))?;
+                interactor_clone.create_file(&tmp_sql, &user_sql)?;
+                let psql_res = run_psql(&format!("sudo -u postgres psql -f '{}'", tmp_sql));
+                let _ = interactor_clone.cmd(&format!("sudo rm -f '{}'", tmp_sql));
+                psql_res?;
 
                 for db_ref in &user.databases {
                     let db_name = db_configs
                         .iter()
-                        .find(|d| &d.name == db_ref || &d.name == db_ref)
+                        .find(|d| &d.name == db_ref)
                         .map(|d| d.name.as_str())
                         .unwrap_or(db_ref);
 
@@ -300,12 +286,12 @@ pub async fn setup_postgres_primary(
                         user.user, db_name
                     );
 
-                    interactor.cmd(&format!(
+                    run_psql(&format!(
                         "sudo -u postgres psql -c \"GRANT ALL PRIVILEGES ON DATABASE {} TO {};\"",
                         db_name, user.user
                     ))?;
 
-                    interactor.cmd(&format!(
+                    run_psql(&format!(
                         "sudo -u postgres psql -d {} -c \"GRANT ALL ON SCHEMA public TO {};\"",
                         db_name, user.user
                     ))?;
@@ -313,16 +299,12 @@ pub async fn setup_postgres_primary(
             } else {
                 anyhow::bail!("unknown user state: {}", user_state);
             }
+        }
 
-            Ok(())
-        });
 
-        user_handles.push(handle);
-    }
-
-    for handle in user_handles {
-        handle.await??;
-    }
+        Ok(())
+    })
+    .await??;
 
     configure_postgres_backup(&*interactor, version, replica_pass, config)?;
 

@@ -1,3 +1,5 @@
+use std::process::Child;
+
 #[allow(unused)]
 
 pub struct MockInteractor {
@@ -146,5 +148,8 @@ impl ServerInteractor for MockInteractor {
     }
     fn disable_service(&self, _: &str) -> Result<(), anyhow::Error> {
         Ok(())
+    }
+    fn spawn_cmd(&self, _: &str) -> Result<Child, anyhow::Error> {
+        todo!()
     }
 }

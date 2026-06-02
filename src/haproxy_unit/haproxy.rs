@@ -1,8 +1,6 @@
 use crate::{
     config,
-    helper::keys::find_private_key_for_user,
     server_interactor::{get_server_interactor, server_interactor_trait::ServerInteractor},
-    ssh::SSHSession,
 };
 
 pub fn install_haproxy(interactor: &dyn ServerInteractor) -> anyhow::Result<()> {
@@ -303,16 +301,10 @@ pub async fn setup_haproxy_on_each_nodes_wrapper(
         let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
             println!("\n\tSetting up HAProxy on app node {}...", app_node.name);
 
-            let private_key = find_private_key_for_user(&app_node.user, &config)?;
-            let ssh = SSHSession::new(
-                app_node.host.clone(),
-                app_node.user.clone(),
-                private_key,
-                Some(app_node.port),
-            );
-            let interactor = get_server_interactor(ssh, app_node.sudo_pass.clone())?;
+            let interactor = get_server_interactor(&app_node.name)?;
 
             setup_haproxy_unified(&*interactor, &config, &app_node, None, None)?;
+
             Ok(())
         });
         handles.push(handle);

@@ -6,7 +6,6 @@ use crate::postgres_unit::python_backup_script::PYTHON_BACKUP_SCRIPT;
 use crate::s3::S3Client;
 use crate::server_interactor::get_server_interactor;
 use crate::server_interactor::server_interactor_trait::ServerInteractor;
-use crate::ssh::SSHSession;
 
 pub fn find_node_config<'a>(
     target: &str,
@@ -43,17 +42,9 @@ pub fn find_node_config_with_fallback(
 
 pub fn connect_to_node(
     node: &config::NodeConfig,
-    config: &config::Config,
-) -> anyhow::Result<Box<dyn ServerInteractor + Send + Sync>> {
-    let private_key = crate::helper::keys::find_private_key_for_user(&node.user, config)?;
-    let ssh = SSHSession::new(
-        node.host.clone(),
-        node.user.clone(),
-        private_key,
-        Some(node.port),
-    );
-
-    get_server_interactor(ssh, node.sudo_pass.clone())
+    _config: &config::Config,
+) -> anyhow::Result<std::sync::Arc<dyn ServerInteractor + Send + Sync>> {
+    get_server_interactor(&node.name)
 }
 
 pub fn get_pg_version(config: &config::Config) -> String {
