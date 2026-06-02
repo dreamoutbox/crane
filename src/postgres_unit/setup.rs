@@ -169,8 +169,82 @@ pub async fn postgres_setup_wrapper(
     )
     .await?;
 
-    // 4. Setup HAProxy on all app nodes
+    // 4. Assert all patroni instances are healthy
+    assert_postgres_cluster_healthy(pg_nodes).await?;
+
+    // 5. Setup HAProxy on all app nodes
     setup_haproxy_on_each_nodes_wrapper(config, app_nodes).await?;
+
+    Ok(())
+}
+
+async fn assert_postgres_cluster_healthy(pg_nodes: Vec<config::NodeConfig>) -> anyhow::Result<()> {
+    println!("\n\tPolling PostgreSQL cluster health...");
+
+    let mut handles = vec![];
+
+    for node in pg_nodes {
+        let node_name = node.name.clone();
+        let handle = tokio::spawn(async move {
+            let timeout_secs = 120;
+            let start = std::time::Instant::now();
+            let mut healthy = false;
+
+            while start.elapsed().as_secs() < timeout_secs {
+                if let Ok(interactor) = get_server_interactor(&node_name) {
+                    // Check via Patroni REST API
+                    let primary_cmd =
+                        "curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8008/primary";
+                    let replica_cmd =
+                        "curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8008/replica";
+
+                    let is_primary = interactor
+                        .cmd(primary_cmd)
+                        .map(|out| out.stdout.trim() == "200")
+                        .unwrap_or(false);
+
+                    let is_replica = interactor
+                        .cmd(replica_cmd)
+                        .map(|out| out.stdout.trim() == "200")
+                        .unwrap_or(false);
+
+                    if is_primary || is_replica {
+                        healthy = true;
+                        break;
+                    }
+
+                    // Fallback: check pg_is_in_recovery
+                    let recovery_cmd =
+                        r#"sudo -u postgres psql -t -A -c "select pg_is_in_recovery();""#;
+                    if let Ok(out) = interactor.cmd(recovery_cmd) {
+                        let rec_trimmed = out.stdout.trim();
+                        if rec_trimmed == "f" || rec_trimmed == "t" {
+                            healthy = true;
+                            break;
+                        }
+                    }
+                }
+
+                tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+            }
+
+            if healthy {
+                println!("\tPostgreSQL node {} is healthy!", node_name);
+                Ok(())
+            } else {
+                anyhow::bail!(
+                    "PostgreSQL node {} failed to become healthy within {} seconds",
+                    node_name,
+                    timeout_secs
+                )
+            }
+        });
+        handles.push(handle);
+    }
+
+    for handle in handles {
+        handle.await??;
+    }
 
     Ok(())
 }
