@@ -81,7 +81,8 @@ pub async fn postgres_setup_wrapper(
                 interactor.cmd("sudo chown postgres:postgres /var/lib/postgresql/wal_archive")?;
                 interactor.cmd("sudo chmod 700 /var/lib/postgresql/wal_archive")?;
 
-                install_patroni(&pg_version, &replica_pass, &pg_nodes, &node, &*interactor)?;
+                let patroni_config_changed =
+                    install_patroni(&pg_version, &replica_pass, &pg_nodes, &node, &*interactor)?;
 
                 // Wait for all nodes to finish configuration/installation
                 barrier_installed.wait();
@@ -101,27 +102,41 @@ pub async fn postgres_setup_wrapper(
                 barrier_quorum.wait();
 
                 // --- Phase 3: Start Patroni ---
-                println!("\tStarting Patroni on node {}...", node.name);
-                interactor.restart_service("patroni --no-block")?;
+                // Skip restart if config is unchanged and Patroni REST API is already healthy.
+                let patroni_already_healthy = !patroni_config_changed
+                    && interactor
+                        .cmd("curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8008/health")
+                        .map(|o| o.stdout.trim() == "200")
+                        .unwrap_or(false);
 
-                // Check if Patroni is running (with a 30s timeout since it can be "activating" initially)
-                let is_active = interactor.wait_for_service_start("patroni", 30)?;
-
-                if !is_active {
+                if patroni_already_healthy {
                     println!(
-                        "Error: patroni is not running on node {}. Fetching logs...",
+                        "\tPatroni already healthy on node {}, skipping restart",
                         node.name
                     );
-                    let log_out =
-                        interactor.cmd("sudo journalctl -xeu patroni.service -n 100 -o cat")?;
-
-                    println!("\n===BEGIN PATRONI LOGS ON {}===\n", node.name);
-                    println!("{}", log_out.stdout);
-                    println!("\n===END PATRONI LOGS ON {}===\n", node.name);
-
-                    anyhow::bail!("Patroni failed to start on node {}", node.name);
                 } else {
-                    println!("\tPatroni started successfully on node {}", node.name);
+                    println!("\tStarting Patroni on node {}...", node.name);
+                    interactor.restart_service("patroni --no-block")?;
+
+                    // Check if Patroni is running (with a 30s timeout since it can be "activating" initially)
+                    let is_active = interactor.wait_for_service_start("patroni", 30)?;
+
+                    if !is_active {
+                        println!(
+                            "Error: patroni is not running on node {}. Fetching logs...",
+                            node.name
+                        );
+                        let log_out =
+                            interactor.cmd("sudo journalctl -xeu patroni.service -n 100 -o cat")?;
+
+                        println!("\n===BEGIN PATRONI LOGS ON {}===\n", node.name);
+                        println!("{}", log_out.stdout);
+                        println!("\n===END PATRONI LOGS ON {}===\n", node.name);
+
+                        anyhow::bail!("Patroni failed to start on node {}", node.name);
+                    } else {
+                        println!("\tPatroni started successfully on node {}", node.name);
+                    }
                 }
 
                 Ok((node.name, interactor))
@@ -221,13 +236,26 @@ async fn assert_postgres_cluster_healthy(pg_nodes: Vec<config::NodeConfig>) -> a
                         break;
                     }
 
+                    // Fallback: patronictl list (faster than psql, detects streaming replicas)
+                    let patronictl_cmd = format!(
+                        "sudo -u postgres patronictl -c /etc/patroni/config.yml list 2>/dev/null | grep '{}'",
+                        node_name
+                    );
+                    if let Ok(out) = interactor.cmd(&patronictl_cmd) {
+                        let line = out.stdout.trim().to_lowercase();
+                        if line.contains("streaming") || line.contains("running") {
+                            healthy = true;
+                            break;
+                        }
+                    }
+
                     // Fallback: check pg_is_in_recovery
                     let recovery_cmd =
                         r#"sudo -u postgres psql -t -A -c "select pg_is_in_recovery();""#;
                     if let Ok(out) = interactor.cmd(recovery_cmd) {
                         let rec_trimmed = out.stdout.trim();
 
-                        dbg!(&node_name, is_primary, is_replica, rec_trimmed);
+                        // dbg!(&node_name, is_primary, is_replica, rec_trimmed);
 
                         if rec_trimmed == "f" || rec_trimmed == "t" {
                             healthy = true;

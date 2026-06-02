@@ -50,6 +50,14 @@ pub fn setup_etcd(
         .collect::<Vec<_>>()
         .join(",");
 
+    // Use "existing" if etcd member data already exists to avoid re-triggering
+    // Patroni DCS re-bootstrap (and pg_basebackup) on every redeploy.
+    let has_etcd_data = interactor
+        .cmd("test -d /var/lib/etcd/default.etcd/member")
+        .map(|o| o.exit_code == 0)
+        .unwrap_or(false);
+    let cluster_state = if has_etcd_data { "existing" } else { "new" };
+
     let etcd_default = format!(
         r#"
 # Member settings
@@ -61,7 +69,7 @@ ETCD_LISTEN_CLIENT_URLS="http://127.0.0.1:2379,http://{}:2379"
 # Clustering settings
 ETCD_INITIAL_ADVERTISE_PEER_URLS="http://{}:2380"
 ETCD_INITIAL_CLUSTER="{}"
-ETCD_INITIAL_CLUSTER_STATE="new"
+ETCD_INITIAL_CLUSTER_STATE="{}"
 ETCD_INITIAL_CLUSTER_TOKEN="etcd-postgres-token"
 ETCD_ADVERTISE_CLIENT_URLS="http://{}:2379"
 "#,
@@ -70,6 +78,7 @@ ETCD_ADVERTISE_CLIENT_URLS="http://{}:2379"
         node.internal_ip,
         node.internal_ip,
         initial_cluster,
+        cluster_state,
         node.internal_ip
     );
 
@@ -86,11 +95,22 @@ pub fn start_etcd(
     node: &config::NodeConfig,
     interactor: &dyn ServerInteractor,
 ) -> anyhow::Result<()> {
+    // Skip restart if etcd is already healthy to avoid disrupting the cluster state.
+    let is_healthy = interactor
+        .cmd("env ETCDCTL_API=3 etcdctl endpoint health")
+        .map(|o| o.exit_code == 0)
+        .unwrap_or(false);
+
+    if is_healthy {
+        println!(
+            "\tetcd already healthy on node {}, skipping restart",
+            node.name
+        );
+        return Ok(());
+    }
+
     println!("\tStarting etcd service on node {} ...", node.name);
-
-    let _start_etcd_output = interactor.restart_service("etcd --no-block")?;
-    // dbg!(start_etcd_output);
-
+    interactor.restart_service("etcd --no-block")?;
     Ok(())
 }
 

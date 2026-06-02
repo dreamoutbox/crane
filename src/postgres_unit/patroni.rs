@@ -1,13 +1,18 @@
 use crate::config;
 use crate::server_interactor::server_interactor_trait::ServerInteractor;
 
+/// install_patroni:
+/// - check if patroni is installed
+/// - install patroni if not installed
+/// - configure patroni
+/// - return true if config is changed
 pub fn install_patroni(
     pg_version: &String,
     replica_pass: &String,
     pg_nodes: &Vec<config::NodeConfig>,
     node: &config::NodeConfig,
     interactor: &dyn ServerInteractor,
-) -> Result<(), anyhow::Error> {
+) -> Result<bool, anyhow::Error> {
     let patroni_installed = interactor
         .cmd("which patroni")
         .map(|out| out.exit_code == 0)
@@ -105,12 +110,18 @@ postgresql:
     // println!("{}", patroni_yaml);
     // println!("========== END PATRONI YAML ==========");
 
-    // write for debug at /debug/patroni_node_{node_name}.yaml
-    //to local file that run crane
+    // Write debug copy locally
     std::fs::write(
         format!("patroni_node_{}.yaml", node.name),
         patroni_yaml.clone(),
     )?;
+
+    // Compare with existing config; only write (and signal a change) if different
+    let existing_config = interactor
+        .cmd("sudo cat /etc/patroni/config.yml")
+        .map(|o| o.stdout)
+        .unwrap_or_default();
+    let config_changed = existing_config.trim() != patroni_yaml.trim();
 
     interactor.cmd("sudo mkdir -p /etc/patroni")?;
     interactor.create_file("/etc/patroni/config.yml", &patroni_yaml)?;
@@ -124,5 +135,5 @@ postgresql:
         interactor.enable_service("patroni")?;
     }
 
-    Ok(())
+    Ok(config_changed)
 }
