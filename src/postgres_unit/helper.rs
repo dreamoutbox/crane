@@ -324,9 +324,9 @@ pub fn configure_postgresql_conf(
         "'cp %p /var/lib/postgresql/wal_archive/%f'",
     );
 
-    if version.parse::<i32>().unwrap_or(0) >= 17 {
-        updated_conf = update_config_value(&updated_conf, "summarize_wal", "'on'");
-    }
+    // if version.parse::<i32>().unwrap_or(0) >= 17 {
+    //     updated_conf = update_config_value(&updated_conf, "summarize_wal", "'on'");
+    // }
 
     if updated_conf != existing_conf.stdout {
         interactor.create_file(&pg_conf_path, &updated_conf)?;

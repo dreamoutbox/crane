@@ -29,10 +29,10 @@ pub fn install_patroni(
         etcd_hosts_yaml.push_str(&format!("    - {}:2379\n", n.internal_ip));
     }
 
-    let mut summarize_wal_line = String::new();
-    if pg_version.parse::<i32>().unwrap_or(0) >= 17 {
-        summarize_wal_line = "summarize_wal: \"on\"".to_string();
-    }
+    // let mut summarize_wal_line = String::new();
+    // if pg_version.parse::<i32>().unwrap_or(0) >= 17 {
+    //     summarize_wal_line = "summarize_wal: \"on\"".to_string();
+    // }
 
     let patroni_yaml = format!(
         r#"scope: postgres-cluster
@@ -61,6 +61,7 @@ bootstrap:
         wal_level: replica
         max_wal_senders: 10
         max_replication_slots: 10
+        wal_log_hints: "on"
         hot_standby: "on"
         wal_keep_size: 1024MB
         shared_buffers: 128MB
@@ -71,7 +72,6 @@ bootstrap:
         log_line_prefix: '%t [%p]: user=%u db=%d app=%a client=%h '
         archive_mode: "on"
         archive_command: "cp %p /var/lib/postgresql/wal_archive/%f"
-        {}
   initdb:
     - encoding: UTF8
     - data-checksums
@@ -101,7 +101,6 @@ postgresql:
         node.name,
         etcd_hosts_yaml,
         node.internal_ip,
-        summarize_wal_line,
         node.internal_ip,
         *pg_version,
         *pg_version,
