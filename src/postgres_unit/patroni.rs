@@ -66,6 +66,9 @@ bootstrap:
         shared_buffers: 128MB
         logging_collector: "on"
         log_destination: "csvlog"
+        log_statement: "mod"
+        log_min_duration_statement: 0
+        log_line_prefix: '%t [%p]: user=%u db=%d app=%a client=%h '
         archive_mode: "on"
         archive_command: "cp %p /var/lib/postgresql/wal_archive/%f"
         {}
