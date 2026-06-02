@@ -202,6 +202,7 @@ pub async fn postgres_setup_wrapper(
 
 async fn assert_postgres_cluster_healthy(pg_nodes: Vec<config::NodeConfig>) -> anyhow::Result<()> {
     println!("\n\tPolling PostgreSQL cluster health...");
+    let start = std::time::Instant::now();
 
     let mut handles = vec![];
 
@@ -286,6 +287,12 @@ async fn assert_postgres_cluster_healthy(pg_nodes: Vec<config::NodeConfig>) -> a
     for handle in handles {
         handle.await??;
     }
+
+    let elapsed = start.elapsed();
+    println!(
+        "\n\tPostgreSQL cluster health check completed (took {}s)",
+        elapsed.as_secs()
+    );
 
     Ok(())
 }

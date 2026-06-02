@@ -64,14 +64,14 @@ bootstrap:
         wal_log_hints: "on"
         hot_standby: "on"
         wal_keep_size: 1024MB
-        shared_buffers: 128MB
+        shared_buffers: 512MB
         logging_collector: "on"
         log_destination: "csvlog"
         log_statement: "mod"
         log_min_duration_statement: 0
         log_line_prefix: '%t [%p]: user=%u db=%d app=%a client=%h '
         archive_mode: "on"
-        archive_command: "cp %p /var/lib/postgresql/wal_archive/%f"
+        // archive_command: "cp %p /var/lib/postgresql/wal_archive/%f"
         {summarize_wal}
   basebackup:
     - checkpoint: fast
