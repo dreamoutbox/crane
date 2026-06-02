@@ -31,6 +31,10 @@ pub fn run_postgres_backup_list_cmd(config: &crate::config::Config) -> anyhow::R
         println!("Date: {}", backup.date);
         println!("Time: {}", backup.time);
         println!("Type: {}", backup.backup_type);
+        println!(
+            "Label: {}",
+            backup.label.as_ref().unwrap_or(&"Unnamed".to_string())
+        );
         println!("LOCAL: {}", backup.local_path);
         println!("S3: {}", backup.s3_path);
     }

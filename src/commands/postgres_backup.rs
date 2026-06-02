@@ -12,6 +12,7 @@ use crate::{
 pub fn backup_from_config_wrapper(
     config: &crate::config::Config,
     backup_type: &str,
+    label: Option<&str>,
 ) -> anyhow::Result<BackupMetadata> {
     let s3_config = get_s3_config(&config)?;
     let primary_node = postgres_get_primary(&config)?
@@ -27,7 +28,7 @@ pub fn backup_from_config_wrapper(
     let last_backup = backups.last();
 
     println!(
-        "Starting PostgreSQL {} backup...",
+        "Starting PostgreSQL backup {} ...",
         backup_type.to_uppercase()
     );
 
@@ -39,17 +40,25 @@ pub fn backup_from_config_wrapper(
         &replica_pass,
         &s3_config.bucket,
         last_backup,
+        label,
     )
 }
 
-pub fn run_backup_cmd(config: &crate::config::Config, backup_type: &str) -> anyhow::Result<()> {
-    let meta = backup_from_config_wrapper(config, backup_type)?;
+pub fn run_backup_cmd(
+    config: &crate::config::Config,
+    backup_type: &str,
+    label: Option<&str>,
+) -> anyhow::Result<()> {
+    let meta = backup_from_config_wrapper(config, backup_type, label)?;
 
     println!("\nBackup successful!\n");
     println!("ID: {}", meta.id);
     println!("Date: {}", meta.date);
     println!("Time: {}", meta.time);
     println!("Type: {}", meta.backup_type);
+    if let Some(ref l) = meta.label {
+        println!("Label: {}", l);
+    }
     println!("LOCAL: {}", meta.local_path);
     println!("S3: {}", meta.s3_path);
 

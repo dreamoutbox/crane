@@ -15,6 +15,7 @@ pub fn postgres_backup(
     replica_pass: &str,
     bucket_name: &str,
     last_backup: Option<&BackupMetadata>,
+    label: Option<&str>,
 ) -> anyhow::Result<BackupMetadata> {
     // 1. Get Date and Time from DB Node
     let date_output = interactor.cmd("date +'%Y%m%d%H%M%S%3N %Y-%m-%d %H:%M:%S'")?;
@@ -293,6 +294,7 @@ Falling back to a full backup.
         base: base_id,
         local_path: local_path.clone(),
         s3_path,
+        label: label.map(|s| s.to_string()),
     };
 
     // 9. Write metadata descriptor file locally and upload to S3

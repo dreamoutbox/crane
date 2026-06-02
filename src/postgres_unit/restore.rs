@@ -103,7 +103,7 @@ pub async fn postgres_restore(
         let pgdata_dir = pgdata_dir.clone();
 
         let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
-            println!("Clearing postgres data directory on node {}", node.name);
+            println!("\tClearing postgres data directory on node {}", node.name);
 
             match connect_to_node(&node, &config) {
                 Ok(interactor) => {
@@ -115,10 +115,10 @@ pub async fn postgres_restore(
                     )?;
 
                     cmdw(&*interactor, &format!("sudo chmod 700 {}", pgdata_dir))?;
-                    println!("Cleared postgres data directory on node {}", node.name);
+                    println!("\tCleared postgres data directory on node {}", node.name);
                 }
                 Err(e) => {
-                    println!("Warning: failed to connect to node {}: {}", node.name, e);
+                    println!("\tWarning: failed to connect to node {}: {}", node.name, e);
                 }
             }
             Ok(())

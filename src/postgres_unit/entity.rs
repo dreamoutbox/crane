@@ -9,6 +9,7 @@ pub struct BackupMetadata {
     pub local_path: String,
     pub s3_path: String,
     // pub last_executed_sql_time: Option<String>, // "YYYY-MM-DD HH:MM:SS"
+    pub label: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]

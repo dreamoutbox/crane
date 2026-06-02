@@ -74,6 +74,13 @@ async fn main() -> anyhow::Result<()> {
                             Arg::new("type")
                                 .required(true)
                                 .help("Backup type: 'full' or 'incr'"),
+                        )
+                        .arg(
+                            Arg::new("label")
+                                .short('l')
+                                .long("label")
+                                .value_name("LABEL")
+                                .help("Optional label name for the backup"),
                         ),
                 )
                 .subcommand(Command::new("list").about("List available backups in the cluster"))
@@ -240,6 +247,7 @@ async fn main() -> anyhow::Result<()> {
 
                 Some(("backup", sub_sub_m)) => {
                     let backup_type = sub_sub_m.get_one::<String>("type").unwrap();
+                    let label = sub_sub_m.get_one::<String>("label").map(|s| s.as_str());
 
                     // dbg!(backup_type);
                     if backup_type != "full" && backup_type != "incr" {
@@ -248,7 +256,7 @@ async fn main() -> anyhow::Result<()> {
                     }
 
                     if let Err(e) =
-                        crane::commands::postgres_backup::run_backup_cmd(&config, backup_type)
+                        crane::commands::postgres_backup::run_backup_cmd(&config, backup_type, label)
                     {
                         eprintln!("Backup failed: {}", e);
                         std::process::exit(1);

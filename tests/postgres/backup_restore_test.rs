@@ -42,8 +42,10 @@ async fn test_backup_restore() {
     // FULL BACKUP #1
     // ============================================================
     println!("Step 4: create full backup");
-    let full_backup = backup_from_config_wrapper(&config, "full").expect("Full backup failed");
+    let full_backup = backup_from_config_wrapper(&config, "full", Some("my-full-backup-label"))
+        .expect("Full backup failed");
     assert_eq!(full_backup.backup_type, "FULL");
+    assert_eq!(full_backup.label, Some("my-full-backup-label".to_string()));
 
     // ============================================================
     // SIMULATE DATA LOSS
@@ -97,8 +99,8 @@ async fn test_backup_restore() {
     // ============================================================
     println!("Step 10: create incremental backup #1 (expects FULL fallback after restore)");
     std::thread::sleep(std::time::Duration::from_secs(2));
-    let incr_backup_1 =
-        backup_from_config_wrapper(&config, "incr").expect("Incremental backup #1 failed");
+    let incr_backup_1 = backup_from_config_wrapper(&config, "incr", Some("incr1"))
+        .expect("Incremental backup #1 failed");
     // After restore, timeline changes so incremental auto-falls back to FULL
     assert_eq!(incr_backup_1.backup_type, "FULL");
 
@@ -143,8 +145,8 @@ async fn test_backup_restore() {
     // ============================================================
     println!("Step 12: create incremental backup #2");
     std::thread::sleep(std::time::Duration::from_secs(2));
-    let incr_backup_2 =
-        backup_from_config_wrapper(&config, "incr").expect("Incremental backup #2 failed");
+    let incr_backup_2 = backup_from_config_wrapper(&config, "incr", Some("incr2"))
+        .expect("Incremental backup #2 failed");
     assert_eq!(incr_backup_2.backup_type, "INCR");
 
     // ============================================================
