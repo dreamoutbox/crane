@@ -10,6 +10,7 @@ port = 2221
 roles = ["app", "haproxy", "postgres", "redis"]
 user = "crane"
 private_key = "keys/id_ed25519"
+sudo_pass = "cranepass"
 
 [[nodes]]
 name = "vps2"
@@ -20,6 +21,7 @@ port = 2222
 roles = ["postgres", "redis"]
 user = "crane"
 private_key = "keys/id_ed25519"
+sudo_pass = "cranepass"
 
 [[nodes]]
 name = "vps3"
@@ -30,6 +32,7 @@ port = 2223
 roles = ["postgres", "redis"]
 user = "crane"
 private_key = "keys/id_ed25519"
+sudo_pass = "cranepass"
 
 
 [db.postgres]

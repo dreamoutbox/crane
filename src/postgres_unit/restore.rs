@@ -422,7 +422,7 @@ pub async fn postgres_restore(
     // Wait for primary node to become the Patroni leader
     println!("Waiting for primary node to become Patroni leader...");
     let mut primary_ready = false;
-    let check_leader_cmd = "curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8008/primary";
+    let check_leader_cmd = "curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8008/primary";
     let start_time = std::time::Instant::now();
     let timeout = std::time::Duration::from_secs(300); // 5 minutes
 

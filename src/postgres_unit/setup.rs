@@ -94,7 +94,7 @@ pub async fn postgres_setup_wrapper(
 
                 // --- Wait for quorum (only first node runs it) ---
                 if is_first {
-                    wait_for_etcd_quorum(&*interactor, 10)?;
+                    wait_for_etcd_quorum(&*interactor, 40)?;
                 }
 
                 // Wait for first node to complete quorum check before starting Patroni
@@ -104,8 +104,8 @@ pub async fn postgres_setup_wrapper(
                 println!("\tStarting Patroni on node {}...", node.name);
                 interactor.restart_service("patroni --no-block")?;
 
-                // Check if Patroni is running (with a 10s timeout since it can be "activating" initially)
-                let is_active = interactor.wait_for_service_start("patroni", 10)?;
+                // Check if Patroni is running (with a 30s timeout since it can be "activating" initially)
+                let is_active = interactor.wait_for_service_start("patroni", 30)?;
 
                 if !is_active {
                     println!(
@@ -202,9 +202,9 @@ async fn assert_postgres_cluster_healthy(pg_nodes: Vec<config::NodeConfig>) -> a
                 if let Ok(interactor) = get_server_interactor(&node_name) {
                     // Check via Patroni REST API
                     let primary_cmd =
-                        "curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8008/primary";
+                        "curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8008/primary";
                     let replica_cmd =
-                        "curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8008/replica";
+                        "curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8008/replica";
 
                     let is_primary = interactor
                         .cmd(primary_cmd)
@@ -226,6 +226,9 @@ async fn assert_postgres_cluster_healthy(pg_nodes: Vec<config::NodeConfig>) -> a
                         r#"sudo -u postgres psql -t -A -c "select pg_is_in_recovery();""#;
                     if let Ok(out) = interactor.cmd(recovery_cmd) {
                         let rec_trimmed = out.stdout.trim();
+
+                        dbg!(&node_name, is_primary, is_replica, rec_trimmed);
+
                         if rec_trimmed == "f" || rec_trimmed == "t" {
                             healthy = true;
                             break;

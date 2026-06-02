@@ -22,7 +22,7 @@ async fn test_database_persist_after_deploy() {
     // create table api_counter in database
     run_sql(
         &*interactor,
-        "CREATE TABLE IF NOT EXISTS api_counter (id INT PRIMARY KEY, value INT);",
+        "DROP TABLE IF EXISTS api_counter; CREATE TABLE api_counter (id INT PRIMARY KEY, value INT);",
     );
 
     // INSERT INTO api_counter (id, value) VALUES (1, 1) ON CONFLICT (id) DO NOTHING

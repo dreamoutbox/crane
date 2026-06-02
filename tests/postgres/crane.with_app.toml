@@ -1,6 +1,5 @@
 # crane.toml
 
-
 [[nodes]]
 name = "vps1"
 host = "localhost"
@@ -10,6 +9,7 @@ port = 2221
 roles = ["app", "haproxy", "postgres", "redis"]
 user = "crane"
 private_key = "keys/id_ed25519"
+sudo_pass = "cranepass"
 
 [[nodes]]
 name = "vps2"
@@ -20,6 +20,7 @@ port = 2222
 roles = ["postgres", "redis"]
 user = "crane"
 private_key = "keys/id_ed25519"
+sudo_pass = "cranepass"
 
 [[nodes]]
 name = "vps3"
@@ -29,6 +30,14 @@ internal_ip = "10.0.0.13"
 port = 2223
 roles = ["postgres", "redis"]
 user = "crane"
+private_key = "keys/id_ed25519"
+sudo_pass = "cranepass"
+
+
+[[users]]
+name = "deployman"
+groups = ["www"]
+ssh_authorized_keys = ["keys/id_ed25519.pub"]
 private_key = "keys/id_ed25519"
 
 

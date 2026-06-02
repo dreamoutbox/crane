@@ -99,7 +99,7 @@ pub fn wait_for_etcd_quorum(
     interactor: &dyn ServerInteractor,
     timeout_secs: u64,
 ) -> anyhow::Result<()> {
-    println!("\tWaiting for etcd quorum...");
+    println!("\tWaiting for etcd quorum on all nodes...");
     let start = std::time::Instant::now();
     let duration = std::time::Duration::from_secs(timeout_secs);
 

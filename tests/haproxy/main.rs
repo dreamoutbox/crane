@@ -27,6 +27,7 @@ fn test_haproxy_setup_config() {
     roles = ["app", "haproxy"]
     user = "crane"
     private_key = "keys/id_ed25519"
+    sudo_pass = "cranepass"
 
     [domain]
     provider = "cloudflare"

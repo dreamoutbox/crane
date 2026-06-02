@@ -12,14 +12,17 @@ impl SSHSession {
         private_key_path: String,
         port: Option<u16>,
     ) -> Self {
-        // dbg!("SSHSession#new", &host, &username, &port);
+        let debug_ssh_create = std::env::var("DEBUG_SSH");
+        if debug_ssh_create.is_ok() {
+            // dbg!("SSHSession#new", &host, &username, &port);
 
-        println!(
-            "Create new SSH session for {}@{} (port: {})",
-            username,
-            host,
-            port.unwrap_or(22)
-        );
+            println!(
+                "Create new SSH session for {}@{} (port: {})",
+                username,
+                host,
+                port.unwrap_or(22)
+            );
+        }
 
         Self {
             host,

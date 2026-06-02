@@ -151,21 +151,31 @@ pub fn postgres_get_leader(config: &config::Config) -> anyhow::Result<Option<con
         if let Ok(interactor) = connect_to_node(&node, config) {
             // First check via Patroni REST API
             let curl_patroni_primary_cmd =
-                "curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8008/primary";
+                "curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8008/primary";
             let curl_patroni_get_primary = interactor.cmd(curl_patroni_primary_cmd);
             // dbg!(&curl_patroni_get_primary);
 
-            if let Ok(output) = curl_patroni_get_primary {
-                if output.stdout.trim() == "200" {
-                    return Ok(Some(node));
-                }
-            }
+            let is_patroni_primary = if let Ok(output) = curl_patroni_get_primary {
+                output.stdout.trim() == "200"
+            } else {
+                false
+            };
 
-            // Fallback for mock interactor and compatibility
-            let cmd = r#"sudo -u postgres psql -t -A -c "select pg_is_in_recovery();""#;
-            if let Ok(output) = interactor.cmd(cmd) {
-                if output.stdout.trim() == "f" {
-                    return Ok(Some(node));
+            if is_patroni_primary {
+                // Verify it's actually writable (out of recovery)
+                let cmd = r#"sudo -u postgres psql -t -A -c "select pg_is_in_recovery();""#;
+                if let Ok(output) = interactor.cmd(cmd) {
+                    if output.stdout.trim() == "f" {
+                        return Ok(Some(node));
+                    }
+                }
+            } else {
+                // Fallback for mock interactor and compatibility
+                let cmd = r#"sudo -u postgres psql -t -A -c "select pg_is_in_recovery();""#;
+                if let Ok(output) = interactor.cmd(cmd) {
+                    if output.stdout.trim() == "f" {
+                        return Ok(Some(node));
+                    }
                 }
             }
         }
