@@ -9,18 +9,16 @@ use anyhow::{Context, Result};
 /// - `app_name`: Optional target app name to update. If `None`, updates all apps in the config.
 /// - `is_deploy`: If `true` (called during deploy), missing token logs a warning and returns Ok.
 ///   If `false` (called explicitly via CLI), missing token returns an Error.
-pub async fn update_dns(config: &Config, app_name: Option<&str>, is_deploy: bool) -> Result<()> {
-    let token = match std::env::var("CLOUDFLARE_TOKEN") {
-        Ok(t) if !t.is_empty() => t,
-        _ => {
-            if is_deploy {
-                println!("Warning: CLOUDFLARE_TOKEN not set in environment. Skipping DNS updates.");
-                return Ok(());
-            } else {
-                anyhow::bail!("CLOUDFLARE_TOKEN environment variable is not set.");
-            }
-        }
-    };
+pub async fn update_dns(config: &Config, app_name: Option<&str>) -> Result<()> {
+    let token = config
+        .domain
+        .as_ref()
+        .and_then(|d| d.token.clone())
+        .unwrap_or_default();
+
+    if token.is_empty() {
+        anyhow::bail!("config CLOUDFLARE_TOKEN environment variable is not set.");
+    }
 
     // Filter apps to update
     let target_apps: Vec<_> = if let Some(target) = app_name {
@@ -134,12 +132,13 @@ pub async fn update_dns(config: &Config, app_name: Option<&str>, is_deploy: bool
 }
 
 /// Synchronous wrapper around `update_dns` using a Tokio runtime.
-pub fn update_dns_blocking(config: &Config, app_name: Option<&str>, is_deploy: bool) -> Result<()> {
+pub fn update_dns_blocking(config: &Config, app_name: Option<&str>) -> Result<()> {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .context("Failed to build tokio runtime for DNS update")?;
-    rt.block_on(update_dns(config, app_name, is_deploy))
+
+    rt.block_on(update_dns(config, app_name))
 }
 
 /// Helper to get the Cloudflare zone name (apex domain) from an app domain.

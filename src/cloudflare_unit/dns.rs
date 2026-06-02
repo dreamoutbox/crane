@@ -107,12 +107,6 @@ impl CloudflareDns {
     /// Get Zone ID by name.
     /// `GET /zones`
     pub async fn get_zone_id_by_name(&self, name: &str) -> Result<String> {
-        #[derive(Debug, Deserialize)]
-        struct ZoneResult {
-            id: String,
-            name: String,
-        }
-
         let url = format!("{}/zones", self.base_url);
         let response = self
             .client
@@ -372,11 +366,6 @@ impl CloudflareDns {
     ///
     /// Returns the deleted record's ID on success.
     pub async fn delete_record(&self, record_id: &str) -> Result<String> {
-        #[derive(Deserialize)]
-        struct DeleteResult {
-            id: String,
-        }
-
         let response = self
             .client
             .delete(self.record_url(record_id))

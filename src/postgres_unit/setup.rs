@@ -57,7 +57,7 @@ pub async fn postgres_setup_wrapper(
                     private_key,
                     Some(node.port),
                 );
-                let interactor = get_server_interactor(ssh)?;
+                let interactor = get_server_interactor(ssh, node.sudo_pass.clone())?;
 
                 // Ensure postgres binaries are installed first
                 install_postgres(&*interactor, &pg_version)?;

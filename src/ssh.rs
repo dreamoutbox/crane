@@ -12,6 +12,8 @@ impl SSHSession {
         private_key_path: String,
         port: Option<u16>,
     ) -> Self {
+        dbg!("SSHSession#new", &host, &username, &port);
+
         Self {
             host,
             username,

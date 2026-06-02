@@ -8,15 +8,39 @@ static APT_UPDATE: Once = Once::new();
 
 pub struct DebianInteractor {
     ssh: SSHSession,
+    sudo_pass: Option<String>,
 }
 
 impl DebianInteractor {
-    pub fn new(ssh: SSHSession) -> Self {
-        Self { ssh }
+    pub fn new(ssh: SSHSession, sudo_pass: Option<String>) -> Self {
+        Self { ssh, sudo_pass }
     }
 
-    fn run_checked(&self, cmd: &str) -> anyhow::Result<String> {
-        let out = self.ssh.run_cmd(cmd)?;
+    fn wrap_sudo(&self, cmd: &str) -> String {
+        if let Some(ref pass) = self.sudo_pass {
+            if cmd.contains("sudo") {
+                let mut escaped = String::new();
+                for c in cmd.chars() {
+                    match c {
+                        '"' | '$' | '\\' | '`' => {
+                            escaped.push('\\');
+                            escaped.push(c);
+                        }
+                        _ => escaped.push(c),
+                    }
+                }
+                format!("echo '{}' | sudo -S sh -c \"{}\"", pass, escaped)
+            } else {
+                cmd.to_string()
+            }
+        } else {
+            cmd.to_string()
+        }
+    }
+
+    fn run_stdout(&self, cmd: &str) -> anyhow::Result<String> {
+        let cmd_to_run = self.wrap_sudo(cmd);
+        let out = self.ssh.run_cmd(&cmd_to_run)?;
 
         if out.exit_code != 0 {
             // if error like:
@@ -29,10 +53,11 @@ impl DebianInteractor {
             }
 
             println!(
-                "error executing command {} (exit code: {})",
+                "error DebianInteractor#runw executing command:\n{}\n(exit code: {})\n",
                 cmd, out.exit_code
             );
-            println!("\nDebianInteractor run_checked STDERR:\n{}\n", out.stderr);
+            println!("STDOUT:\n{}\n", out.stdout);
+            println!("STDERR:\n{}\n", out.stderr);
 
             anyhow::bail!(
                 "Command '{}' failed with exit code {}: {}",
@@ -48,11 +73,12 @@ impl DebianInteractor {
 
 impl ServerInteractor for DebianInteractor {
     fn whoami(&self) -> anyhow::Result<String> {
-        self.run_checked("whoami")
+        self.run_stdout("whoami")
     }
 
     fn cmd(&self, cmd: &str) -> anyhow::Result<CmdOutput> {
-        let out = self.ssh.run_cmd(cmd)?;
+        let cmd_to_run = self.wrap_sudo(cmd);
+        let out = self.ssh.run_cmd(&cmd_to_run)?;
 
         if out.exit_code != 0 {
             // if error is error executing command sudo systemctl stop 'myapp2@4000' (exit code: 5)
@@ -64,7 +90,7 @@ impl ServerInteractor for DebianInteractor {
                 || out.stderr.contains("not loaded")
             {
             } else {
-                let debug_cmd = std::env::var("DEBUG_CMD_ERROR").unwrap_or_default();
+                let debug_cmd = std::env::var("DEBUG_CMD").unwrap_or_default();
 
                 if !debug_cmd.is_empty() {
                     println!("=========================");
@@ -83,7 +109,7 @@ impl ServerInteractor for DebianInteractor {
     }
 
     fn get_os_info(&self) -> anyhow::Result<String> {
-        self.run_checked("uname -a")
+        self.run_stdout("uname -a")
     }
 
     fn create_file(&self, path: &str, content: &str) -> anyhow::Result<()> {
@@ -92,12 +118,12 @@ impl ServerInteractor for DebianInteractor {
             "echo '{}' | base64 -d | sudo tee '{}' > /dev/null",
             b64, path
         );
-        self.run_checked(&cmd)?;
+        self.run_stdout(&cmd)?;
         Ok(())
     }
 
     fn read_file(&self, path: &str) -> anyhow::Result<String> {
-        self.run_checked(&format!("cat '{}'", path))
+        self.run_stdout(&format!("cat '{}'", path))
     }
 
     fn upload(&self, local_path: &str, remote_path: &str) -> anyhow::Result<()> {
@@ -109,23 +135,23 @@ impl ServerInteractor for DebianInteractor {
     }
 
     fn chmod(&self, path: &str, permission: &str) -> anyhow::Result<()> {
-        self.run_checked(&format!("chmod -R '{}' '{}'", permission, path))?;
+        self.run_stdout(&format!("sudo chmod -R '{}' '{}'", permission, path))?;
         Ok(())
     }
 
     fn chown(&self, path: &str, user: &str, group: &str) -> anyhow::Result<()> {
-        self.run_checked(&format!("chown -R '{}:{}' '{}'", user, group, path))?;
+        self.run_stdout(&format!("sudo chown -R '{}:{}' '{}'", user, group, path))?;
         Ok(())
     }
 
     fn mkdir(&self, path: &str) -> anyhow::Result<()> {
-        self.run_checked(&format!("sudo mkdir -p '{}'", path))?;
+        self.run_stdout(&format!("sudo mkdir -p '{}'", path))?;
         // self.run_checked(&format!("sudo chown '{}:{}' '{}'", user, group, path))?;
         Ok(())
     }
 
     fn ls(&self, path: &str) -> anyhow::Result<Vec<String>> {
-        let output = self.run_checked(&format!("ls -1 '{}'", path))?;
+        let output = self.run_stdout(&format!("ls -1 '{}'", path))?;
         let files: Vec<String> = output
             .lines()
             .map(|s| s.trim().to_string())
@@ -166,9 +192,9 @@ impl ServerInteractor for DebianInteractor {
             service_register.service_name
         );
         self.create_file(&dest_path, &service_content)?;
-        self.run_checked(&format!("sudo chown root:root '{}'", dest_path))?;
-        self.run_checked(&format!("sudo chmod 644 '{}'", dest_path))?;
-        self.run_checked("sudo systemctl daemon-reload")?;
+        self.run_stdout(&format!("sudo chown root:root '{}'", dest_path))?;
+        self.run_stdout(&format!("sudo chmod 644 '{}'", dest_path))?;
+        self.run_stdout("sudo systemctl daemon-reload")?;
 
         if service_register.auto_start {
             self.enable_service(&service_register.service_name)?;
@@ -179,22 +205,22 @@ impl ServerInteractor for DebianInteractor {
     }
 
     fn restart_service(&self, service_name: &str) -> anyhow::Result<()> {
-        self.run_checked(&format!("sudo systemctl restart {}", service_name))?;
+        self.run_stdout(&format!("sudo systemctl restart {}", service_name))?;
         Ok(())
     }
 
     fn stop_service(&self, service_name: &str) -> anyhow::Result<()> {
-        self.run_checked(&format!("sudo systemctl stop {}", service_name))?;
+        self.run_stdout(&format!("sudo systemctl stop {}", service_name))?;
         Ok(())
     }
 
     fn start_service(&self, service_name: &str) -> anyhow::Result<()> {
-        self.run_checked(&format!("sudo systemctl start {}", service_name))?;
+        self.run_stdout(&format!("sudo systemctl start {}", service_name))?;
         Ok(())
     }
 
     fn status_service(&self, service_name: &str) -> anyhow::Result<()> {
-        self.run_checked(&format!("sudo systemctl status {}", service_name))?;
+        self.run_stdout(&format!("sudo systemctl status {}", service_name))?;
         Ok(())
     }
 
@@ -202,7 +228,7 @@ impl ServerInteractor for DebianInteractor {
         let service_path = format!("/etc/systemd/system/{}.service", service_name);
         self.stop_service(service_name)?;
         self.disable_service(service_name)?;
-        self.run_checked(&format!("sudo rm -f '{}'", service_path))?;
+        self.run_stdout(&format!("sudo rm -f '{}'", service_path))?;
         self.service_daemon_reload()?;
         Ok(())
     }
@@ -215,11 +241,11 @@ impl ServerInteractor for DebianInteractor {
 
         let mut update_res = Ok(());
         APT_UPDATE.call_once(|| {
-            update_res = self.run_checked("sudo apt-get update").map(|_| ());
+            update_res = self.run_stdout("sudo apt-get update").map(|_| ());
         });
         update_res?;
 
-        self.run_checked(&format!("sudo apt-get install -y {}", packages))?;
+        self.run_stdout(&format!("sudo apt-get install -y {}", packages))?;
 
         Ok(())
     }
@@ -231,9 +257,9 @@ impl ServerInteractor for DebianInteractor {
         // Check if user exists. If not, create it.
         let user_check = self
             .ssh
-            .run_cmd(&format!("id -u {}", user_register.username))?;
+            .run_cmd(&self.wrap_sudo(&format!("id -u {}", user_register.username)))?;
         if user_check.exit_code != 0 {
-            let create_result = self.run_checked(&format!(
+            let create_result = self.run_stdout(&format!(
                 "sudo useradd -m -s /bin/bash {}",
                 user_register.username
             ));
@@ -254,7 +280,7 @@ impl ServerInteractor for DebianInteractor {
         }
 
         // Ensure home directory ownership is correct (in case it existed beforehand)
-        self.run_checked(&format!(
+        self.run_stdout(&format!(
             "sudo chown '{username}:{username}' '/home/{username}'",
             username = user_register.username
         ))?;
@@ -270,24 +296,24 @@ impl ServerInteractor for DebianInteractor {
             let ssh_dir = format!("/home/{}/.ssh", user_register.username);
             let auth_keys_path = format!("{}/authorized_keys", ssh_dir);
 
-            self.run_checked(&format!("sudo mkdir -p '{}'", ssh_dir))?;
+            self.run_stdout(&format!("sudo mkdir -p '{}'", ssh_dir))?;
 
             self.create_file(&auth_keys_path, &keys_content)?;
 
-            self.run_checked(&format!(
+            self.run_stdout(&format!(
                 "sudo chown -R '{}:{}' '{}'",
                 user_register.username, user_register.username, ssh_dir
             ))?;
 
-            self.run_checked(&format!("sudo chmod 700 '{}'", ssh_dir))?;
-            self.run_checked(&format!("sudo chmod 600 '{}'", auth_keys_path))?;
+            self.run_stdout(&format!("sudo chmod 700 '{}'", ssh_dir))?;
+            self.run_stdout(&format!("sudo chmod 600 '{}'", auth_keys_path))?;
         }
 
         Ok(())
     }
 
     fn delete_user(&self, username: &str) -> anyhow::Result<()> {
-        self.run_checked(&format!("sudo userdel -r {}", username))?;
+        self.run_stdout(&format!("sudo userdel -r {}", username))?;
         Ok(())
     }
 
@@ -296,10 +322,12 @@ impl ServerInteractor for DebianInteractor {
             return Ok(());
         }
         for g in &groups {
-            let _ = self.ssh.run_cmd(&format!("sudo groupadd '{}'", g));
+            let _ = self
+                .ssh
+                .run_cmd(&self.wrap_sudo(&format!("sudo groupadd '{}'", g)));
         }
         let groups_csv = groups.join(",");
-        self.run_checked(&format!(
+        self.run_stdout(&format!(
             "sudo usermod -a -G '{}' '{}'",
             groups_csv, username
         ))?;
@@ -313,13 +341,13 @@ impl ServerInteractor for DebianInteractor {
         for g in &groups {
             let _ = self
                 .ssh
-                .run_cmd(&format!("sudo gpasswd -d '{}' '{}'", username, g));
+                .run_cmd(&self.wrap_sudo(&format!("sudo gpasswd -d '{}' '{}'", username, g)));
         }
         Ok(())
     }
 
     fn list_users(&self) -> anyhow::Result<Vec<String>> {
-        let output = self.run_checked("cut -d: -f1 /etc/passwd")?;
+        let output = self.run_stdout("cut -d: -f1 /etc/passwd")?;
         let users: Vec<String> = output
             .lines()
             .map(|s| s.trim().to_string())
@@ -348,22 +376,22 @@ impl ServerInteractor for DebianInteractor {
     }
 
     fn service_daemon_reload(&self) -> anyhow::Result<()> {
-        self.run_checked("sudo systemctl daemon-reload")?;
+        self.run_stdout("sudo systemctl daemon-reload")?;
         Ok(())
     }
 
     fn enable_service(&self, service_name: &str) -> anyhow::Result<()> {
-        self.run_checked(&format!("sudo systemctl enable {}", service_name))?;
+        self.run_stdout(&format!("sudo systemctl enable {}", service_name))?;
         Ok(())
     }
 
     fn disable_service(&self, service_name: &str) -> anyhow::Result<()> {
-        self.run_checked(&format!("sudo systemctl disable {}", service_name))?;
+        self.run_stdout(&format!("sudo systemctl disable {}", service_name))?;
         Ok(())
     }
 
     fn unzip(&self, zip_path: &str, dest: &str) -> anyhow::Result<()> {
-        self.run_checked(&format!("sudo unzip -o '{}' -d '{}'", zip_path, dest))?;
+        self.run_stdout(&format!("sudo unzip -o '{}' -d '{}'", zip_path, dest))?;
 
         Ok(())
     }

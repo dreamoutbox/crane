@@ -87,7 +87,7 @@ impl ServerInteractor for MockInteractor {
     fn chown(&self, _path: &str, _user: &str, _group: &str) -> anyhow::Result<()> {
         Ok(())
     }
-    fn mkdir(&self, _path: &str, _user: &str, _group: &str) -> anyhow::Result<()> {
+    fn mkdir(&self, _path: &str) -> anyhow::Result<()> {
         Ok(())
     }
     fn ls(&self, _path: &str) -> anyhow::Result<Vec<String>> {
@@ -128,5 +128,23 @@ impl ServerInteractor for MockInteractor {
     }
     fn list_users(&self) -> anyhow::Result<Vec<String>> {
         Ok(vec![])
+    }
+
+    fn unzip(&self, _: &str, _: &str) -> Result<(), anyhow::Error> {
+        Ok(())
+    }
+
+    fn wait_for_service_start(&self, _: &str, _: u64) -> Result<bool, anyhow::Error> {
+        Ok(true)
+    }
+
+    fn service_daemon_reload(&self) -> Result<(), anyhow::Error> {
+        Ok(())
+    }
+    fn enable_service(&self, _: &str) -> Result<(), anyhow::Error> {
+        Ok(())
+    }
+    fn disable_service(&self, _: &str) -> Result<(), anyhow::Error> {
+        Ok(())
     }
 }

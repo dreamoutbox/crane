@@ -203,7 +203,9 @@ async fn main() -> anyhow::Result<()> {
         Some(("deploy", sub_m)) => {
             let no_dns_update = sub_m.get_flag("no-dns-update");
 
-            if let Err(e) = crane::commands::deploy::run(&config, config_path, no_dns_update).await
+            if let Err(e) =
+                crane::commands::deploy::run_deploy_command(&config, config_path, no_dns_update)
+                    .await
             {
                 eprintln!("Deployment failed: {}", e);
                 std::process::exit(1);
@@ -343,7 +345,7 @@ async fn main() -> anyhow::Result<()> {
                 let app_name = sub_sub_m.get_one::<String>("app").map(|s| s.as_str());
 
                 if let Err(e) =
-                    crane::cloudflare_unit::setup::update_dns_blocking(&config, app_name, false)
+                    crane::cloudflare_unit::setup::update_dns_blocking(&config, app_name)
                 {
                     eprintln!("DNS update failed: {}", e);
                     std::process::exit(1);

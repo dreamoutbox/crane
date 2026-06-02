@@ -364,3 +364,14 @@ pub struct BatchPutRecord {
     #[serde(flatten)]
     pub record: UpdateDnsRecord,
 }
+
+#[derive(Deserialize)]
+pub struct DeleteResult {
+    pub id: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ZoneResult {
+    pub id: String,
+    pub name: String,
+}

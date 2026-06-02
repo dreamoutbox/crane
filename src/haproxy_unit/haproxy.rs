@@ -310,7 +310,7 @@ pub async fn setup_haproxy_on_each_nodes_wrapper(
                 private_key,
                 Some(app_node.port),
             );
-            let interactor = get_server_interactor(ssh)?;
+            let interactor = get_server_interactor(ssh, app_node.sudo_pass.clone())?;
 
             setup_haproxy_unified(&*interactor, &config, &app_node, None, None)?;
             Ok(())

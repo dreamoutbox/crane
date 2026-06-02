@@ -61,9 +61,6 @@ impl ServerInteractor for MockServerInteractorUserNotExist {
     fn whoami(&self) -> anyhow::Result<String> {
         Ok("admin".to_string())
     }
-    fn get_os_info(&self) -> anyhow::Result<String> {
-        Ok("Linux".to_string())
-    }
     fn cmd(&self, command: &str) -> anyhow::Result<CmdOutput> {
         if command == "id postgres" {
             Ok(CmdOutput {
@@ -78,6 +75,9 @@ impl ServerInteractor for MockServerInteractorUserNotExist {
                 exit_code: 0,
             })
         }
+    }
+    fn get_os_info(&self) -> anyhow::Result<String> {
+        Ok("Linux".to_string())
     }
     fn create_file(&self, _p: &str, _c: &str) -> anyhow::Result<()> {
         Ok(())
@@ -97,7 +97,7 @@ impl ServerInteractor for MockServerInteractorUserNotExist {
     fn chown(&self, _p: &str, _u: &str, _g: &str) -> anyhow::Result<()> {
         Ok(())
     }
-    fn mkdir(&self, _p: &str, _u: &str, _g: &str) -> anyhow::Result<()> {
+    fn mkdir(&self, _p: &str) -> anyhow::Result<()> {
         Ok(())
     }
     fn ls(&self, _p: &str) -> anyhow::Result<Vec<String>> {
@@ -138,6 +138,22 @@ impl ServerInteractor for MockServerInteractorUserNotExist {
     }
     fn list_users(&self) -> anyhow::Result<Vec<String>> {
         Ok(vec![])
+    }
+    fn wait_for_service_start(&self, _: &str, _: u64) -> Result<bool, anyhow::Error> {
+        Ok(true)
+    }
+    fn service_daemon_reload(&self) -> Result<(), anyhow::Error> {
+        Ok(())
+    }
+    fn enable_service(&self, _: &str) -> Result<(), anyhow::Error> {
+        Ok(())
+    }
+    fn disable_service(&self, _: &str) -> Result<(), anyhow::Error> {
+        Ok(())
+    }
+
+    fn unzip(&self, _: &str, _: &str) -> Result<(), anyhow::Error> {
+        Ok(())
     }
 }
 
@@ -184,7 +200,7 @@ impl ServerInteractor for MockServerInteractorLogsRecorder {
     fn chown(&self, _p: &str, _u: &str, _g: &str) -> anyhow::Result<()> {
         Ok(())
     }
-    fn mkdir(&self, _p: &str, _u: &str, _g: &str) -> anyhow::Result<()> {
+    fn mkdir(&self, _p: &str) -> anyhow::Result<()> {
         Ok(())
     }
     fn ls(&self, _p: &str) -> anyhow::Result<Vec<String>> {
@@ -225,5 +241,21 @@ impl ServerInteractor for MockServerInteractorLogsRecorder {
     }
     fn list_users(&self) -> anyhow::Result<Vec<String>> {
         Ok(vec![])
+    }
+    fn wait_for_service_start(&self, _: &str, _: u64) -> Result<bool, anyhow::Error> {
+        Ok(true)
+    }
+    fn service_daemon_reload(&self) -> Result<(), anyhow::Error> {
+        Ok(())
+    }
+    fn enable_service(&self, _: &str) -> Result<(), anyhow::Error> {
+        Ok(())
+    }
+    fn disable_service(&self, _: &str) -> Result<(), anyhow::Error> {
+        Ok(())
+    }
+
+    fn unzip(&self, _: &str, _: &str) -> Result<(), anyhow::Error> {
+        Ok(())
     }
 }

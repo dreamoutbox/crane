@@ -1,0 +1,11 @@
+- `[x]` Add `sudo_pass: Option<String>` to `NodeConfig` in `src/config.rs`
+- `[x]` Update `DebianInteractor` and its helper methods to wrap sudo commands in `src/server_interactor/debian.rs`
+- `[x]` Update `get_server_interactor` and helper function signatures in `src/server_interactor/mod.rs`
+- `[x]` Update all `get_server_interactor` call sites:
+  - `[x]` `src/commands/deploy.rs`
+  - `[x]` `src/commands/status.rs`
+  - `[x]` `src/commands/logs.rs`
+  - `[x]` `src/postgres_unit/setup.rs`
+  - `[x]` `src/postgres_unit/helper.rs`
+  - `[x]` `src/haproxy_unit/haproxy.rs`
+- `[x]` Verify changes with deploy test

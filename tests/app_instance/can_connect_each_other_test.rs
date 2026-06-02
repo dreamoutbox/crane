@@ -21,7 +21,9 @@ async fn test_app_instances_can_connect_each_other() {
     // 2. Deploy app configuration to VPS nodes
     let config_path = Path::new("demo/crane.toml");
     let config = crane::config::read_config_toml_file(config_path).expect("Failed to load config");
-    crane::commands::deploy::run(&config, config_path, true).await.expect("deploy failed");
+    crane::commands::deploy::run_deploy_command(&config, config_path, true)
+        .await
+        .expect("deploy failed");
 
     // 3. Test myapp to myapp2 connectivity
     let curl1 = Command::new("curl")

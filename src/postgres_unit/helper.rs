@@ -53,7 +53,7 @@ pub fn connect_to_node(
         Some(node.port),
     );
 
-    get_server_interactor(ssh)
+    get_server_interactor(ssh, node.sudo_pass.clone())
 }
 
 pub fn get_pg_version(config: &config::Config) -> String {

@@ -98,7 +98,7 @@ pub fn run(config: &crate::config::Config, app_name: &str) -> anyhow::Result<()>
                     Some(node_clone.port),
                 );
 
-                let interactor = get_server_interactor(ssh)?;
+                let interactor = get_server_interactor(ssh, node_clone.sudo_pass.clone())?;
 
                 // Query service instances from systemd to dynamically discover active ports
                 let systemd_cmd = format!(

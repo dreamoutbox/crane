@@ -23,7 +23,9 @@ async fn test_deploy() {
     // 2. Deploy app configuration to VPS nodes
     let config_path = Path::new("demo/crane.toml");
     let config = crane::config::read_config_toml_file(config_path).expect("Failed to load config");
-    crane::commands::deploy::run(&config, config_path, true).await.expect("deploy failed");
+    crane::commands::deploy::run_deploy_command(&config, config_path, true)
+        .await
+        .expect("deploy failed");
 
     // ASSERT this machine can curl at myapp.example.com
     let curl_myapp = Command::new("curl")

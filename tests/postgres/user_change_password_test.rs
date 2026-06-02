@@ -10,7 +10,7 @@ async fn test_user_change_password() {
         std::path::Path::new("tests/postgres/crane.postgres_user_old_password.toml");
     let old_config =
         crane::config::read_config_toml_file(old_config_path).expect("Failed to load config");
-    crane::commands::deploy::run(&old_config, old_config_path, true).await.expect("deploy failed");
+    crane::commands::deploy::run_deploy_command(&old_config, old_config_path, true).await.expect("deploy failed");
 
     // Allow host machine connection to Docker container
     allow_host_connection(old_config_path);
@@ -28,7 +28,7 @@ async fn test_user_change_password() {
         std::path::Path::new("tests/postgres/crane.postgres_user_new_password.toml");
     let new_config =
         crane::config::read_config_toml_file(new_config_path).expect("Failed to load config");
-    crane::commands::deploy::run(&new_config, new_config_path, true).await.expect("deploy failed");
+    crane::commands::deploy::run_deploy_command(&new_config, new_config_path, true).await.expect("deploy failed");
 
     // Allow host machine connection again since configuration was redeployed
     allow_host_connection(new_config_path);

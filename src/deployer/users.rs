@@ -1,6 +1,9 @@
-use crate::{config, server_interactor::server_interactor_trait::ServerInteractor};
+use crate::{
+    config,
+    server_interactor::server_interactor_trait::{ServerInteractor, UserRegister},
+};
 
-pub fn deploy_setup_users(
+pub fn deploy_setup_app_users(
     app: &config::AppConfig,
     config: &config::Config,
     node_interactor: &dyn ServerInteractor,
@@ -38,7 +41,7 @@ pub fn deploy_setup_users(
                 }
             }
 
-            let register = crate::server_interactor::server_interactor_trait::UserRegister::new(
+            let register = UserRegister::new(
                 user_config.name.clone(),
                 user_config.groups.clone(),
                 authorized_keys,

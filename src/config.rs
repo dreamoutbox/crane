@@ -23,6 +23,7 @@ pub struct NodeConfig {
     pub user: String,
     pub roles: Vec<String>,
     pub private_key: String,
+    pub sudo_pass: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

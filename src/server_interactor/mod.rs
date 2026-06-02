@@ -5,10 +5,11 @@ pub mod server_interactor_trait;
 /// wrapper to get server interactor from ssh session
 pub fn get_server_interactor(
     ssh: SSHSession,
+    sudo_pass: Option<String>,
 ) -> anyhow::Result<Box<dyn ServerInteractor + Send + Sync>> {
     let distro = get_server_distro(&ssh)?;
 
-    get_interactor_for_distro(ssh, &distro)
+    get_interactor_for_distro(ssh, sudo_pass, &distro)
 }
 
 /// get server distro from ssh session
@@ -27,10 +28,11 @@ fn get_server_distro(ssh: &SSHSession) -> anyhow::Result<String> {
 /// Build an interactor using a pre-detected distro string (skips SSH detection).
 fn get_interactor_for_distro(
     ssh: SSHSession,
+    sudo_pass: Option<String>,
     distro: &str,
 ) -> anyhow::Result<Box<dyn ServerInteractor + Send + Sync>> {
     match distro {
-        "debian" | "ubuntu" => Ok(Box::new(debian::DebianInteractor::new(ssh))),
+        "debian" | "ubuntu" => Ok(Box::new(debian::DebianInteractor::new(ssh, sudo_pass))),
         other => anyhow::bail!("Unsupported server distribution: {}", other),
     }
 }

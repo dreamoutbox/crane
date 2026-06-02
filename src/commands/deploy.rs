@@ -1,5 +1,5 @@
 use crate::deployer::helper::{deploy_update_etc_hosts, deploy_zip_app};
-use crate::deployer::users::deploy_setup_users;
+use crate::deployer::users::deploy_setup_app_users;
 use crate::helper::config::config_get_nodes;
 use crate::helper::keys::find_private_key_for_user;
 use crate::postgres_unit::helper::get_postgres_configs;
@@ -9,7 +9,7 @@ use crate::ssh::SSHSession;
 use std::path::Path;
 
 /// deploy app commands
-pub async fn run(
+pub async fn run_deploy_command(
     config: &crate::config::Config,
     config_path: &Path,
     no_dns_update: bool,
@@ -18,13 +18,17 @@ pub async fn run(
 
     println!("Loading configuration from {:?}\n", config_path);
 
+    dbg!(&config);
+
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
 
     // Get datetime for release
-    let output = std::process::Command::new("date")
+    let datetime_output = std::process::Command::new("date")
         .arg("+%Y%m%d_%H%M%S")
         .output()?;
-    let datetime = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let datetime = String::from_utf8_lossy(&datetime_output.stdout)
+        .trim()
+        .to_string();
     if datetime.is_empty() {
         anyhow::bail!("Failed to generate datetime prefix using 'date' command");
     }
@@ -63,8 +67,9 @@ pub async fn run(
                 Some(node.port),
             );
 
+            let interactor = get_server_interactor(ssh, node.sudo_pass.clone())?;
+
             //install required dependencies
-            let interactor = get_server_interactor(ssh)?;
             interactor.install_dependencies(all_deps.clone())?;
 
             // install haproxy
@@ -72,6 +77,7 @@ pub async fn run(
 
             Ok(())
         });
+
         handles.push(handle);
     }
     for handle in handles {
@@ -195,10 +201,10 @@ pub async fn run(
                     private_key,
                     Some(node.port),
                 );
-                let node_interactor = get_server_interactor(ssh)?;
+                let node_interactor = get_server_interactor(ssh, node.sudo_pass.clone())?;
 
                 // 1. Setup user if specified
-                deploy_setup_users(&app, &config, &*node_interactor)?;
+                deploy_setup_app_users(&app, &config, &*node_interactor)?;
 
                 // 3. Prepare target directories (admin) and chown to deploy_user
                 let app_dir = format!("/app/{}", app.name);
@@ -267,6 +273,7 @@ pub async fn run(
                             .and_then(|a| a.min_replicas)
                     })
                     .unwrap_or(1);
+
                 let max_replicas = app
                     .max_replicas
                     .or_else(|| {
@@ -294,16 +301,18 @@ pub async fn run(
                     println!("\t[{}] Deploying instance on port {} ...", app.name, port);
                     let service_instance = format!("{}@{}", app.name, port);
 
+                    let mut env_content_for_app = env_content.clone();
+                    // add env PORT for this app
+                    env_content_for_app.push_str(&format!("PORT={}\n", port));
+
                     // Stop service if running (admin)
                     let _ = node_interactor.stop_service(&service_instance);
 
-                    // No symlink update needed for direct /app deployment
-
                     // Write env file directly
                     let env_path = format!("{}/.env", app_config_dir);
-                    node_interactor.create_file(&env_path, &env_content)?;
+                    node_interactor.create_file(&env_path, &env_content_for_app)?;
                     node_interactor.chown(&env_path, &app.deploy_user, &app.deploy_user)?;
-                    node_interactor.chmod(&env_path, "600");
+                    node_interactor.chmod(&env_path, "600")?;
 
                     // Create systemd template unit (admin)
                     crate::systemd_unit::setup::setup_systemd_template(
@@ -385,7 +394,6 @@ pub async fn run(
                         Some((hostname, "127.0.0.1".to_string()))
                     })
                     .collect();
-
                 // Dedup by hostnamesetup_traefik
                 etc_hosts.sort_by(|a, b| a.0.cmp(&b.0));
                 etc_hosts.dedup_by(|a, b| a.0 == b.0);
@@ -415,7 +423,7 @@ pub async fn run(
     println!("\nDEPLOY COMPLETE ({} secs)\n", deploy_elapse.as_secs());
 
     if !no_dns_update {
-        if let Err(e) = crate::cloudflare_unit::setup::update_dns_blocking(&config, None, true) {
+        if let Err(e) = crate::cloudflare_unit::setup::update_dns_blocking(&config, None) {
             eprintln!("Failed to update DNS records: {}", e);
         }
     }

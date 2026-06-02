@@ -13,7 +13,7 @@ async fn test_backup_restore() {
     let config = read_config_toml_file(config_path).expect("Failed to load crane.toml");
 
     //Deploy
-    crane::commands::deploy::run(&config, config_path, true)
+    crane::commands::deploy::run_deploy_command(&config, config_path, true)
         .await
         .expect("deploy failed");
 

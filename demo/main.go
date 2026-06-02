@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,8 +12,14 @@ import (
 )
 
 func main() {
-	port := flag.Int("port", 3000, "port to listen on")
-	flag.Parse()
+	// port := flag.Int("port", 3000, "port to listen on")
+	// flag.Parse()
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		fmt.Println("No env PORT set. defaulting to 3000")
+		port = "3000"
+	}
 
 	app := fiber.New()
 
@@ -160,10 +165,11 @@ func main() {
 		}
 
 		c.Set("Content-Type", resp.Header.Get("Content-Type"))
+
 		return c.Status(resp.StatusCode).SendString(
 			fmt.Sprintf("Response from %s: %s", to, string(body)),
 		)
 	})
 
-	app.Listen(fmt.Sprintf(":%d", *port))
+	app.Listen(fmt.Sprintf(":%s", port))
 }

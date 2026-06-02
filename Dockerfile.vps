@@ -72,8 +72,8 @@ RUN mkdir -p /run/sshd && \
 RUN (userdel -r ubuntu || true) && \
     (groupdel ubuntu || true) && \
     useradd -u 1000 -U -m -s /bin/bash -G sudo crane && \
-    echo "crane ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/crane && \
-    chmod 440 /etc/sudoers.d/crane && \
+    # echo "crane ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/crane && \
+    # chmod 440 /etc/sudoers.d/crane && \
     mkdir -p /home/crane/.ssh && \
     chmod 700 /home/crane/.ssh && \
     chown crane:crane /home/crane/.ssh
@@ -82,6 +82,12 @@ RUN (userdel -r ubuntu || true) && \
 # Fallback: copy if present at build time
 COPY --chown=crane:crane keys/authorized_keys /home/crane/.ssh/authorized_keys
 RUN chmod 600 /home/crane/.ssh/authorized_keys 2>/dev/null || true
+
+#Change root password
+RUN echo 'root:rootpass' | chpasswd
+
+#Change crane password
+RUN echo 'crane:cranepass' | chpasswd
 
 # Enable SSH service
 RUN systemctl enable ssh

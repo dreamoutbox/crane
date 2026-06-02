@@ -103,6 +103,21 @@ pub fn run(
 
         for target in targets {
             let cmd = build_cmd(target.port);
+            let cmd_to_run = if let Some(ref pass) = target.node.sudo_pass {
+                let mut escaped = String::new();
+                for c in cmd.chars() {
+                    match c {
+                        '"' | '$' | '\\' | '`' => {
+                            escaped.push('\\');
+                            escaped.push(c);
+                        }
+                        _ => escaped.push(c),
+                    }
+                }
+                format!("echo '{}' | sudo -S sh -c \"{}\"", pass, escaped)
+            } else {
+                cmd
+            };
 
             let private_key = find_private_key_for_user(&target.node.user, &config)?;
             let ssh = SSHSession::new(
@@ -116,7 +131,7 @@ pub fn run(
             let instance_id = target.instance_id;
 
             let handle = std::thread::spawn(move || -> anyhow::Result<()> {
-                let mut child = ssh.spawn_cmd(&cmd)?;
+                let mut child = ssh.spawn_cmd(&cmd_to_run)?;
                 let stdout = child.stdout.take().ok_or_else(|| {
                     anyhow::anyhow!("Failed to open stdout for instance {}", instance_id)
                 })?;
@@ -154,9 +169,10 @@ pub fn run(
                 Some(target.node.port),
             );
             let instance_id = target.instance_id;
+            let sudo_pass = target.node.sudo_pass.clone();
 
             let handle = std::thread::spawn(move || -> anyhow::Result<Vec<String>> {
-                let interactor = crate::server_interactor::get_server_interactor(ssh)?;
+                let interactor = crate::server_interactor::get_server_interactor(ssh, sudo_pass)?;
 
                 let output = interactor.cmd(&cmd)?;
                 if output.exit_code != 0 {
