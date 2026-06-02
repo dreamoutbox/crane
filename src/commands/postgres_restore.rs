@@ -1,7 +1,7 @@
 use crate::{
     postgres_unit::{
         entity::BackupRegistry,
-        helper::{connect_to_node, get_backups_from_s3, get_pg_version, postgres_get_leader},
+        helper::{connect_to_node, get_backups_from_s3, get_pg_version, postgres_get_primary},
     },
     s3::{get_s3_config, s3_client::RealS3Client},
 };
@@ -20,7 +20,7 @@ pub async fn run_restore_cmd(
     );
 
     let s3_config = get_s3_config(&config)?;
-    let primary_node = match postgres_get_leader(&config)? {
+    let primary_node = match postgres_get_primary(&config)? {
         Some(node) => node,
         None => config
             .nodes

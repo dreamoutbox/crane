@@ -156,7 +156,7 @@ pub async fn postgres_setup_wrapper(
     println!("\tWaiting for Patroni leader election...");
     let mut leader_node = None;
     for _ in 0..100 {
-        if let Ok(Some(leader)) = crate::postgres_unit::helper::postgres_get_leader(config) {
+        if let Ok(Some(leader)) = crate::postgres_unit::helper::postgres_get_primary(config) {
             leader_node = Some(leader);
             break;
         }

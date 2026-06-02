@@ -90,7 +90,7 @@ defaults
 
     if pg_enabled {
         // Try to dynamically get postgres leader
-        let leader_node = match crate::postgres_unit::helper::postgres_get_leader(config) {
+        let leader_node = match crate::postgres_unit::helper::postgres_get_primary(config) {
             Ok(Some(n)) => Some(n),
             _ => {
                 // Fallback to first node with postgres role

@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use crane::postgres_unit::helper::postgres_get_leader;
+use crane::postgres_unit::helper::postgres_get_primary;
 
 // RUN:
 // cargo nextest run --test deploy -- test_deploy --nocapture
@@ -147,7 +147,7 @@ async fn test_deploy() {
     // we need to temporarily add a pg_hba.conf entry
     // to the deployed primary postgres database and reload.
 
-    let primary_node = postgres_get_leader(&config)
+    let primary_node = postgres_get_primary(&config)
         .expect("Failed to get leader node")
         .expect("No active PostgreSQL leader found");
 

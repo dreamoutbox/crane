@@ -100,12 +100,7 @@ async fn main() -> anyhow::Result<()> {
                 )
                 .subcommand(
                     Command::new("logs")
-                        .about("Get the logs of PostgreSQL from a node")
-                        .arg(
-                            Arg::new("node")
-                                .required(true)
-                                .help("The host/IP or name of the node to get logs from"),
-                        )
+                        .about("Get the logs of PostgreSQL from the primary node")
                         .arg(Arg::new("since").long("since").value_name("TIME").help(
                             "Filter logs starting from a specific time (YYYY-MM-DD HH:MM:SS)",
                         ))
@@ -282,7 +277,6 @@ async fn main() -> anyhow::Result<()> {
                 }
 
                 Some(("logs", sub_sub_m)) => {
-                    let target_node = sub_sub_m.get_one::<String>("node").unwrap();
                     let since = sub_sub_m.get_one::<String>("since").map(|s| s.as_str());
                     let until = sub_sub_m.get_one::<String>("until").map(|s| s.as_str());
                     let user = sub_sub_m.get_one::<String>("user").map(|s| s.as_str());
@@ -290,13 +284,7 @@ async fn main() -> anyhow::Result<()> {
                     let sql = sub_sub_m.get_one::<String>("sql").map(|s| s.as_str());
 
                     if let Err(e) = crane::commands::postgres_logs::run_postgres_logs_cmd(
-                        &config,
-                        target_node,
-                        since,
-                        until,
-                        user,
-                        db,
-                        sql,
+                        &config, since, until, user, db, sql,
                     ) {
                         eprintln!("Logs failed: {}", e);
                         std::process::exit(1);

@@ -17,10 +17,10 @@ fn try_connect(user: &str, password: &str, db: &str) -> Result<String, String> {
 }
 
 fn allow_host_connection(config_path: &std::path::Path) {
-    use crane::postgres_unit::helper::postgres_get_leader;
+    use crane::postgres_unit::helper::postgres_get_primary;
 
     let config = crane::config::read_config_toml_file(config_path).expect("Failed to load config");
-    let primary_node = postgres_get_leader(&config)
+    let primary_node = postgres_get_primary(&config)
         .expect("Failed to get leader node")
         .expect("No active PostgreSQL leader found");
     let primary_interactor = crane::postgres_unit::helper::connect_to_node(&primary_node, &config)

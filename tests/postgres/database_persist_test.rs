@@ -12,7 +12,7 @@ async fn test_database_persist_after_deploy() {
         .expect("deploy failed");
 
     // Retrieve leader node and connect
-    let primary_node = postgres_get_leader(&config)
+    let primary_node = postgres_get_primary(&config)
         .expect("Failed to get leader node")
         .expect("No active PostgreSQL leader found");
 

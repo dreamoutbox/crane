@@ -144,7 +144,7 @@ pub fn get_postgres_backup_schedule(
         .and_then(|pg| pg.backup.clone())
 }
 
-pub fn postgres_get_leader(config: &config::Config) -> anyhow::Result<Option<config::NodeConfig>> {
+pub fn postgres_get_primary(config: &config::Config) -> anyhow::Result<Option<config::NodeConfig>> {
     let pg_nodes = config_get_nodes(config, "postgres");
 
     for node in pg_nodes {

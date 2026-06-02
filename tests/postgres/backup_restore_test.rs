@@ -1,10 +1,11 @@
 // RUN:
 // RUST_BACKTRACE=1 cargo nextest run test_backup_restore -- --no-capture
 
+use crane::server_interactor::server_interactor_trait::ServerInteractor;
 use crane::{
     commands::{postgres_backup::backup_from_config_wrapper, postgres_restore::run_restore_cmd},
     config::read_config_toml_file,
-    postgres_unit::helper::postgres_get_leader,
+    postgres_unit::helper::postgres_get_primary,
 };
 
 #[tokio::test]
@@ -18,7 +19,7 @@ async fn test_backup_restore() {
         .expect("deploy failed");
 
     // Retrieve leader node and connect
-    let primary_node = postgres_get_leader(&config)
+    let primary_node = postgres_get_primary(&config)
         .expect("Failed to get leader node")
         .expect("No active PostgreSQL leader found");
 

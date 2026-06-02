@@ -1,5 +1,5 @@
 use crate::postgres_unit::helper::{
-    connect_to_node, find_node_config_with_fallback, postgres_get_leader,
+    connect_to_node, find_node_config_with_fallback, postgres_get_primary,
 };
 
 pub fn run_demote_cmd(config: &crate::config::Config, target_node_str: &str) -> anyhow::Result<()> {
@@ -13,7 +13,7 @@ pub fn run_demote_cmd(config: &crate::config::Config, target_node_str: &str) -> 
         );
     }
 
-    let current_leader = postgres_get_leader(&config)?;
+    let current_leader = postgres_get_primary(&config)?;
 
     let leader = current_leader.ok_or_else(|| {
         anyhow::anyhow!("Cannot demote: No active PostgreSQL leader discovered in the cluster to replicate from.")

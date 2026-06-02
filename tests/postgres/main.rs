@@ -1,15 +1,15 @@
-use crane::s3::S3Client;
-use crane::server_interactor::server_interactor_trait::ServerInteractor;
-use crane::ssh::CmdOutput;
-
 mod postgres {
-    use super::*;
+    use crane::s3::S3Client;
+    use crane::ssh::CmdOutput;
+
     use crane::server_interactor::server_interactor_trait::{ServiceRegister, UserRegister};
     use std::cell::RefCell;
     use std::collections::HashMap;
 
     include!("../common/mock_interactor.rs");
     include!("../common/mock_s3.rs");
+    include!("../common/MockServerInteractorLogsRecorder.rs");
+    include!("../common/MockServerInteractorUserNotExist.rs");
     include!("helper.rs");
 
     include!("config_test.rs");

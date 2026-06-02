@@ -1,6 +1,6 @@
 use crate::postgres_unit::helper::connect_to_node;
 use crate::postgres_unit::helper::find_node_config_with_fallback;
-use crate::postgres_unit::helper::postgres_get_leader;
+use crate::postgres_unit::helper::postgres_get_primary;
 
 pub fn run_promote_cmd(
     config: &crate::config::Config,
@@ -16,7 +16,7 @@ pub fn run_promote_cmd(
         );
     }
 
-    let current_leader = postgres_get_leader(&config)?;
+    let current_leader = postgres_get_primary(&config)?;
 
     if let Some(ref leader) = current_leader {
         if leader.internal_ip == target_conf.internal_ip {

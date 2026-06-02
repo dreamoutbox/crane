@@ -1,34 +1,25 @@
-use crate::postgres_unit::helper::{connect_to_node, find_node_config_with_fallback};
+use crate::postgres_unit::helper::{connect_to_node, postgres_get_primary};
 use crate::postgres_unit::python_parse_pg_log_script::PYTHON_PARSE_PG_LOG_SCRIPT;
 use crate::server_interactor::server_interactor_trait::ServerInteractor;
 
 pub fn run_postgres_logs_cmd(
     config: &crate::config::Config,
-    target_node_str: &str,
     since: Option<&str>,
     until: Option<&str>,
     user: Option<&str>,
     db: Option<&str>,
     sql: Option<&str>,
 ) -> anyhow::Result<()> {
-    let target_conf = find_node_config_with_fallback(target_node_str, &config)
-        .ok_or_else(|| anyhow::anyhow!("Node '{}' not found in configuration", target_node_str))?;
+    let primary_node = postgres_get_primary(config)?
+        .ok_or_else(|| anyhow::anyhow!("No active PostgreSQL primary/leader found in cluster"))?;
 
-    if !target_conf.roles.contains(&"postgres".to_string()) {
-        anyhow::bail!(
-            "Node '{}' does not have the 'postgres' role",
-            target_node_str
-        );
-    }
+    let interactor = connect_to_node(&primary_node, &config)?;
 
-    let interactor = connect_to_node(&target_conf, &config)?;
-
-    run_postgres_logs_cmd_internal(&*interactor, target_node_str, since, until, user, db, sql)
+    run_postgres_logs_cmd_internal(&*interactor, since, until, user, db, sql)
 }
 
 pub fn run_postgres_logs_cmd_internal(
     interactor: &dyn ServerInteractor,
-    target_node_str: &str,
     since: Option<&str>,
     until: Option<&str>,
     user: Option<&str>,
@@ -39,8 +30,7 @@ pub fn run_postgres_logs_cmd_internal(
     let user_check = interactor.cmd("id postgres")?;
     if user_check.exit_code != 0 {
         anyhow::bail!(
-            "PostgreSQL is not installed or the 'postgres' user does not exist on node '{}'. Please run 'crane deploy' first to set up the database.",
-            target_node_str
+            "PostgreSQL is not installed or the 'postgres' user does not exist on the target node. Please run 'crane deploy' first to set up the database."
         );
     }
 
