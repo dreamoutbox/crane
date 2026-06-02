@@ -1,4 +1,3 @@
-pub const PYTHON_BACKUP_SCRIPT: &str = r#"import sys
 import json
 import os
 from datetime import datetime
@@ -249,4 +248,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-"#;

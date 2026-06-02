@@ -1,8 +1,8 @@
 use crate::config::{self, PostgresBackupSchedule, PostgresDbConfig, PostgresUserConfig};
 use crate::helper::config::config_get_nodes;
 use crate::helper::cron::interval_to_cron;
+use crate::postgres_unit::PYTHON_BACKUP_SCRIPT;
 use crate::postgres_unit::entity::{BackupMetadata, BackupRegistry};
-use crate::postgres_unit::python_backup_script::PYTHON_BACKUP_SCRIPT;
 use crate::s3::S3Client;
 use crate::server_interactor::get_server_interactor;
 use crate::server_interactor::server_interactor_trait::ServerInteractor;
@@ -324,9 +324,9 @@ pub fn configure_postgresql_conf(
         "'cp %p /var/lib/postgresql/wal_archive/%f'",
     );
 
-    // if version.parse::<i32>().unwrap_or(0) >= 17 {
-    //     updated_conf = update_config_value(&updated_conf, "summarize_wal", "'on'");
-    // }
+    if version.parse::<i32>().unwrap_or(0) >= 17 {
+        updated_conf = update_config_value(&updated_conf, "summarize_wal", "'on'");
+    }
 
     if updated_conf != existing_conf.stdout {
         interactor.create_file(&pg_conf_path, &updated_conf)?;

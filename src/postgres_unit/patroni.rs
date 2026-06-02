@@ -29,23 +29,23 @@ pub fn install_patroni(
         etcd_hosts_yaml.push_str(&format!("    - {}:2379\n", n.internal_ip));
     }
 
-    // let mut summarize_wal_line = String::new();
-    // if pg_version.parse::<i32>().unwrap_or(0) >= 17 {
-    //     summarize_wal_line = "summarize_wal: \"on\"".to_string();
-    // }
+    let mut summarize_wal_line = String::new();
+    if pg_version.parse::<i32>().unwrap_or(0) >= 17 {
+        summarize_wal_line = "\n        summarize_wal: \"on\"".to_string();
+    }
 
     let patroni_yaml = format!(
         r#"scope: postgres-cluster
 namespace: /service
-name: {}
+name: {node_name}
 
 etcd3:
   hosts:
-{}
+{etcd_hosts}
 
 restapi:
   listen: 0.0.0.0:8008
-  connect_address: {}:8008
+  connect_address: {internal_ip}:8008
 
 bootstrap:
   dcs:
@@ -59,8 +59,8 @@ bootstrap:
       parameters:
         listen_addresses: '*'
         wal_level: replica
-        max_wal_senders: 10
-        max_replication_slots: 10
+        max_wal_senders: 20
+        max_replication_slots: 20
         wal_log_hints: "on"
         hot_standby: "on"
         wal_keep_size: 1024MB
@@ -71,7 +71,7 @@ bootstrap:
         log_min_duration_statement: 0
         log_line_prefix: '%t [%p]: user=%u db=%d app=%a client=%h '
         archive_mode: "on"
-        archive_command: "cp %p /var/lib/postgresql/wal_archive/%f"
+        archive_command: "cp %p /var/lib/postgresql/wal_archive/%f"{summarize_wal}
   initdb:
     - encoding: UTF8
     - data-checksums
@@ -86,26 +86,24 @@ bootstrap:
 
 postgresql:
   listen: '*:5432'
-  connect_address: {}:5432
-  data_dir: /var/lib/postgresql/{}/main
-  bin_dir: /usr/lib/postgresql/{}/bin
+  connect_address: {internal_ip}:5432
+  data_dir: /var/lib/postgresql/{pg_version}/main
+  bin_dir: /usr/lib/postgresql/{pg_version}/bin
   pgpass: /var/lib/postgresql/.pgpass
   authentication:
     replication:
       username: replicator
-      password: {}
+      password: {replica_pass}
     superuser:
       username: postgres
-      password: {}
+      password: {replica_pass}
 "#,
-        node.name,
-        etcd_hosts_yaml,
-        node.internal_ip,
-        node.internal_ip,
-        *pg_version,
-        *pg_version,
-        *replica_pass,
-        *replica_pass
+        node_name = node.name,
+        etcd_hosts = etcd_hosts_yaml,
+        internal_ip = node.internal_ip,
+        summarize_wal = summarize_wal_line,
+        pg_version = *pg_version,
+        replica_pass = *replica_pass
     );
 
     // println!("========== BEGIN PATRONI YAML ==========");
