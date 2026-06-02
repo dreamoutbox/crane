@@ -4,6 +4,7 @@ use crate::s3::{S3Client, S3Config};
 
 pub struct RealS3Client {
     pub bucket: Box<Bucket>,
+    s3_config: S3Config,
 }
 
 impl RealS3Client {
@@ -43,15 +44,22 @@ impl RealS3Client {
             bucket = bucket.with_path_style();
         }
 
-        Ok(Self { bucket })
+        Ok(Self {
+            bucket,
+            s3_config: s3_config.clone(),
+        })
     }
 }
 
 impl S3Client for RealS3Client {
     fn put_object(&self, key: &str, data: &[u8]) -> anyhow::Result<()> {
-        self.bucket
-            .put_object(key, data)
-            .map_err(|e| anyhow::anyhow!("S3 upload failed: {}", e))?;
+        self.bucket.put_object(key, data).map_err(|e| {
+            anyhow::anyhow!(
+                "S3 upload failed (endpoint: {:?}): {}",
+                self.s3_config.endpoint.as_deref(),
+                e
+            )
+        })?;
         Ok(())
     }
 
