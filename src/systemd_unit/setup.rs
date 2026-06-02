@@ -10,7 +10,8 @@ pub fn setup_systemd_template(
     let clean_entrypoint = entrypoint.trim_start_matches("./");
     let env_file = format!("/app_config/{}/.env", app_name);
     let working_dir = format!("/app/{}", app_name);
-    let exec_start = format!("/app/{}/{} --port %i", app_name, clean_entrypoint);
+    // let exec_start = format!("/app/{}/{} --port %i", app_name, clean_entrypoint);
+    let exec_start = format!("/app/{}/{}", app_name, clean_entrypoint);
 
     println!(
         "\t[{app_name}] Register Service:

@@ -43,3 +43,14 @@ curl -w "\n" -L -k -i myapp2.localhost/curl?to=myapp
 ```sh
 docker exec vps1 rm -f /run/nologin && docker exec vps1 systemctl restart systemd-user-sessions.service
 ```
+
+## Get myapp logs on port 3000
+```sh
+journalctl -xeu myapp@3000.service
+```
+
+## Get myapp2 logs on port 4000
+```sh
+journalctl -xeu myapp2@4000.service
+```
+

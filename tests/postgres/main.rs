@@ -19,4 +19,5 @@ mod postgres {
     include!("user_state_test.rs");
     include!("promote_test.rs");
     include!("failover_test.rs");
+    include!("database_persist_test.rs");
 }

@@ -27,15 +27,22 @@ pub fn setup_etcd(
 ) -> anyhow::Result<()> {
     println!("\tConfiguring etcd cluster on node {}...", node.name);
 
-    // Stop etcd cleanly and remove data directory; wait to ensure it is fully stopped
-    let _ = interactor.stop_service("etcd");
-    std::thread::sleep(std::time::Duration::from_secs(1));
-    let _ = interactor.cmd("sudo rm -rf /var/lib/etcd/");
+    let etcd_configured = interactor
+        .cmd("test -f /etc/default/etcd")
+        .map(|out| out.exit_code == 0)
+        .unwrap_or(false);
 
-    // Recreate with correct ownership so the etcd service user can write to it
-    interactor.cmd("sudo mkdir -p /var/lib/etcd")?;
-    interactor.cmd("sudo chown etcd:etcd /var/lib/etcd")?;
-    interactor.cmd("sudo chmod 700 /var/lib/etcd")?;
+    if !etcd_configured {
+        // Stop etcd cleanly and remove data directory; wait to ensure it is fully stopped
+        let _ = interactor.stop_service("etcd");
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let _ = interactor.cmd("sudo rm -rf /var/lib/etcd/");
+
+        // Recreate with correct ownership so the etcd service user can write to it
+        interactor.cmd("sudo mkdir -p /var/lib/etcd")?;
+        interactor.cmd("sudo chown etcd:etcd /var/lib/etcd")?;
+        interactor.cmd("sudo chmod 700 /var/lib/etcd")?;
+    }
 
     let initial_cluster = pg_nodes
         .iter()

@@ -62,12 +62,19 @@ pub async fn postgres_setup_wrapper(
                 let _stop_res = interactor.stop_service("postgresql");
                 let _disable_pg_res = interactor.disable_service("postgresql");
 
-                // Stop and kill Patroni before cleaning up config and bootstrapping
-                let _stop_patroni_res = interactor.stop_service("patroni");
-                let _ = interactor.cmd("sudo pkill -9 -u postgres postgres");
+                let patroni_configured = interactor
+                    .cmd("test -f /etc/patroni/config.yml")
+                    .map(|out| out.exit_code == 0)
+                    .unwrap_or(false);
 
-                // Backup existing postgres main directory
-                backup_postgres_dir(&pg_version, &*interactor)?;
+                if !patroni_configured {
+                    // Stop and kill Patroni before cleaning up config and bootstrapping
+                    let _stop_patroni_res = interactor.stop_service("patroni");
+                    let _ = interactor.cmd("sudo pkill -9 -u postgres postgres");
+
+                    // Backup existing postgres main directory
+                    backup_postgres_dir(&pg_version, &*interactor)?;
+                }
 
                 // Configure WAL archive directory
                 interactor.cmd("sudo mkdir -p /var/lib/postgresql/wal_archive")?;
@@ -185,6 +192,7 @@ async fn assert_postgres_cluster_healthy(pg_nodes: Vec<config::NodeConfig>) -> a
 
     for node in pg_nodes {
         let node_name = node.name.clone();
+
         let handle = tokio::spawn(async move {
             let timeout_secs = 120;
             let start = std::time::Instant::now();
@@ -229,7 +237,7 @@ async fn assert_postgres_cluster_healthy(pg_nodes: Vec<config::NodeConfig>) -> a
             }
 
             if healthy {
-                println!("\tPostgreSQL node {} is healthy!", node_name);
+                println!("\t\tPostgreSQL node {} is healthy!", node_name);
                 Ok(())
             } else {
                 anyhow::bail!(
@@ -239,6 +247,7 @@ async fn assert_postgres_cluster_healthy(pg_nodes: Vec<config::NodeConfig>) -> a
                 )
             }
         });
+
         handles.push(handle);
     }
 
@@ -409,7 +418,7 @@ pub fn backup_postgres_dir(
 
     if dir_exists {
         println!(
-            "\tBacking up existing data directory {} to {}",
+            "\tBacking up old postgres data directory {} to {}",
             old_main_dir, backup_main_dir
         );
         interactor.cmd(&format!("sudo mkdir -p {}", backup_parent))?;

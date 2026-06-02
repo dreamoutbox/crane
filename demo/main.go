@@ -171,5 +171,81 @@ func main() {
 		)
 	})
 
+	app.Get("/counter", func(c fiber.Ctx) error {
+		leader := os.Getenv("POSTGRES_MYDB_LEADER")
+		follower := os.Getenv("POSTGRES_MYDB_FOLLOWER")
+		if leader == "" {
+			return c.Status(fiber.StatusInternalServerError).SendString("missing POSTGRES_MYDB_LEADER env")
+		}
+		if follower == "" {
+			follower = leader
+		}
+
+		ctx := context.Background()
+		if err := ensureCounterTableExists(ctx, leader); err != nil {
+			return c.Status(fiber.StatusInternalServerError).SendString(fmt.Sprintf("Failed to ensure counter table: %v", err))
+		}
+
+		conn, err := pgx.Connect(ctx, follower)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).SendString(fmt.Sprintf("Failed to connect to FOLLOWER: %v", err))
+		}
+		defer conn.Close(ctx)
+
+		var val int
+		err = conn.QueryRow(ctx, "SELECT value FROM api_counter WHERE id = 1").Scan(&val)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).SendString(fmt.Sprintf("Failed to query counter: %v", err))
+		}
+
+		return c.JSON(fiber.Map{"count": val})
+	})
+
+	app.Post("/counter/add", addCounterHandler)
+	app.Get("/counter/add", addCounterHandler)
+	app.Post("/counter", addCounterHandler)
+
 	app.Listen(fmt.Sprintf(":%s", port))
+}
+
+func addCounterHandler(c fiber.Ctx) error {
+	leader := os.Getenv("POSTGRES_MYDB_LEADER")
+	if leader == "" {
+		return c.Status(fiber.StatusInternalServerError).SendString("missing POSTGRES_MYDB_LEADER env")
+	}
+
+	ctx := context.Background()
+	if err := ensureCounterTableExists(ctx, leader); err != nil {
+		return c.Status(fiber.StatusInternalServerError).SendString(fmt.Sprintf("Failed to ensure counter table: %v", err))
+	}
+
+	conn, err := pgx.Connect(ctx, leader)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).SendString(fmt.Sprintf("Failed to connect to LEADER: %v", err))
+	}
+	defer conn.Close(ctx)
+
+	var val int
+	err = conn.QueryRow(ctx, "UPDATE api_counter SET value = value + 1 WHERE id = 1 RETURNING value").Scan(&val)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).SendString(fmt.Sprintf("Failed to increment counter: %v", err))
+	}
+
+	return c.JSON(fiber.Map{"count": val})
+}
+
+func ensureCounterTableExists(ctx context.Context, connStr string) error {
+	conn, err := pgx.Connect(ctx, connStr)
+	if err != nil {
+		return err
+	}
+	defer conn.Close(ctx)
+
+	_, err = conn.Exec(ctx, "CREATE TABLE IF NOT EXISTS api_counter (id INT PRIMARY KEY, value INT NOT NULL)")
+	if err != nil {
+		return err
+	}
+
+	_, err = conn.Exec(ctx, "INSERT INTO api_counter (id, value) VALUES (1, 0) ON CONFLICT (id) DO NOTHING")
+	return err
 }
