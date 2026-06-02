@@ -61,24 +61,6 @@ docker exec vps1 sudo -u postgres psql -t -A -c "show server_version;"
 
 ### Restore PITR test command
 
-
-
-# Patroni & Etcd Debug Commands
-
+```sh
 cargo run -- -f demo/crane.toml postgres restore --pitr "2026-05-26 03:26:00" 20260526032538830
-
-### check etcd logs journalctl
-```sh
-docker exec vps1 journalctl -u etcd -n 50
-```
-
-### check patroni logs journalctl
-```sh
-docker exec vps1 journalctl -xeu patroni.service -n 50 -ocat
-```
-
-### check summarize_wal on
-
-```sh
-docker exec vps1 sudo -u postgres psql -t -c "select name, setting, source, sourcefile, sourceline from pg_settings where name = 'summarize_wal';"
 ```

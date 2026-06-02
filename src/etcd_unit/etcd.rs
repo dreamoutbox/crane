@@ -95,9 +95,16 @@ pub fn start_etcd(
     node: &config::NodeConfig,
     interactor: &dyn ServerInteractor,
 ) -> anyhow::Result<()> {
-    // Skip restart if etcd is already healthy to avoid disrupting the cluster state.
+    // Check the node's internal IP (not localhost) so we only skip restart when etcd is
+    // actually bound to the correct interface.
+    // Checking localhost would pass even if etcd is running
+    // with an old config that only binds 127.0.0.1.
+    let check_cmd = format!(
+        "env ETCDCTL_API=3 etcdctl --endpoints=http://{}:2379 endpoint health",
+        node.internal_ip
+    );
     let is_healthy = interactor
-        .cmd("env ETCDCTL_API=3 etcdctl endpoint health")
+        .cmd(&check_cmd)
         .map(|o| o.exit_code == 0)
         .unwrap_or(false);
 
@@ -111,25 +118,43 @@ pub fn start_etcd(
 
     println!("\tStarting etcd service on node {} ...", node.name);
     interactor.restart_service("etcd --no-block")?;
+
     Ok(())
 }
 
-/// Wait for etcd quorum to form by polling the health of the endpoint.
+/// Wait for etcd quorum to form by polling all cluster endpoints (internal IPs).
+/// This ensures all peers are reachable before Patroni starts, not just localhost.
 pub fn wait_for_etcd_quorum(
     interactor: &dyn ServerInteractor,
+    pg_nodes: &[config::NodeConfig],
     timeout_secs: u64,
 ) -> anyhow::Result<()> {
     println!("\tWaiting for etcd quorum on all nodes...");
+
+    let endpoints = pg_nodes
+        .iter()
+        .map(|n| format!("http://{}:2379", n.internal_ip))
+        .collect::<Vec<_>>()
+        .join(",");
+
+    let health_cmd = format!(
+        "env ETCDCTL_API=3 etcdctl --endpoints={} endpoint health",
+        endpoints
+    );
+
     let start = std::time::Instant::now();
     let duration = std::time::Duration::from_secs(timeout_secs);
 
     while start.elapsed() < duration {
-        if let Ok(output) = interactor.cmd("env ETCDCTL_API=3 etcdctl endpoint health") {
+        let cmd_result = interactor.cmd(&health_cmd);
+
+        if let Ok(output) = cmd_result {
             if output.exit_code == 0 {
                 println!("\tEtcd quorum formed.");
                 return Ok(());
             }
         }
+
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
 

@@ -95,7 +95,7 @@ pub async fn postgres_setup_wrapper(
 
                 // --- Wait for quorum (only first node runs it) ---
                 if is_first {
-                    wait_for_etcd_quorum(&*interactor, 40)?;
+                    wait_for_etcd_quorum(&*interactor, &pg_nodes, 40)?;
                 }
 
                 // Wait for first node to complete quorum check before starting Patroni
