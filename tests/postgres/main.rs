@@ -20,4 +20,5 @@ mod postgres {
     include!("promote_test.rs");
     include!("failover_test.rs");
     include!("database_persist_test.rs");
+    include!("python_backup_script_test.rs");
 }

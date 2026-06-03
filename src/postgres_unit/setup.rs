@@ -5,7 +5,7 @@ use crate::{
     helper::config::config_get_nodes,
     postgres_unit::{
         helper::{
-            configure_postgres_cron_backup, get_pg_version, get_postgres_backup_schedule, get_postgres_configs, get_replica_pass, pg_clear_dcs_state, pg_wait_all_replicas, postgres_get_primary
+            configure_postgres_cron_backup, get_pg_version, get_postgres_backup_schedule, get_postgres_configs, get_replica_pass, pg_clear_dcs_state, pg_cluster_wait_all_nodes_ready, postgres_get_primary
         },
         install::install_postgres,
         patroni::install_patroni,
@@ -210,8 +210,8 @@ pub async fn postgres_setup_wrapper(
     println!("\n\tPolling PostgreSQL cluster health...");
     let start = std::time::Instant::now();
 
-    // println!("\tWaiting for replica nodes to join the cluster...");
-    pg_wait_all_replicas(&*leader_interactor, &pg_nodes);
+    // println!("\tWaiting for nodes to join the cluster...");
+    pg_cluster_wait_all_nodes_ready(&*leader_interactor, &pg_nodes);
 
     let elapsed = start.elapsed();
     println!(

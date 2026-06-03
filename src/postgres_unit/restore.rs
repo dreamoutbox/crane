@@ -2,7 +2,7 @@ use crate::{
     helper::{base64::base64_encode, config::config_get_nodes},
     postgres_unit::{
         entity::BackupMetadata,
-        helper::{cmdw, connect_to_node, pg_clear_dcs_state, pg_wait_all_replicas},
+        helper::{cmdw, connect_to_node, pg_clear_dcs_state, pg_cluster_wait_all_nodes_ready},
     },
     s3::S3Client,
     server_interactor::server_interactor_trait::ServerInteractor,
@@ -487,7 +487,7 @@ pub async fn postgres_restore(
 
     // Wait for all replica nodes to join and reach "running" state
     println!("Waiting for replica nodes to join the cluster...");
-    pg_wait_all_replicas(interactor, &pg_nodes);
+    pg_cluster_wait_all_nodes_ready(interactor, &pg_nodes);
 
     Ok(())
 }

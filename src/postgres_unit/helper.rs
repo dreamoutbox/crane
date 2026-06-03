@@ -537,13 +537,13 @@ pub fn get_postgres_current_timeline_id(
     Ok(current_timeline_id)
 }
 
-pub fn pg_wait_all_replicas(
+pub fn pg_cluster_wait_all_nodes_ready(
     interactor: &dyn ServerInteractor,
     pg_nodes: &Vec<crate::config::NodeConfig>,
-) {
+) -> bool {
     if pg_nodes.len() > 1 {
         let replica_start_time = std::time::Instant::now();
-        let replica_timeout = std::time::Duration::from_secs(30);
+        let replica_timeout = std::time::Duration::from_secs(90);
 
         let list_cmd = "sudo -u postgres patronictl -c /etc/patroni/config.yml list";
 
@@ -571,12 +571,15 @@ pub fn pg_wait_all_replicas(
                 }
 
                 if all_running {
-                    break;
+                    return true;
                 }
             }
 
             std::thread::sleep(std::time::Duration::from_secs(1));
         }
+        false
+    } else {
+        true
     }
 }
 
