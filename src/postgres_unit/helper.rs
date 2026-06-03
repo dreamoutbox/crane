@@ -165,6 +165,8 @@ pub fn postgres_get_primary(config: &config::Config) -> anyhow::Result<Option<co
                 // Verify it's actually writable (out of recovery)
                 let cmd = r#"sudo -u postgres psql -t -A -c "select pg_is_in_recovery();""#;
                 if let Ok(output) = interactor.cmd(cmd) {
+                    // dbg!(&output);
+
                     if output.stdout.trim() == "f" {
                         return Ok(Some(node));
                     }

@@ -65,26 +65,25 @@ pub fn setup_etcd(
     let etcd_default = format!(
         r#"
 # Member settings
-ETCD_NAME="{}"
+ETCD_NAME="{etcd_name}"
 ETCD_DATA_DIR="/var/lib/etcd/default.etcd"
-ETCD_LISTEN_PEER_URLS="http://{}:2380"
-ETCD_LISTEN_CLIENT_URLS="http://127.0.0.1:2379,http://{}:2379"
+ETCD_LISTEN_PEER_URLS="http://0.0.0.0:2380"
+ETCD_LISTEN_CLIENT_URLS="http://0.0.0.0:2379"
 
 # Clustering settings
-ETCD_INITIAL_ADVERTISE_PEER_URLS="http://{}:2380"
-ETCD_INITIAL_CLUSTER="{}"
-ETCD_INITIAL_CLUSTER_STATE="{}"
+ETCD_INITIAL_ADVERTISE_PEER_URLS="http://{internal_ip}:2380"
+ETCD_INITIAL_CLUSTER="{initial_cluster}"
+ETCD_INITIAL_CLUSTER_STATE="{cluster_state}"
 ETCD_INITIAL_CLUSTER_TOKEN="etcd-postgres-token"
-ETCD_ADVERTISE_CLIENT_URLS="http://{}:2379"
+ETCD_ADVERTISE_CLIENT_URLS="http://{internal_ip}:2379"
 "#,
-        node.name,
-        node.internal_ip,
-        node.internal_ip,
-        node.internal_ip,
-        initial_cluster,
-        cluster_state,
-        node.internal_ip
+        etcd_name = node.name,
+        internal_ip = node.internal_ip,
+        initial_cluster = initial_cluster,
+        cluster_state = cluster_state,
     );
+
+    println!("\nETCD CONFIG\n{}\n", &etcd_default);
 
     let etcd_default_path = "/etc/default/etcd";
     interactor.create_file(etcd_default_path, &etcd_default)?;
@@ -146,11 +145,15 @@ pub fn wait_for_etcd_quorum(
         endpoints
     );
 
+    // dbg!(&health_cmd);
+
     let start = std::time::Instant::now();
     let duration = std::time::Duration::from_secs(timeout_secs);
 
     while start.elapsed() < duration {
         let cmd_result = interactor.cmd(&health_cmd);
+
+        // dbg!(&cmd_result);
 
         if let Ok(output) = cmd_result {
             if output.exit_code == 0 {
