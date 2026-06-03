@@ -5,10 +5,11 @@ pub fn setup_systemd_template(
     app_name: &str,
     deploy_user: &str,
     entrypoint: &str,
+    env_path: &str,
 ) -> anyhow::Result<()> {
     let service_file_path = format!("/etc/systemd/system/{}@.service", app_name);
     let clean_entrypoint = entrypoint.trim_start_matches("./");
-    let env_file = format!("/app_config/{}/.env", app_name);
+    // let env_file = format!("/app_config/{}/.env", app_name);
     let working_dir = format!("/app/{}", app_name);
     // let exec_start = format!("/app/{}/{} --port %i", app_name, clean_entrypoint);
     let exec_start = format!("/app/{}/{}", app_name, clean_entrypoint);
@@ -19,7 +20,7 @@ pub fn setup_systemd_template(
 \t\tUser={deploy_user}
 \t\tWorkingDirectory={working_dir}
 \t\tExecStart={exec_start}
-\t\tEnvFile={env_file}"
+\t\tEnvFile={env_path}"
     );
 
     let systemd_data = format!(
@@ -32,7 +33,7 @@ Type=simple
 User={deploy_user}
 WorkingDirectory={working_dir}
 ExecStart={exec_start}
-EnvironmentFile={env_file}
+EnvironmentFile={env_path}
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true
@@ -46,7 +47,7 @@ WantedBy=multi-user.target
         deploy_user = deploy_user,
         working_dir = working_dir,
         exec_start = exec_start,
-        env_file = env_file,
+        env_path = env_path,
     );
 
     interactor.create_file(&service_file_path, &systemd_data)?;

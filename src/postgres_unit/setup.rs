@@ -5,7 +5,7 @@ use crate::{
     helper::config::config_get_nodes,
     postgres_unit::{
         helper::{
-            configure_postgres_cron_backup, get_pg_version, get_postgres_configs, get_replica_pass, pg_wait_all_replicas, postgres_get_primary
+            configure_postgres_cron_backup, get_pg_version, get_postgres_configs, get_replica_pass, pg_clear_dcs_state, pg_wait_all_replicas, postgres_get_primary
         },
         install::install_postgres,
         patroni::install_patroni,
@@ -98,9 +98,7 @@ pub async fn postgres_setup_wrapper(
                     wait_for_etcd_quorum(&*interactor, &pg_nodes, 40)?;
             
                     // 2. Clear DCS (etcd) keys for the cluster to prevent conflicts
-                    println!("=== Clearing DCS cluster state...");
-                    let _ =
-                        interactor.cmd("sudo env ETCDCTL_API=3 etcdctl del /service/postgres-cluster --prefix");
+                    pg_clear_dcs_state(&*interactor);
                 }
 
                 // Wait for first node to complete quorum check before starting Patroni

@@ -288,11 +288,19 @@ pub async fn run_deploy_command(
                     // Stop service if running (admin)
                     let _ = node_interactor.stop_service(&service_instance);
 
-                    // Write env file directly
-                    let env_path = format!("{}/.env", app_config_dir);
+                    //Create app config directory for this instance
+                    let this_app_config_dir = format!("{}/{}", app_config_dir, port);
+                    node_interactor.mkdir(&this_app_config_dir)?;
+                    // Write env file
+                    let env_path = format!("{}/.env", this_app_config_dir);
                     node_interactor.create_file(&env_path, &env_content_for_app)?;
-                    node_interactor.chown(&env_path, &app.deploy_user, &app.deploy_user)?;
-                    node_interactor.chmod(&env_path, "600")?;
+                    //Fix perrmissions
+                    node_interactor.chown(
+                        &this_app_config_dir,
+                        &app.deploy_user,
+                        &app.deploy_user,
+                    )?;
+                    node_interactor.chmod(&this_app_config_dir, "600")?;
 
                     // Create systemd template unit (admin)
                     crate::systemd_unit::setup::setup_systemd_template(
@@ -300,6 +308,7 @@ pub async fn run_deploy_command(
                         &app.name,
                         &app.deploy_user,
                         &app.entrypoint,
+                        &env_path,
                     )?;
 
                     // Enable service instance
