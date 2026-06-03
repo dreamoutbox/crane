@@ -2,7 +2,7 @@ use crate::{
     helper::{base64::base64_encode, config::config_get_nodes},
     postgres_unit::{
         entity::BackupMetadata,
-        helper::{cmdw, connect_to_node},
+        helper::{cmdw, connect_to_node, pg_wait_all_replicas},
     },
     s3::S3Client,
     server_interactor::server_interactor_trait::ServerInteractor,
@@ -486,44 +486,7 @@ pub async fn postgres_restore(
     }
 
     // Wait for all replica nodes to join and reach "running" state
-    if pg_nodes.len() > 1 {
-        println!("Waiting for replica nodes to join the cluster...");
-        let replica_start_time = std::time::Instant::now();
-        let replica_timeout = std::time::Duration::from_secs(30);
-
-        let list_cmd = "sudo -u postgres patronictl -c /etc/patroni/config.yml list";
-
-        while replica_start_time.elapsed() < replica_timeout {
-            if let Ok(out) = interactor.cmd(list_cmd) {
-                let output = out.stdout;
-                let mut all_running = true;
-
-                for node in &pg_nodes {
-                    let node_line = output.lines().find(|l| l.contains(&node.name));
-                    // dbg!(&node_line);
-
-                    match node_line {
-                        Some(line) => {
-                            // if not `streaming` or `running` it means that the node is not healthy
-                            if !line.contains("streaming") && !line.contains("running") {
-                                all_running = false;
-                            }
-                        }
-
-                        None => {
-                            all_running = false;
-                        }
-                    }
-                }
-
-                if all_running {
-                    break;
-                }
-            }
-
-            std::thread::sleep(std::time::Duration::from_secs(1));
-        }
-    }
+    pg_wait_all_replicas(interactor, &pg_nodes);
 
     Ok(())
 }

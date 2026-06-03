@@ -1,4 +1,7 @@
-use crate::{config, server_interactor::server_interactor_trait::ServerInteractor};
+use crate::{
+    config, helper::server::wait_for_service_status,
+    server_interactor::server_interactor_trait::ServerInteractor,
+};
 
 pub fn install_etcd(interactor: &dyn ServerInteractor) -> anyhow::Result<()> {
     let installed = interactor
@@ -25,24 +28,24 @@ pub fn setup_etcd(
     node: &config::NodeConfig,
     pg_nodes: &[config::NodeConfig],
 ) -> anyhow::Result<()> {
-    println!("\tConfiguring etcd cluster on node {}...", node.name);
+    println!("\tSetup etcd cluster on node {}...", node.name);
 
-    let etcd_configured = interactor
-        .cmd("test -f /etc/default/etcd")
-        .map(|out| out.exit_code == 0)
-        .unwrap_or(false);
+    // let etcd_configured = interactor
+    //     .cmd("test -f /etc/default/etcd")
+    //     .map(|out| out.exit_code == 0)
+    //     .unwrap_or(false);
+    // if !etcd_configured {
+    // Stop etcd cleanly and remove data directory; wait to ensure it is fully stopped
+    let _ = interactor.stop_service("etcd");
+    // std::thread::sleep(std::time::Duration::from_secs(1));
+    let _ = wait_for_service_status(interactor, "etcd", "inactive", 10);
+    let _ = interactor.cmd("sudo rm -rf /var/lib/etcd/");
 
-    if !etcd_configured {
-        // Stop etcd cleanly and remove data directory; wait to ensure it is fully stopped
-        let _ = interactor.stop_service("etcd");
-        std::thread::sleep(std::time::Duration::from_secs(1));
-        let _ = interactor.cmd("sudo rm -rf /var/lib/etcd/");
-
-        // Recreate with correct ownership so the etcd service user can write to it
-        interactor.cmd("sudo mkdir -p /var/lib/etcd")?;
-        interactor.cmd("sudo chown etcd:etcd /var/lib/etcd")?;
-        interactor.cmd("sudo chmod 700 /var/lib/etcd")?;
-    }
+    // Recreate with correct ownership so the etcd service user can write to it
+    interactor.cmd("sudo mkdir -p /var/lib/etcd")?;
+    interactor.cmd("sudo chown etcd:etcd /var/lib/etcd")?;
+    interactor.cmd("sudo chmod 700 /var/lib/etcd")?;
+    // }
 
     let initial_cluster = pg_nodes
         .iter()
@@ -52,11 +55,12 @@ pub fn setup_etcd(
 
     // Use "existing" if etcd member data already exists to avoid re-triggering
     // Patroni DCS re-bootstrap (and pg_basebackup) on every redeploy.
-    let has_etcd_data = interactor
-        .cmd("test -d /var/lib/etcd/default.etcd/member")
-        .map(|o| o.exit_code == 0)
-        .unwrap_or(false);
-    let cluster_state = if has_etcd_data { "existing" } else { "new" };
+    // let has_etcd_data = interactor
+    //     .cmd("test -d /var/lib/etcd/default.etcd/member")
+    //     .map(|o| o.exit_code == 0)
+    //     .unwrap_or(false);
+    // let cluster_state = if has_etcd_data { "existing" } else { "new" };
+    let cluster_state = "new";
 
     let etcd_default = format!(
         r#"

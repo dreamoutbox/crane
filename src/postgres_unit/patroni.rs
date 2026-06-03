@@ -49,9 +49,9 @@ restapi:
 
 bootstrap:
   dcs:
-    ttl: 10
-    loop_wait: 2
-    retry_timeout: 3
+    ttl: 5
+    loop_wait: 5
+    retry_timeout: 5
     maximum_lag_on_failover: 1048576
     postgresql:
       use_pg_rewind: true
@@ -59,23 +59,24 @@ bootstrap:
       parameters:
         listen_addresses: '*'
         wal_level: replica
-        max_wal_senders: 10
-        max_replication_slots: 10
-        wal_log_hints: "on"
+        max_wal_senders: 20
+        max_replication_slots: 20
+        # wal_log_hints: "on"
         hot_standby: "on"
         wal_keep_size: 1024MB
-        shared_buffers: 512MB
-        logging_collector: "on"
-        log_destination: "csvlog"
-        log_statement: "mod"
-        log_min_duration_statement: 0
-        log_line_prefix: '%t [%p]: user=%u db=%d app=%a client=%h '
-        archive_mode: "on"
-        // archive_command: "cp %p /var/lib/postgresql/wal_archive/%f"
+        shared_buffers: 128MB
+        # logging_collector: "on"
+        # log_destination: "csvlog"
+        # log_statement: "mod"
+        # log_min_duration_statement: 0
+        # log_line_prefix: '%t [%p]: user=%u db=%d app=%a client=%h '
+        # archive_mode: "on"
+        # archive_command: "cp %p /var/lib/postgresql/wal_archive/%f"
         {summarize_wal}
-  basebackup:
-    - checkpoint: fast
-    - no-verify-checksums
+  #basebackup:
+  #  - checkpoint: fast
+  #  - no-verify-checksums
+  #  - compress: client/zstd:3
 
   initdb:
     - encoding: UTF8
@@ -116,10 +117,7 @@ postgresql:
     // println!("========== END PATRONI YAML ==========");
 
     // Write debug copy locally
-    std::fs::write(
-        format!("patroni_node_{}.yaml", node.name),
-        patroni_yaml.clone(),
-    )?;
+    std::fs::write(format!("patroni_{}.yaml", node.name), patroni_yaml.clone())?;
 
     // Compare with existing config; only write (and signal a change) if different
     let existing_config = interactor
@@ -128,12 +126,12 @@ postgresql:
         .unwrap_or_default();
     let config_changed = existing_config.trim() != patroni_yaml.trim();
 
-    interactor.cmd("sudo mkdir -p /etc/patroni")?;
+    interactor.mkdir("/etc/patroni")?;
     interactor.create_file("/etc/patroni/config.yml", &patroni_yaml)?;
     println!("\tCreate patroni config at /etc/patroni/config.yml");
 
-    interactor.cmd("sudo chown -R postgres:postgres /etc/patroni")?;
-    interactor.cmd("sudo chmod 600 /etc/patroni/config.yml")?;
+    interactor.chown("/etc/patroni", "postgres", "postgres")?;
+    interactor.chmod("/etc/patroni/config.yml", "600")?;
 
     if !patroni_installed {
         interactor.service_daemon_reload()?;

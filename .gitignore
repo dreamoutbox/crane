@@ -10,3 +10,4 @@ patroni_node_*.yaml
 *.log
 .env
 *.env
+patroni_*.yaml

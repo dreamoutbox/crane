@@ -5,7 +5,7 @@ use crate::{
     helper::config::config_get_nodes,
     postgres_unit::{
         helper::{
-            configure_postgres_cron_backup, get_pg_version, get_postgres_configs, get_replica_pass,
+            configure_postgres_cron_backup, get_pg_version, get_postgres_configs, get_replica_pass, pg_wait_all_replicas, postgres_get_primary
         },
         install::install_postgres,
         patroni::install_patroni,
@@ -42,7 +42,7 @@ pub async fn postgres_setup_wrapper(
         let barrier_installed = barrier_installed.clone();
         let barrier_etcd_started = barrier_etcd_started.clone();
         let barrier_quorum = barrier_quorum.clone();
-        let is_first = i == 0;
+        let is_first_node = i == 0;
 
         let handle = tokio::task::spawn_blocking(
             move || -> anyhow::Result<(String, std::sync::Arc<dyn ServerInteractor + Send + Sync>)> {
@@ -94,8 +94,13 @@ pub async fn postgres_setup_wrapper(
                 barrier_etcd_started.wait();
 
                 // --- Wait for quorum (only first node runs it) ---
-                if is_first {
+                if is_first_node {
                     wait_for_etcd_quorum(&*interactor, &pg_nodes, 40)?;
+            
+                    // 2. Clear DCS (etcd) keys for the cluster to prevent conflicts
+                    println!("=== Clearing DCS cluster state...");
+                    let _ =
+                        interactor.cmd("sudo env ETCDCTL_API=3 etcdctl del /service/postgres-cluster --prefix");
                 }
 
                 // Wait for first node to complete quorum check before starting Patroni
@@ -154,35 +159,35 @@ pub async fn postgres_setup_wrapper(
 
     // 2. Wait for Patroni leader election
     println!("\tWaiting for Patroni leader election...");
-    let mut leader_node = None;
+    let mut primary_node = None;
     for _ in 0..100 {
-        if let Ok(Some(leader)) = crate::postgres_unit::helper::postgres_get_primary(config) {
-            leader_node = Some(leader);
+        if let Ok(Some(leader)) = postgres_get_primary(config) {
+            primary_node = Some(leader);
             break;
         }
 
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
 
-    let leader = leader_node
+    let primary = primary_node
         .ok_or_else(|| anyhow::anyhow!("Timeout waiting for PostgreSQL Patroni leader election"))?;
-    println!("\tDiscovered Patroni leader at node: {}", leader.name);
+    println!("\tDiscovered Patroni leader at node: {}", primary.name);
 
-    let follower_ips: Vec<String> = pg_nodes
+    let replicas: Vec<String> = pg_nodes
         .iter()
-        .filter(|n| n.internal_ip != leader.internal_ip)
-        .map(|n| n.internal_ip.clone())
+        .filter(|n| n.internal_ip != primary.internal_ip)
+        .map(|n| n.name.clone())
         .collect();
-    println!("\tFollower: {:?}", follower_ips);
+    println!("\tReplicas: {:?}", replicas);
 
     // 3. Provision database schema and users on the dynamic leader
     let leader_interactor = interactors
-        .remove(&leader.name)
+        .remove(&primary.name)
         .ok_or_else(|| anyhow::anyhow!("Leader interactor not found in setup map"))?;
     let (db_configs, user_configs) = get_postgres_configs(config);
 
     setup_postgres_primary(
-        leader_interactor,
+        leader_interactor.clone(),
         &pg_version,
         &replica_pass,
         &db_configs,
@@ -192,101 +197,11 @@ pub async fn postgres_setup_wrapper(
     .await?;
 
     // 4. Assert all patroni instances are healthy
-    assert_postgres_cluster_healthy(pg_nodes).await?;
-
-    // 5. Setup HAProxy on all app nodes
-    setup_haproxy_on_each_nodes_wrapper(config, app_nodes).await?;
-
-    Ok(())
-}
-
-async fn assert_postgres_cluster_healthy(pg_nodes: Vec<config::NodeConfig>) -> anyhow::Result<()> {
     println!("\n\tPolling PostgreSQL cluster health...");
     let start = std::time::Instant::now();
 
-    let mut handles = vec![];
+    pg_wait_all_replicas(&*leader_interactor, &pg_nodes);
 
-    for node in pg_nodes {
-        let node_name = node.name.clone();
-
-        let handle = tokio::spawn(async move {
-            let timeout_secs = 120;
-            let start = std::time::Instant::now();
-            let mut healthy = false;
-
-            while start.elapsed().as_secs() < timeout_secs {
-                if let Ok(interactor) = get_server_interactor(&node_name) {
-                    // Check via Patroni REST API
-                    let primary_cmd =
-                        "curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8008/primary";
-                    let replica_cmd =
-                        "curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8008/replica";
-
-                    let is_primary = interactor
-                        .cmd(primary_cmd)
-                        .map(|out| out.stdout.trim() == "200")
-                        .unwrap_or(false);
-
-                    let is_replica = interactor
-                        .cmd(replica_cmd)
-                        .map(|out| out.stdout.trim() == "200")
-                        .unwrap_or(false);
-
-                    if is_primary || is_replica {
-                        healthy = true;
-                        break;
-                    }
-
-                    // Fallback: patronictl list (faster than psql, detects streaming replicas)
-                    let patronictl_cmd = format!(
-                        "sudo -u postgres patronictl -c /etc/patroni/config.yml list 2>/dev/null | grep '{}'",
-                        node_name
-                    );
-                    if let Ok(out) = interactor.cmd(&patronictl_cmd) {
-                        let line = out.stdout.trim().to_lowercase();
-                        if line.contains("streaming") || line.contains("running") {
-                            //|| line.contains("creating replica")
-                            healthy = true;
-                            break;
-                        }
-                    }
-
-                    // Fallback: check pg_is_in_recovery
-                    let recovery_cmd =
-                        r#"sudo -u postgres psql -t -A -c "select pg_is_in_recovery();""#;
-                    if let Ok(out) = interactor.cmd(recovery_cmd) {
-                        let rec_trimmed = out.stdout.trim();
-
-                        // dbg!(&node_name, is_primary, is_replica, rec_trimmed);
-
-                        if rec_trimmed == "f" || rec_trimmed == "t" {
-                            healthy = true;
-                            break;
-                        }
-                    }
-                }
-
-                tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-            }
-
-            if healthy {
-                println!("\t\tPostgreSQL node {} is healthy!", node_name);
-                Ok(())
-            } else {
-                anyhow::bail!(
-                    "PostgreSQL node {} failed to become healthy within {} seconds",
-                    node_name,
-                    timeout_secs
-                )
-            }
-        });
-
-        handles.push(handle);
-    }
-
-    for handle in handles {
-        handle.await??;
-    }
 
     let elapsed = start.elapsed();
     println!(
@@ -294,8 +209,13 @@ async fn assert_postgres_cluster_healthy(pg_nodes: Vec<config::NodeConfig>) -> a
         elapsed.as_secs()
     );
 
+    // 5. Setup HAProxy on all app nodes
+    setup_haproxy_on_each_nodes_wrapper(config, app_nodes).await?;
+
     Ok(())
 }
+
+ 
 
 pub async fn setup_postgres_primary(
     interactor: std::sync::Arc<dyn ServerInteractor + Send + Sync>,
@@ -454,7 +374,6 @@ pub fn backup_postgres_dir(
         .cmd(&format!("test -d {}", old_main_dir))
         .map(|out| out.exit_code == 0)
         .unwrap_or(false);
-
     if dir_exists {
         println!(
             "\tBacking up old postgres data directory {} to {}",
@@ -470,7 +389,6 @@ pub fn backup_postgres_dir(
         .cmd(&format!("test -d {}", failed_main_dir))
         .map(|out| out.exit_code == 0)
         .unwrap_or(false);
-
     if failed_exists {
         println!(
             "\tBacking up failed data directory {} to {}...",

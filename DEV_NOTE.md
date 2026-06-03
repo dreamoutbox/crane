@@ -74,3 +74,16 @@ docker exec vps1 journalctl -xeu patroni.service -n 100 -ocat
 ```sh
 docker exec vps1 sudo -u postgres psql -t -c "select name, setting, source, sourcefile, sourceline from pg_settings where name = 'summarize_wal';"
 ```
+
+
+## DEBUG slow assert_postgres_cluster_healthy
+
+# Are replication connections visible?
+psql -U postgres -c "SELECT pid, usename, application_name, client_addr, state, sent_lsn, write_lsn, flush_lsn, replay_lsn, sync_state FROM pg_stat_replication;"
+
+# Check replication slots (if used — slots can block or stall)
+psql -U postgres -c "SELECT slot_name, active, restart_lsn, pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)) AS lag FROM pg_replication_slots;"
+
+# Confirm wal_senders headroom
+psql -U postgres -c "SHOW max_wal_senders;"
+# Compare against current count from pg_stat_replication
