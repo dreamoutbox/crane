@@ -61,17 +61,17 @@ bootstrap:
         wal_level: replica
         max_wal_senders: 20
         max_replication_slots: 20
-        # wal_log_hints: "on"
         hot_standby: "on"
         wal_keep_size: 1024MB
         shared_buffers: 128MB
-        # logging_collector: "on"
-        # log_destination: "csvlog"
-        # log_statement: "mod"
-        # log_min_duration_statement: 0
-        # log_line_prefix: '%t [%p]: user=%u db=%d app=%a client=%h '
-        # archive_mode: "on"
-        # archive_command: "cp %p /var/lib/postgresql/wal_archive/%f"
+        wal_log_hints: "on"
+        logging_collector: "on"
+        log_destination: "csvlog"
+        log_statement: "mod"
+        log_min_duration_statement: 0
+        log_line_prefix: '%t [%p]: user=%u db=%d app=%a client=%h '
+        archive_mode: "on"
+        archive_command: "cp %p /var/lib/postgresql/wal_archive/%f"
         {summarize_wal}
   #basebackup:
   #  - checkpoint: fast
