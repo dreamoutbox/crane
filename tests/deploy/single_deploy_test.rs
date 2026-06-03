@@ -2,10 +2,10 @@ use std::path::Path;
 use std::process::Command;
 
 // RUN:
-// cargo nextest run test_deploy_single --nocapture
+// cargo nextest run test_single_deploy --nocapture
 
 #[tokio::test]
-async fn test_deploy_single() {
+async fn test_single_deploy() {
     // 1. Build Go demo app
     let go_build = Command::new("go")
         .arg("build")

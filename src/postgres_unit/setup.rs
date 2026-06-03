@@ -5,7 +5,7 @@ use crate::{
     helper::config::config_get_nodes,
     postgres_unit::{
         helper::{
-            configure_postgres_cron_backup, get_pg_version, get_postgres_configs, get_replica_pass, pg_clear_dcs_state, pg_wait_all_replicas, postgres_get_primary
+            configure_postgres_cron_backup, get_pg_version, get_postgres_backup_schedule, get_postgres_configs, get_replica_pass, pg_clear_dcs_state, pg_wait_all_replicas, postgres_get_primary
         },
         install::install_postgres,
         patroni::install_patroni,
@@ -19,6 +19,13 @@ pub async fn postgres_setup_wrapper(
 ) -> Result<(), anyhow::Error> {
     let pg_version = get_pg_version(&config);
     let replica_pass = get_replica_pass(&config);
+
+    let schedule = get_postgres_backup_schedule(config);
+    let s3_config = if schedule.is_some() {
+        Some(crate::s3::get_s3_config(config)?)
+    } else {
+        None
+    };
 
     let pg_nodes = config_get_nodes(&config, "postgres");
 
@@ -38,6 +45,8 @@ pub async fn postgres_setup_wrapper(
         let pg_nodes = pg_nodes.clone();
         let pg_version = pg_version.clone();
         let replica_pass = replica_pass.clone();
+        let schedule = schedule.clone();
+        let s3_config = s3_config.clone();
 
         let barrier_installed = barrier_installed.clone();
         let barrier_etcd_started = barrier_etcd_started.clone();
@@ -142,6 +151,9 @@ pub async fn postgres_setup_wrapper(
                     }
                 }
 
+                println!("\tSetting up automated cron backups on node {}...", node.name);
+                configure_postgres_cron_backup(&*interactor, &pg_version, &replica_pass, &schedule, &s3_config)?;
+
                 Ok((node.name, interactor))
             },
         );
@@ -217,11 +229,11 @@ pub async fn postgres_setup_wrapper(
 
 pub async fn setup_postgres_primary(
     interactor: std::sync::Arc<dyn ServerInteractor + Send + Sync>,
-    version: &str,
-    replica_pass: &str,
+    _version: &str,
+    _replica_pass: &str,
     db_configs: &[PostgresDbConfig],
     user_configs: &[PostgresUserConfig],
-    config: &crate::config::Config,
+    _config: &crate::config::Config,
 ) -> anyhow::Result<()> {
     println!("\n\tProvisioning PostgreSQL databases and users on Patroni leader...");
 
@@ -345,8 +357,6 @@ pub async fn setup_postgres_primary(
         Ok(())
     })
     .await??;
-
-    configure_postgres_cron_backup(&*interactor, version, replica_pass, config)?;
 
     Ok(())
 }

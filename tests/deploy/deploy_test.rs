@@ -4,7 +4,7 @@ use std::process::Command;
 use crane::postgres_unit::helper::postgres_get_primary;
 
 // RUN:
-// cargo nextest run --test deploy -- test_deploy --nocapture
+// cargo nextest run test_deploy --nocapture
 
 #[tokio::test]
 async fn test_deploy() {
