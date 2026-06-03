@@ -220,8 +220,8 @@ async fn test_deploy() {
 
     // Verify injected env variables in app .env
     let env_file_content = primary_interactor
-        .cmd("sudo cat /app_config/myapp/.env")
-        .expect("failed to read /app_config/myapp/.env")
+        .cmd("sudo cat /app_config/myapp/3000/.env")
+        .expect("failed to read /app_config/myapp/3000/.env")
         .stdout;
 
     assert!(

@@ -25,7 +25,7 @@ pub fn deploy_zip_app(
     ignores.push(".git".to_string());
 
     let python_script_path =
-        std::env::temp_dir().join(format!("crane-zip-helper-{}.py", *datetime));
+        std::env::temp_dir().join(format!("crane-zip-helper-{}-{}.py", app.name, *datetime));
     std::fs::write(&python_script_path, PYTHON_ZIP_SCRIPT)?;
     let mut zip_cmd = std::process::Command::new("python3");
     zip_cmd
