@@ -5,6 +5,7 @@ pub mod postgres_backup_list;
 pub mod postgres_demote;
 pub mod postgres_logs;
 pub mod postgres_promote;
+pub mod postgres_reset;
 pub mod postgres_restore;
 pub mod postgres_status;
 pub mod status;

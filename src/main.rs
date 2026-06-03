@@ -83,6 +83,16 @@ async fn main() -> anyhow::Result<()> {
                                 .help("Optional label name for the backup"),
                         ),
                 )
+                .subcommand(
+                    Command::new("reset")
+                        .about("Reset PostgreSQL cluster by stopping Patroni, clearing the data directory and starting Patroni again")
+                        .arg(
+                            Arg::new("force")
+                                .long("force")
+                                .action(clap::ArgAction::SetTrue)
+                                .help("Force reset without prompting for confirmation"),
+                        ),
+                )
                 .subcommand(Command::new("list").about("List available backups in the cluster"))
                 .subcommand(
                     Command::new("restore")
@@ -255,10 +265,20 @@ async fn main() -> anyhow::Result<()> {
                         std::process::exit(1);
                     }
 
-                    if let Err(e) =
-                        crane::commands::postgres_backup::run_backup_cmd(&config, backup_type, label)
-                    {
+                    if let Err(e) = crane::commands::postgres_backup::run_backup_cmd(
+                        &config,
+                        backup_type,
+                        label,
+                    ) {
                         eprintln!("Backup failed: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+
+                Some(("reset", sub_sub_m)) => {
+                    let force = sub_sub_m.get_flag("force");
+                    if let Err(e) = crane::commands::postgres_reset::run_reset_cmd(&config, force) {
+                        eprintln!("Reset failed: {}", e);
                         std::process::exit(1);
                     }
                 }
