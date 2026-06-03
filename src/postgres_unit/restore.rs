@@ -22,8 +22,14 @@ pub async fn postgres_restore(
     let mut backup = backup.clone();
 
     if let Some(pitr) = pitr_time {
-        let pitr_dt = chrono::NaiveDateTime::parse_from_str(pitr, "%Y-%m-%d %H:%M:%S")
-            .map_err(|_| anyhow::anyhow!("--pitr must be in 'YYYY-MM-DD HH:MM:SS' format"))?;
+        let pitr_dt = chrono::NaiveDateTime::parse_from_str(pitr, "%Y-%m-%d %H:%M:%S%.f")
+            .or_else(|_| chrono::NaiveDateTime::parse_from_str(pitr, "%Y-%m-%d %H:%M:%S"))
+            .map_err(|_| {
+                anyhow::anyhow!(
+                    "--pitr must be in 'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DD HH:MM:SS.FFF' format. got `{}`",
+                    pitr
+                )
+            })?;
 
         let mut filtered_chain = Vec::new();
         for item in &chain {
@@ -376,6 +382,12 @@ pub async fn postgres_restore(
             pg_ctl, pgdata_dir
         ))?;
         if pg_start_out.exit_code != 0 {
+            if let Ok(log_out) = interactor.cmd("sudo cat /tmp/pg_start.log") {
+                println!("--- PostgreSQL Start Log (/tmp/pg_start.log) ---");
+                println!("{}", log_out.stdout);
+                println!("{}", log_out.stderr);
+                println!("------------------------------------------------");
+            }
             anyhow::bail!(
                 "Failed to start PostgreSQL directly for PITR: {}",
                 pg_start_out.stderr

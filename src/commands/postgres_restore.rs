@@ -84,10 +84,11 @@ pub async fn run_restore_cmd(
 
     // Validate --pitr is after the oldest backup in the chain (chain[0] after reverse)
     if let Some(pitr) = pitr_time {
-        let pitr_dt =
-            chrono::NaiveDateTime::parse_from_str(pitr, "%Y-%m-%d %H:%M:%S").map_err(|_| {
+        let pitr_dt = chrono::NaiveDateTime::parse_from_str(pitr, "%Y-%m-%d %H:%M:%S%.f")
+            .or_else(|_| chrono::NaiveDateTime::parse_from_str(pitr, "%Y-%m-%d %H:%M:%S"))
+            .map_err(|_| {
                 anyhow::anyhow!(
-                    "--pitr must be in 'YYYY-MM-DD HH:MM:SS' format. got `{}`",
+                    "--pitr must be in 'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DD HH:MM:SS.FFF' format. got `{}`",
                     pitr
                 )
             })?;
