@@ -282,11 +282,14 @@ backend {name}_backend
     interactor.cmd("sudo chown root:root /etc/haproxy/haproxy.cfg")?;
     interactor.cmd("sudo chmod 644 /etc/haproxy/haproxy.cfg")?;
 
+    Ok(())
+}
+
+pub fn reload_haproxy(interactor: &dyn ServerInteractor) -> anyhow::Result<()> {
     println!("\tRestarting and enabling HAProxy service...");
     interactor.service_daemon_reload()?;
     interactor.enable_service("haproxy")?;
     interactor.restart_service("haproxy")?;
-
     Ok(())
 }
 
@@ -317,5 +320,35 @@ pub async fn setup_haproxy_on_each_nodes_wrapper(
     for res in results {
         res??;
     }
+    Ok(())
+}
+
+pub async fn reload_haproxy_on_each_nodes_wrapper(
+    app_nodes: &Vec<config::NodeConfig>,
+) -> Result<(), anyhow::Error> {
+    let mut handles = vec![];
+
+    for app_node in app_nodes {
+        let app_node = app_node.clone();
+        let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+            println!("\n\tReloading HAProxy on app node {}...", app_node.name);
+
+            let interactor = get_server_interactor(&app_node.name)?;
+
+            reload_haproxy(&*interactor)?;
+
+            Ok(())
+        });
+        handles.push(handle);
+    }
+
+    let mut results = vec![];
+    for handle in handles {
+        results.push(handle.await);
+    }
+    for res in results {
+        res??;
+    }
+
     Ok(())
 }
