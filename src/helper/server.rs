@@ -14,14 +14,14 @@ pub fn wait_for_service_status(
     while start_time.elapsed() < timeout {
         let status = interactor.cmd(&format!("sudo systemctl is-active {}", service_name))?;
 
-        dbg!(&service_name, &status);
+        // dbg!(&service_name, &status);
 
         if status.stdout.trim() == service_status {
             met_status = true;
             break;
         }
 
-        std::thread::sleep(std::time::Duration::from_millis(500));
+        std::thread::sleep(std::time::Duration::from_millis(1000));
     }
 
     Ok(met_status)

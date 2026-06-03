@@ -32,6 +32,7 @@ pub async fn postgres_restore(
                     chrono::NaiveDateTime::parse_from_str(taken_at, "%Y-%m-%d %H:%M:%S").map_err(
                         |_| anyhow::anyhow!("Backup has invalid taken_at: '{}'", taken_at),
                     )?;
+
                 if backup_dt < pitr_dt {
                     filtered_chain.push(item.clone());
                 }
@@ -486,6 +487,7 @@ pub async fn postgres_restore(
     }
 
     // Wait for all replica nodes to join and reach "running" state
+    println!("Waiting for replica nodes to join the cluster...");
     pg_wait_all_replicas(interactor, &pg_nodes);
 
     Ok(())

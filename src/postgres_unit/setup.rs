@@ -200,8 +200,8 @@ pub async fn postgres_setup_wrapper(
     println!("\n\tPolling PostgreSQL cluster health...");
     let start = std::time::Instant::now();
 
+    // println!("\tWaiting for replica nodes to join the cluster...");
     pg_wait_all_replicas(&*leader_interactor, &pg_nodes);
-
 
     let elapsed = start.elapsed();
     println!(

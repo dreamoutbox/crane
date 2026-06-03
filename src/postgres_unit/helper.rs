@@ -541,7 +541,6 @@ pub fn pg_wait_all_replicas(
     pg_nodes: &Vec<crate::config::NodeConfig>,
 ) {
     if pg_nodes.len() > 1 {
-        println!("Waiting for replica nodes to join the cluster...");
         let replica_start_time = std::time::Instant::now();
         let replica_timeout = std::time::Duration::from_secs(30);
 
@@ -554,8 +553,7 @@ pub fn pg_wait_all_replicas(
 
                 for node in pg_nodes {
                     let node_line = output.lines().find(|l| l.contains(&node.name));
-
-                    dbg!(&node_line);
+                    // dbg!(&node_line);
 
                     match node_line {
                         Some(line) => {
