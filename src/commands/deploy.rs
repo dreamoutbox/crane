@@ -43,9 +43,10 @@ pub async fn run_deploy_command(
     }
 
     let app_nodes = config_get_nodes(&config, "app");
+    let pg_nodes = config_get_nodes(&config, "postgres");
 
     let mut handles = vec![];
-    for node in &app_nodes {
+    for node in &pg_nodes {
         let node = node.clone();
         let all_deps = all_deps.clone();
 
@@ -80,7 +81,7 @@ pub async fn run_deploy_command(
         .map(|pg| pg.enabled)
         .unwrap_or(false);
     if pg_enabled {
-        postgres_setup_wrapper(&config, &app_nodes).await?;
+        postgres_setup_wrapper(&config, &pg_nodes).await?;
     }
 
     let mut deploy_handles = vec![];
@@ -91,6 +92,7 @@ pub async fn run_deploy_command(
         let config = config.clone();
         let datetime = datetime.clone();
         let app_nodes = app_nodes.clone();
+        let pg_nodes = pg_nodes.clone();
 
         let handle = tokio::task::spawn_blocking(move || -> (Vec<String>, anyhow::Result<()>) {
             let mut logs = Vec::new();
@@ -167,7 +169,12 @@ pub async fn run_deploy_command(
                         };
 
                         let leader_uri = build_uri(5000);
-                        let follower_uri = build_uri(5001);
+
+                        let follower_uri = if pg_nodes.len() > 1 {
+                            build_uri(5001)
+                        } else {
+                            leader_uri.clone()
+                        };
 
                         app_env.insert(
                             format!("POSTGRES_{}_LEADER", db_env_key),
