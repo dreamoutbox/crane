@@ -590,3 +590,54 @@ pub fn pg_cluster_wait_all_nodes_ready(
 pub fn pg_clear_dcs_state(interactor: &dyn ServerInteractor) {
     let _ = interactor.cmd("sudo env ETCDCTL_API=3 etcdctl del /service/postgres-cluster --prefix");
 }
+
+pub fn backup_postgres_dir(
+    pg_version: &String,
+    interactor: &dyn ServerInteractor,
+) -> Result<(), anyhow::Error> {
+    let timestamp_out = interactor.cmd("date +%s")?;
+    let unix_timestamp = timestamp_out.stdout.trim().to_string();
+    if unix_timestamp.is_empty() {
+        anyhow::bail!("Failed to generate UNIX timestamp for backup path");
+    }
+
+    let backup_parent = format!(
+        "/backup/{}/var/lib/postgresql/{}",
+        unix_timestamp, *pg_version
+    );
+
+    let old_main_dir = format!("/var/lib/postgresql/{}/main", *pg_version);
+    let backup_main_dir = format!("{}/main", backup_parent);
+    let dir_exists = interactor
+        .cmd(&format!("test -d {}", old_main_dir))
+        .map(|out| out.exit_code == 0)
+        .unwrap_or(false);
+    if dir_exists {
+        println!(
+            "\tBacking up old postgres data directory {} to {}",
+            old_main_dir, backup_main_dir
+        );
+        interactor.cmd(&format!("sudo mkdir -p {}", backup_parent))?;
+        interactor.cmd(&format!("sudo mv {} {}", old_main_dir, backup_main_dir))?;
+    }
+
+    let failed_main_dir = format!("/var/lib/postgresql/{}/main.failed", *pg_version);
+    let backup_failed_dir = format!("{}/main.failed", backup_parent);
+    let failed_exists = interactor
+        .cmd(&format!("test -d {}", failed_main_dir))
+        .map(|out| out.exit_code == 0)
+        .unwrap_or(false);
+    if failed_exists {
+        println!(
+            "\tBacking up failed data directory {} to {}...",
+            failed_main_dir, backup_failed_dir
+        );
+        interactor.cmd(&format!("sudo mkdir -p {}", backup_parent))?;
+        interactor.cmd(&format!(
+            "sudo mv {} {}",
+            failed_main_dir, backup_failed_dir
+        ))?;
+    }
+
+    Ok(())
+}

@@ -33,6 +33,8 @@ We resolved the issue where replica nodes got stuck in the `creating replica` st
        - wal-method: stream
    ```
    *Why:* Patroni ignores `bootstrap.basebackup` settings when performing replica cloning (unless the bootstrap method itself is basebackup, which isn't used here). Placing it under `postgresql.basebackup` ensures Patroni passes `--checkpoint=fast`, `--no-verify-checksums`, and `--wal-method=stream` to `pg_basebackup` when cloning replicas.
+
+
 2. Increased the dynamic configuration store (DCS) timeouts under `bootstrap.dcs:` to safe, standard defaults:
    - `ttl: 30` (was `5`)
    - `loop_wait: 10` (was `5`)

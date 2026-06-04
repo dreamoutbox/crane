@@ -1,5 +1,5 @@
+use crate::postgres_unit::PYTHON_PARSE_PG_LOG_SCRIPT;
 use crate::postgres_unit::helper::{connect_to_node, postgres_get_primary};
-use crate::postgres_unit::python_parse_pg_log_script::PYTHON_PARSE_PG_LOG_SCRIPT;
 use crate::server_interactor::server_interactor_trait::ServerInteractor;
 
 pub fn run_postgres_logs_cmd(

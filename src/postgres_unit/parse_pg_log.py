@@ -1,4 +1,4 @@
-pub const PYTHON_PARSE_PG_LOG_SCRIPT: &str = r#"import csv
+import csv
 import sys
 import re
 import argparse
@@ -12,8 +12,6 @@ parser.add_argument('--user', help='Filter by user name')
 parser.add_argument('--db', help='Filter by database name')
 parser.add_argument('--sql', help='Filter by SQL statement substring')
 args = parser.parse_args()
-
-dml_pattern = re.compile(r'\b(INSERT|UPDATE|DELETE|TRUNCATE)\b', re.IGNORECASE)
 
 since_dt = None
 if args.since:
@@ -42,28 +40,29 @@ with open(args.logfile, 'r', encoding='utf-8', errors='replace') as f:
         severity = row[11]
         message = row[13]
         
-        if severity == 'LOG' and message.startswith('statement: '):
-            sql = message[len('statement: '):].strip()
-            if not dml_pattern.search(sql):
-                continue
+        if since_dt or until_dt:
+            try:
+                dt_part = log_time_str.split('.')[0]
+                row_dt = datetime.strptime(dt_part, '%Y-%m-%d %H:%M:%S')
+                if since_dt and row_dt < since_dt:
+                    continue
+                if until_dt and row_dt > until_dt:
+                    continue
+            except Exception:
+                pass
+        
+        if args.user and args.user.lower() != user_name.lower():
+            continue
+        if args.db and args.db.lower() != database_name.lower():
+            continue
             
-            if args.user and args.user.lower() != user_name.lower():
-                continue
-            if args.db and args.db.lower() != database_name.lower():
-                continue
+        is_statement = severity == 'LOG' and message.startswith('statement: ')
+        if is_statement:
+            sql = message[len('statement: '):].strip()
             if args.sql and args.sql.lower() not in sql.lower():
                 continue
-            
-            if since_dt or until_dt:
-                try:
-                    dt_part = log_time_str.split('.')[0]
-                    row_dt = datetime.strptime(dt_part, '%Y-%m-%d %H:%M:%S')
-                    if since_dt and row_dt < since_dt:
-                        continue
-                    if until_dt and row_dt > until_dt:
-                        continue
-                except Exception:
-                    pass
-            
             print(f"{log_time_str} | user={user_name} db={database_name} client={client} | SQL: {sql}")
-"#;
+        else:
+            if args.sql:
+                continue
+            print(f"{log_time_str} | user={user_name} db={database_name} client={client} | [{severity}] {message}")
