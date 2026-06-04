@@ -99,6 +99,7 @@ pub async fn postgres_restore(
     }
 
     // 2. Clear DCS (etcd) keys for the cluster to prevent conflicts
+    println!("Clearing DCS cluster state...");
     pg_clear_dcs_state(interactor);
 
     // 3. Clear existing data directory on all nodes

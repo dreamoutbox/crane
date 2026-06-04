@@ -12,3 +12,4 @@ patroni_node_*.yaml
 *.env
 patroni_*.yaml
 demo/crane.vm.toml
+debug_output/*

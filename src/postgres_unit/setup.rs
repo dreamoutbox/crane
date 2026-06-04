@@ -107,6 +107,7 @@ pub async fn postgres_setup_wrapper(
                     wait_for_etcd_quorum(&*interactor, &pg_nodes, 40)?;
             
                     // 2. Clear DCS (etcd) keys for the cluster to prevent conflicts
+                    println!("\tClearing DCS cluster state...");
                     pg_clear_dcs_state(&*interactor);
                 }
 

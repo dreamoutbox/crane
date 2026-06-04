@@ -49,9 +49,9 @@ restapi:
 
 bootstrap:
   dcs:
-    ttl: 5
-    loop_wait: 5
-    retry_timeout: 5
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
     maximum_lag_on_failover: 1048576
     postgresql:
       use_pg_rewind: true
@@ -73,11 +73,6 @@ bootstrap:
         archive_mode: "on"
         archive_command: "cp %p /var/lib/postgresql/wal_archive/%f"
         {summarize_wal}
-  #basebackup:
-  #  - checkpoint: fast
-  #  - no-verify-checksums
-  #  - compress: client/zstd:3
-
   initdb:
     - encoding: UTF8
     - data-checksums
@@ -103,6 +98,10 @@ postgresql:
     superuser:
       username: postgres
       password: {replica_pass}
+  basebackup:
+    - checkpoint: fast
+    - no-verify-checksums
+    - wal-method: stream
 "#,
         node_name = node.name,
         etcd_hosts = etcd_hosts_yaml,

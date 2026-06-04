@@ -588,6 +588,5 @@ pub fn pg_cluster_wait_all_nodes_ready(
 /// pg_clear_dcs_state
 /// Clear DCS (etcd) keys for the cluster to prevent conflicts
 pub fn pg_clear_dcs_state(interactor: &dyn ServerInteractor) {
-    println!("Clearing DCS cluster state...");
     let _ = interactor.cmd("sudo env ETCDCTL_API=3 etcdctl del /service/postgres-cluster --prefix");
 }
