@@ -152,4 +152,22 @@ impl ServerInteractor for MockInteractor {
     fn spawn_cmd(&self, _: &str) -> Result<Child, anyhow::Error> {
         todo!()
     }
+    fn firewall_enable(&self, _enable: bool) -> anyhow::Result<()> {
+        Ok(())
+    }
+    fn firewall_reload(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+    fn firewall_reset(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+    fn firewall_allow_port(&self, _port: u16, _proto: &str, _source: Option<&str>) -> anyhow::Result<()> {
+        Ok(())
+    }
+    fn firewall_deny_port(&self, _port: u16, _proto: &str, _source: Option<&str>) -> anyhow::Result<()> {
+        Ok(())
+    }
+    fn firewall_allow_source(&self, _source: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
 }

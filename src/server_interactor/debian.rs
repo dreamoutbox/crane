@@ -400,4 +400,73 @@ impl ServerInteractor for DebianInteractor {
 
         Ok(())
     }
+
+    fn firewall_enable(&self, enable: bool) -> anyhow::Result<()> {
+        let is_installed = match self.cmd("which ufw") {
+            Ok(out) => out.exit_code == 0,
+            Err(_) => false,
+        };
+
+        if enable {
+            if !is_installed {
+                self.install_dependencies(vec!["ufw".to_string()])?;
+            }
+            self.run_stdout("sudo ufw default deny incoming")?;
+            self.run_stdout("sudo ufw default allow outgoing")?;
+            self.run_stdout("sudo ufw --force enable")?;
+        } else if is_installed {
+            self.run_stdout("sudo ufw disable")?;
+        }
+
+        Ok(())
+    }
+
+    fn firewall_reload(&self) -> anyhow::Result<()> {
+        self.run_stdout("sudo ufw reload")?;
+        Ok(())
+    }
+
+    fn firewall_reset(&self) -> anyhow::Result<()> {
+        self.run_stdout("sudo ufw --force reset")?;
+        Ok(())
+    }
+
+    fn firewall_allow_port(
+        &self,
+        port: u16,
+        proto: &str,
+        source: Option<&str>,
+    ) -> anyhow::Result<()> {
+        let cmd = match source {
+            Some(s) => format!(
+                "sudo ufw allow from {} to any port {} proto {}",
+                s, port, proto
+            ),
+            None => format!("sudo ufw allow {}/{}", port, proto),
+        };
+        self.run_stdout(&cmd)?;
+        Ok(())
+    }
+
+    fn firewall_deny_port(
+        &self,
+        port: u16,
+        proto: &str,
+        source: Option<&str>,
+    ) -> anyhow::Result<()> {
+        let cmd = match source {
+            Some(s) => format!(
+                "sudo ufw deny from {} to any port {} proto {}",
+                s, port, proto
+            ),
+            None => format!("sudo ufw deny {}/{}", port, proto),
+        };
+        self.run_stdout(&cmd)?;
+        Ok(())
+    }
+
+    fn firewall_allow_source(&self, source: &str) -> anyhow::Result<()> {
+        self.run_stdout(&format!("sudo ufw allow from {}", source))?;
+        Ok(())
+    }
 }

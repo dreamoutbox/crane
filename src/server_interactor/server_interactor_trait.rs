@@ -41,6 +41,14 @@ pub trait ServerInteractor {
     fn add_user_to_groups(&self, username: &str, groups: Vec<String>) -> anyhow::Result<()>;
     fn remove_user_from_groups(&self, username: &str, groups: Vec<String>) -> anyhow::Result<()>;
     fn list_users(&self) -> anyhow::Result<Vec<String>>;
+
+    // FIREWALL
+    fn firewall_enable(&self, enable: bool) -> anyhow::Result<()>;
+    fn firewall_reload(&self) -> anyhow::Result<()>;
+    fn firewall_reset(&self) -> anyhow::Result<()>;
+    fn firewall_allow_port(&self, port: u16, proto: &str, source: Option<&str>) -> anyhow::Result<()>;
+    fn firewall_deny_port(&self, port: u16, proto: &str, source: Option<&str>) -> anyhow::Result<()>;
+    fn firewall_allow_source(&self, source: &str) -> anyhow::Result<()>;
 }
 
 pub struct ServiceRegister {
