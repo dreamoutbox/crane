@@ -8,6 +8,7 @@ use crane::postgres_unit::helper::postgres_get_primary;
 
 #[tokio::test]
 async fn test_deploy() {
+    println!("STEP: 1. Build Go demo app");
     // 1. Build Go demo app
     let go_build = Command::new("go")
         .arg("build")
@@ -20,6 +21,7 @@ async fn test_deploy() {
         String::from_utf8_lossy(&go_build.stderr)
     );
 
+    println!("STEP: 2. Deploy app configuration to VPS nodes");
     // 2. Deploy app configuration to VPS nodes
     let config_path = Path::new("demo/crane.toml");
     let config = crane::config::read_config_toml_file(config_path).expect("Failed to load config");
@@ -27,6 +29,7 @@ async fn test_deploy() {
         .await
         .expect("deploy failed");
 
+    println!("STEP: ASSERT this machine can curl at myapp.example.com");
     // ASSERT this machine can curl at myapp.example.com
     let curl_myapp = Command::new("curl")
         .args([
@@ -51,6 +54,7 @@ async fn test_deploy() {
         stdout_myapp
     );
 
+    println!("STEP: ASSERT this machine can curl at myapp2.example.com");
     // ASSERT this machine can curl at myapp2.example.com
     let curl_myapp2 = Command::new("curl")
         .args([
@@ -78,6 +82,7 @@ async fn test_deploy() {
         stdout_myapp2
     );
 
+    println!("STEP: ASSERT we can curl to myapp.example.com/pg and get a 200 status");
     // ASSERT we can curl to myapp.example.com/pg and get a 200 status
     // curl -w "\\n%{http_code}\\n" -L -k -s \
     // --resolve myapp2.example.com:80:127.0.0.1 --resolve myapp2.example.com:443:127.0.0.1 \
@@ -112,6 +117,7 @@ async fn test_deploy() {
         );
     }
 
+    println!("STEP: ASSERT we can curl to myapp2.example.com/pg and get a 200 status");
     // ASSERT we can curl to myapp2.example.com/pg and get a 200 status
     let curl_pg = Command::new("curl")
         .args([
@@ -142,6 +148,9 @@ async fn test_deploy() {
         );
     }
 
+    println!(
+        "STEP: Temporarily add a pg_hba.conf entry to the deployed primary postgres database and reload"
+    );
     // To allow connection from the host machine
     //(IP 10.0.0.1 on docker bridge network 10.0.0.0/24),
     // we need to temporarily add a pg_hba.conf entry
@@ -166,12 +175,31 @@ async fn test_deploy() {
         .cmd("sudo -u postgres psql -c 'SELECT pg_reload_conf();'")
         .expect("failed to reload pg config");
 
+    primary_interactor
+        .firewall_allow_source("10.0.0.0/24")
+        .expect("failed to allow subnet in firewall");
+    primary_interactor
+        .firewall_reload()
+        .expect("failed to reload firewall");
+
+    let primary_port = match primary_node.name.as_str() {
+        "vps1" => "5001",
+        "vps2" => "5002",
+        "vps3" => "5003",
+        _ => "5432",
+    };
+
+    println!(
+        "STEP: ASSERT this machine can psql with user=\"u1\" password=\"u1\" database=\"mydb\""
+    );
     // ASSERT this machine can psql with user="u1" password="u1" database="mydb"
     let psql_u1 = Command::new("psql")
         .env("PGPASSWORD", "u1")
         .args([
             "-h",
             "127.0.0.1",
+            "-p",
+            primary_port,
             "-U",
             "u1",
             "-d",
@@ -192,12 +220,17 @@ async fn test_deploy() {
         "expected '1' in psql response for user u1"
     );
 
+    println!(
+        "STEP: ASSERT this machine can psql with user=\"u2\" password=\"u2\" database=\"mydb\""
+    );
     // ASSERT this machine can psql with user="u2" password="u2" database="mydb"
     let psql_u2 = Command::new("psql")
         .env("PGPASSWORD", "u2")
         .args([
             "-h",
             "127.0.0.1",
+            "-p",
+            primary_port,
             "-U",
             "u2",
             "-d",
@@ -218,6 +251,7 @@ async fn test_deploy() {
         "expected '1' in psql response for user u2"
     );
 
+    println!("STEP: Verify injected env variables in app .env");
     // Verify injected env variables in app .env
     let env_file_content = primary_interactor
         .cmd("sudo cat /app_config/myapp/3000/.env")
@@ -240,6 +274,7 @@ async fn test_deploy() {
         env_file_content
     );
 
+    println!("STEP: Verify HAProxy is listening and healthy on ports 5000 and 5001");
     // Verify HAProxy is listening and healthy on ports 5000 and 5001
     let haproxy_5000 = primary_interactor
         .cmd("pg_isready -h 127.0.0.1 -p 5000")
@@ -259,6 +294,7 @@ async fn test_deploy() {
         haproxy_5001.stderr
     );
 
+    println!("STEP: Verify pre-deploy script executed on the node");
     // Verify pre-deploy script executed on the node
     let before_deploy_content = primary_interactor
         .cmd("cat /tmp/before-deploy.txt")

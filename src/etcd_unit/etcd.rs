@@ -130,8 +130,6 @@ pub fn wait_for_etcd_cluster(
     pg_nodes: &[config::NodeConfig],
     timeout_secs: u64,
 ) -> anyhow::Result<()> {
-    println!("\tWaiting for etcd quorum on all nodes...");
-
     let endpoints = pg_nodes
         .iter()
         .map(|n| format!("http://{}:2379", n.internal_ip))
@@ -155,7 +153,6 @@ pub fn wait_for_etcd_cluster(
 
         if let Ok(output) = cmd_result {
             if output.exit_code == 0 {
-                println!("\tEtcd quorum formed.");
                 return Ok(());
             }
         }

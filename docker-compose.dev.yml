@@ -19,6 +19,7 @@ services:
       - "80:80"
       - "443:443"
       - "5432:5432"
+      - "5001:5432"
     networks:
       crane-net:
         ipv4_address: 10.0.0.11

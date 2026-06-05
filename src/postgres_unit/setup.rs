@@ -197,7 +197,9 @@ fn inner_setup_postgres_node(
 
     // --- Wait for quorum (only first node runs it) ---
     if is_first_node {
+        println!("\tWaiting for etcd ready on all nodes...");
         wait_for_etcd_cluster(&*interactor, &pg_nodes, 60)?;
+        println!("\tEtcd cluster ready.");
 
         // 2. Clear DCS (etcd) keys for the cluster to prevent conflicts
         println!("\tClearing DCS cluster state...");
