@@ -3,7 +3,6 @@ pub mod demote;
 pub mod entity;
 pub mod helper;
 pub mod install;
-pub mod patroni;
 pub mod restore;
 pub mod setup;
 pub mod setup_postgres_primary;

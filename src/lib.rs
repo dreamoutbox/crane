@@ -6,6 +6,7 @@ pub mod etcd_unit;
 pub mod firewall;
 pub mod haproxy_unit;
 pub mod helper;
+pub mod patroni;
 pub mod postgres_unit;
 pub mod s3;
 pub mod server_interactor;

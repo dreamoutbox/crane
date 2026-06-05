@@ -3,6 +3,7 @@ use crate::{
     etcd_unit::{install_etcd, setup_etcd, start_etcd, wait_for_etcd_quorum},
     haproxy_unit::haproxy::setup_haproxy_on_each_nodes_wrapper,
     helper::config::config_get_nodes,
+    patroni::install_patroni,
     postgres_unit::{
         helper::{
             backup_postgres_dir, configure_postgres_cron_backup, get_pg_version,
@@ -10,7 +11,6 @@ use crate::{
             pg_clear_dcs_state, pg_cluster_wait_all_nodes_ready, postgres_get_primary,
         },
         install::install_postgres,
-        patroni::install_patroni,
         setup_postgres_primary::setup_postgres_primary,
     },
     server_interactor::{get_server_interactor, server_interactor_trait::ServerInteractor},

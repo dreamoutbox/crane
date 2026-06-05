@@ -17,6 +17,7 @@ pub fn install_patroni(
         .cmd("which patroni")
         .map(|out| out.exit_code == 0)
         .unwrap_or(false);
+
     if !patroni_installed {
         println!("\tInstalling Patroni...");
         interactor.install_dependencies(vec!["patroni".to_string()])?;
