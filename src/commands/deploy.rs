@@ -392,12 +392,13 @@ fn inner_deploy_single_app(
             node_interactor.chmod(&this_app_config_dir, "600")?;
 
             // Create systemd template unit (admin)
+            let env_template_path = format!("/app_config/{}/%i/.env", app.name);
             crate::systemd_unit::setup::setup_systemd_template(
                 &*node_interactor,
                 &app.name,
                 &app.deploy_user,
                 &app.entrypoint,
-                &env_path,
+                &env_template_path,
             )?;
 
             // Enable service instance
