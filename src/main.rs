@@ -151,7 +151,7 @@ async fn main() -> anyhow::Result<()> {
                 .about("Get the status of an application")
                 .arg(
                     Arg::new("app")
-                        .required(true)
+                        .required(false)
                         .help("The name of the application to check"),
                 ),
         )
@@ -327,7 +327,7 @@ async fn main() -> anyhow::Result<()> {
         }
 
         Some(("status", sub_m)) => {
-            let app_name = sub_m.get_one::<String>("app").unwrap();
+            let app_name = sub_m.get_one::<String>("app").map(|s| s.as_str());
             if let Err(e) = crane::commands::status::run_status_command(&config, app_name) {
                 eprintln!("Status check failed: {}", e);
                 std::process::exit(1);

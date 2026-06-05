@@ -128,7 +128,7 @@ pub async fn postgres_setup_wrapper(
 
     let elapsed = start.elapsed();
     println!(
-        "\n\tPostgreSQL cluster health check completed (took {}s)",
+        "\tPostgreSQL cluster health check completed (took {}s)",
         elapsed.as_secs()
     );
 

@@ -59,7 +59,7 @@ health_check_interval = 2
 # Domain
 domain = "myapp.localhost"
 # Replicas
-instances = 2
+instances = 1
 min_replicas = 1
 max_replicas = 3
 # ENV for myapp
@@ -92,7 +92,7 @@ health_check_interval = 2
 # Domain
 domain = "myapp2.localhost"
 # Replicas
-instances = 1
+instances = 2
 min_replicas = 1
 max_replicas = 3
 # ENV for myapp2

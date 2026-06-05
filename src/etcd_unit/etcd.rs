@@ -83,7 +83,7 @@ ETCD_ADVERTISE_CLIENT_URLS="http://{internal_ip}:2379"
         cluster_state = cluster_state,
     );
 
-    println!("\nETCD CONFIG\n{}\n", &etcd_default);
+    // println!("\nETCD CONFIG\n{}\n", &etcd_default);
 
     let etcd_default_path = "/etc/default/etcd";
     interactor.create_file(etcd_default_path, &etcd_default)?;

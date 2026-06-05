@@ -34,8 +34,6 @@ health_check_timeout = 10
 health_check_interval = 5
 # Domain
 domain = "myapp.localhost"
-# Keep old app versions
-retain_releases = 3
 # Replicas
 instances = 2
 min_replicas = 1
@@ -46,9 +44,6 @@ APP_ENV = "simulation"
 LOG_LEVEL = "debug"
 APP_NAME = "myapp"
 # Databases for myapp
-[[app.myapp.database]]
-databases = "mydb"
-user = "u2"
 [[app.myapp.database]]
 databases = "mydb"
 user = "u1"
@@ -73,12 +68,6 @@ user = "u1"
 password = "u1"
 databases = ["mydb"]
 
-[[db.postgres.users]]
-state = "present"
-user = "u2"
-password = "u2"
-databases = ["mydb"]
-
 
 [backup.s3]
 bucket = "crane1"
@@ -94,15 +83,3 @@ secret_access_key = "${S3_SECRET_ACCESS_KEY}"
 provider = "cloudflare"
 domain_name = "localhost"
 token = "${CLOUDFLARE_TOKEN}"
-
-
-[monitor]
-interval = 30
-
-[monitor.autoscale]
-min_replicas = 1
-max_replicas = 4
-scale_up_cpu = 80
-scale_down_cpu = 20
-scale_up_memory = 85
-cooldown = 120

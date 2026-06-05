@@ -53,9 +53,11 @@ pub fn setup_haproxy_unified(
     current_app_name: Option<&str>,
     current_port_end: Option<u16>,
 ) -> anyhow::Result<()> {
+    let haproxy_config_path = "/etc/haproxy/haproxy.cfg";
+
     println!(
-        "\tConfiguring unified HAProxy load balancer on node {}...",
-        node.name
+        "\tConfiguring unified HAProxy load balancer on node {} (at: {})",
+        node.name, haproxy_config_path
     );
 
     // 1. Base Global and Defaults configuration
@@ -274,19 +276,18 @@ backend {name}_backend
         }
     }
 
-    // Write to local file for debug on the runner machine
-    std::fs::write(format!("haproxy_node_{}.cfg", node.name), &haproxy_cfg)?;
+    // Write config to remote node
+    interactor.create_file(haproxy_config_path, &haproxy_cfg)?;
+    interactor.chown(haproxy_config_path, "root", "root")?;
+    interactor.chmod(haproxy_config_path, "644")?;
 
-    println!("\tWriting HAProxy configuration to /etc/haproxy/haproxy.cfg...");
-    interactor.create_file("/etc/haproxy/haproxy.cfg", &haproxy_cfg)?;
-    interactor.cmd("sudo chown root:root /etc/haproxy/haproxy.cfg")?;
-    interactor.cmd("sudo chmod 644 /etc/haproxy/haproxy.cfg")?;
+    // Write to local file for debug
+    std::fs::write(format!("haproxy_node_{}.cfg", node.name), &haproxy_cfg)?;
 
     Ok(())
 }
 
 pub fn reload_haproxy(interactor: &dyn ServerInteractor) -> anyhow::Result<()> {
-    println!("\tRestarting and enabling HAProxy service...");
     interactor.service_daemon_reload()?;
     interactor.enable_service("haproxy")?;
     interactor.restart_service("haproxy")?;
