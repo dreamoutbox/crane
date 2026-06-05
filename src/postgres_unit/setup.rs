@@ -1,6 +1,6 @@
 use crate::{
     config,
-    etcd_unit::{install_etcd, setup_etcd, start_etcd, wait_for_etcd_quorum},
+    etcd_unit::{install_etcd, setup_etcd, start_etcd, wait_for_etcd_cluster},
     haproxy_unit::haproxy::setup_haproxy_on_each_nodes_wrapper,
     helper::config::config_get_nodes,
     patroni::install_patroni,
@@ -122,8 +122,6 @@ pub async fn postgres_setup_wrapper(
     // 4. Assert all patroni instances are healthy
     println!("\n\tPolling PostgreSQL cluster health...");
     let start = std::time::Instant::now();
-
-    // println!("\tWaiting for nodes to join the cluster...");
     pg_cluster_wait_all_nodes_ready(&*leader_interactor, &pg_nodes);
 
     let elapsed = start.elapsed();
@@ -199,7 +197,7 @@ fn inner_setup_postgres_node(
 
     // --- Wait for quorum (only first node runs it) ---
     if is_first_node {
-        wait_for_etcd_quorum(&*interactor, &pg_nodes, 40)?;
+        wait_for_etcd_cluster(&*interactor, &pg_nodes, 60)?;
 
         // 2. Clear DCS (etcd) keys for the cluster to prevent conflicts
         println!("\tClearing DCS cluster state...");

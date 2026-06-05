@@ -30,22 +30,21 @@ pub fn setup_etcd(
 ) -> anyhow::Result<()> {
     println!("\tSetup etcd cluster on node {}...", node.name);
 
-    // let etcd_configured = interactor
-    //     .cmd("test -f /etc/default/etcd")
-    //     .map(|out| out.exit_code == 0)
-    //     .unwrap_or(false);
-    // if !etcd_configured {
-    // Stop etcd cleanly and remove data directory; wait to ensure it is fully stopped
-    let _ = interactor.stop_service("etcd");
-    // std::thread::sleep(std::time::Duration::from_secs(1));
-    let _ = wait_for_service_status(interactor, "etcd", "inactive", 10);
-    let _ = interactor.cmd("sudo rm -rf /var/lib/etcd/");
+    let etcd_configured = interactor
+        .cmd("test -f /etc/default/etcd")
+        .map(|out| out.exit_code == 0)
+        .unwrap_or(false);
+    if !etcd_configured {
+        // Stop etcd cleanly and remove data directory; wait to ensure it is fully stopped
+        let _ = interactor.stop_service("etcd");
+        let _ = wait_for_service_status(interactor, "etcd", "inactive", 30);
+        let _ = interactor.cmd("sudo rm -rf /var/lib/etcd/");
 
-    // Recreate with correct ownership so the etcd service user can write to it
-    interactor.cmd("sudo mkdir -p /var/lib/etcd")?;
-    interactor.cmd("sudo chown etcd:etcd /var/lib/etcd")?;
-    interactor.cmd("sudo chmod 700 /var/lib/etcd")?;
-    // }
+        // Recreate with correct ownership so the etcd service user can write to it
+        interactor.cmd("sudo mkdir -p /var/lib/etcd")?;
+        interactor.cmd("sudo chown etcd:etcd /var/lib/etcd")?;
+        interactor.cmd("sudo chmod 700 /var/lib/etcd")?;
+    }
 
     let initial_cluster = pg_nodes
         .iter()
@@ -55,12 +54,11 @@ pub fn setup_etcd(
 
     // Use "existing" if etcd member data already exists to avoid re-triggering
     // Patroni DCS re-bootstrap (and pg_basebackup) on every redeploy.
-    // let has_etcd_data = interactor
-    //     .cmd("test -d /var/lib/etcd/default.etcd/member")
-    //     .map(|o| o.exit_code == 0)
-    //     .unwrap_or(false);
-    // let cluster_state = if has_etcd_data { "existing" } else { "new" };
-    let cluster_state = "new";
+    let has_etcd_data = interactor
+        .cmd("test -d /var/lib/etcd/default.etcd/member")
+        .map(|o| o.exit_code == 0)
+        .unwrap_or(false);
+    let cluster_state = if has_etcd_data { "existing" } else { "new" };
 
     let etcd_default = format!(
         r#"
@@ -127,7 +125,7 @@ pub fn start_etcd(
 
 /// Wait for etcd quorum to form by polling all cluster endpoints (internal IPs).
 /// This ensures all peers are reachable before Patroni starts, not just localhost.
-pub fn wait_for_etcd_quorum(
+pub fn wait_for_etcd_cluster(
     interactor: &dyn ServerInteractor,
     pg_nodes: &[config::NodeConfig],
     timeout_secs: u64,
