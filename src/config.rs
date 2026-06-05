@@ -10,7 +10,7 @@ pub struct Config {
     pub domain: Option<DomainConfig>,
     pub db: Option<DbConfig>,
     pub backup: Option<BackupConfig>,
-    pub monitor: Option<MonitorConfig>,
+    // pub monitor: Option<MonitorConfig>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -48,7 +48,7 @@ pub struct AppConfig {
     pub health_check_path: Option<String>,
     pub health_check_timeout: Option<u64>,
     pub health_check_interval: Option<u64>,
-    pub retain_releases: Option<u32>,
+    // pub retain_releases: Option<u32>,
     pub domain: Option<String>,
     pub ssl_cert: Option<String>,
     pub env: Option<HashMap<String, String>>,

@@ -1,3 +1,5 @@
+mod parse_config_test;
+
 use crane::config::resolve_placeholders;
 use std::collections::HashMap;
 

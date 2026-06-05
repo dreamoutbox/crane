@@ -58,8 +58,6 @@ health_check_timeout = 30
 health_check_interval = 2
 # Domain
 domain = "myapp.localhost"
-# Keep old app versions
-retain_releases = 3
 # Replicas
 instances = 2
 min_replicas = 1
@@ -93,8 +91,6 @@ health_check_timeout = 30
 health_check_interval = 2
 # Domain
 domain = "myapp2.localhost"
-# Keep old app versions
-retain_releases = 3
 # Replicas
 instances = 1
 min_replicas = 1
@@ -164,13 +160,13 @@ token = "${CLOUDFLARE_TOKEN}"
 
 
 #TODO: implement Observability monitor
-[monitor]
-interval = 30
+# [monitor]
+# interval = 30
 
-[monitor.autoscale]
-min_replicas = 1
-max_replicas = 4
-scale_up_cpu = 80
-scale_down_cpu = 20
-scale_up_memory = 85
-cooldown = 120
+# [monitor.autoscale]
+# min_replicas = 1
+# max_replicas = 4
+# scale_up_cpu = 80
+# scale_down_cpu = 20
+# scale_up_memory = 85
+# cooldown = 120

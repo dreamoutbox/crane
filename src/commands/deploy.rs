@@ -338,25 +338,25 @@ fn inner_deploy_single_app(
         // 4. Rolling deploy across vps instances
         let min_replicas = app
             .min_replicas
-            .or_else(|| {
-                config
-                    .monitor
-                    .as_ref()
-                    .and_then(|m| m.autoscale.as_ref())
-                    .and_then(|a| a.min_replicas)
-            })
+            // .or_else(|| {
+            //     config
+            //         .monitor
+            //         .as_ref()
+            //         .and_then(|m| m.autoscale.as_ref())
+            //         .and_then(|a| a.min_replicas)
+            // })
             .unwrap_or(1);
 
         let max_replicas = app
             .max_replicas
-            .or_else(|| {
-                config
-                    .monitor
-                    .as_ref()
-                    .and_then(|m| m.autoscale.as_ref())
-                    .and_then(|a| a.max_replicas)
-            })
-            .unwrap_or(4);
+            // .or_else(|| {
+            //     config
+            //         .monitor
+            //         .as_ref()
+            //         .and_then(|m| m.autoscale.as_ref())
+            //         .and_then(|a| a.max_replicas)
+            // })
+            .unwrap_or(1);
 
         let mut count = std::cmp::max(app.instances, min_replicas);
         count = std::cmp::min(count, max_replicas);

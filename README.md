@@ -22,62 +22,144 @@
 
 2. **Scaffold Configuration**:
    Create a `crane.toml` configuration and `.env` secrets file in your repository:
+
    ```toml
    # crane.toml
+
    [[nodes]]
    name = "vps1"
-   host = "192.168.1.100"
-   public_ip = "192.168.1.100"
-   internal_ip = "192.168.1.100"
-   port = 22
-   user = "deploy"
-   roles = ["app", "postgres"]
+   host = "localhost"
+   public_ip = "10.0.0.11"
+   internal_ip = "10.0.0.11"
+   port = 2221
+   roles = ["app", "haproxy", "postgres", "redis"]
+   user = "crane"
+   private_key = "keys/id_ed25519"
+   sudo_pass = "${SUDO_PASS_VPS1}"
+
+   [[nodes]]
+   name = "vps2"
+   host = "localhost"
+   public_ip = "10.0.0.12"
+   internal_ip = "10.0.0.12"
+   port = 2222
+   roles = ["app", "haproxy", "postgres", "redis"]
+   user = "crane"
+   private_key = "keys/id_ed25519"
+   sudo_pass = "${SUDO_PASS_VPS2}"
+
+   [[nodes]]
+   name = "vps3"
+   host = "localhost"
+   public_ip = "10.0.0.13"
+   internal_ip = "10.0.0.13"
+   port = 2223
+   roles = ["app", "haproxy", "postgres", "redis"]
+   user = "crane"
+   private_key = "keys/id_ed25519"
+   sudo_pass = "${SUDO_PASS_VPS3}"
+
+
+   [[users]]
+   name = "deployman"
+   groups = ["www"]
+   ssh_authorized_keys = ["keys/id_ed25519.pub"]
+   private_key = "keys/id_ed25519"
+
 
    [app.myapp]
    name = "myapp"
-   deploy_dir = "./dist"
-   entrypoint = "./myapp"
-   deploy_user = "www-data"
-   port_start = 3000
-   instances = 2
+   # Setup Info
    dependencies = ["libssl3", "ca-certificates"]
-   database = [{ databases = "mydb", user = "u1" }]
+   # Deploy Info
+   deploy_dir = "./demo"
+   entrypoint = "./myapp"
+   pre_deploy_script = "./before-deploy.sh"
+   deploy_user = "deployman"
+   port_start = 3000
+   port_end = 3100
+   # Health Check
+   health_check_path = "/health"
+   health_check_timeout = 30
+   health_check_interval = 2
+   # Domain
+   domain = "myapp.localhost"
+   # Replicas
+   instances = 2
+   min_replicas = 1
+   max_replicas = 3
+   # ENV for myapp
+   [app.myapp.env]
+   APP_ENV = "simulation"
+   LOG_LEVEL = "debug"
+   APP_NAME = "myapp"
+   # Databases for myapp
+   [[app.myapp.database]]
+   databases = "mydb"
+   user = "u1"
+
+   [app.myapp2]
+   name = "myapp2"
+   # Setup Info
+   dependencies = ["libssl3", "ca-certificates"]
+   # Deploy Info
+   deploy_dir = "./demo"
+   entrypoint = "./myapp"
+   deploy_user = "deployman"
+   port_start = 4000
+   port_end = 4100
+   # Health Check
+   health_check_path = "/health"
+   health_check_timeout = 30
+   health_check_interval = 2
+   # Domain
+   domain = "myapp2.localhost"
+   # Replicas
+   instances = 1
+   min_replicas = 1
+   max_replicas = 3
+   # ENV for myapp2
+   [app.myapp2.env]
+   APP_ENV = "simulation"
+   LOG_LEVEL = "debug"
+   APP_NAME = "myapp2"
+   # Databases for my app2
+   [[app.myapp2.database]]
+   databases = "mydb"
+   user = "u1"
+
 
    [db.postgres]
    enabled = true
    version = "17"
-   replica_pass = "replica_secret_pass"
+   replica_pass = "replica"
+
+   [db.postgres.backup]
+   full_backup_every = "1h"
+   incremental_backup_every = "15m"
 
    [db.postgres.mydb]
    name = "mydb"
 
    [[db.postgres.users]]
+   state = "present"
    user = "u1"
-   password = "${DB_PASSWORD}"
+   password = "u1"
    databases = ["mydb"]
 
+
    [backup.s3]
-   bucket = "myapp-backups"
+   bucket = "crane1"
    region = "us-east-1"
-   endpoint = "https://s3.amazonaws.com"
+   endpoint = "http://s3:9000"
    access_key_id = "${S3_ACCESS_KEY_ID}"
    secret_access_key = "${S3_SECRET_ACCESS_KEY}"
 
+
    [domain]
    provider = "cloudflare"
-   domain_name = "myapp.example.com"
+   domain_name = "localhost"
    token = "${CLOUDFLARE_TOKEN}"
-
-   [monitor]
-   interval = 30
-
-   [monitor.autoscale]
-   min_replicas = 1
-   max_replicas = 4
-   scale_up_cpu = 80
-   scale_down_cpu = 20
-   scale_up_memory = 85
-   cooldown = 120
    ```
 
 3. **Deploy**:
@@ -107,7 +189,7 @@
 | `crane pg promote --node <host>` | Force-promote a specific node to primary database leader. |
 | `crane pg backup <full\|incr>` | Trigger a manual full or incremental cluster database backup to S3. |
 | `crane pg list` | List available database backups. |
-| `crane pg restore <backup_id> [--pitr <TIME>]` | Restore the database state from an S3 backup ID. with  Point-in-time recovery support. --pitr <YYYY-MM-DD HH:MM:SS> |
+| `crane pg restore <backup_id> [--pitr <TIME>]` | Restore the database state from an S3 backup ID. with  Point-in-time recovery support. --pitr \<YYYY-MM-DD HH:MM:SS\> |
 | `crane logs <app>` | Stream application standard output/error logs. |
 
 ---
