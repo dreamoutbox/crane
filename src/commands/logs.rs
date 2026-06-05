@@ -1,7 +1,7 @@
 use crate::{config, helper::config::config_get_nodes};
 use std::io::{BufRead, BufReader};
 
-pub fn run(
+pub fn run_logs_cmd(
     config: &crate::config::Config,
     app_target: &str,
     lines: u32,
@@ -141,7 +141,8 @@ pub fn run(
             let instance_id = target.instance_id;
 
             let handle = std::thread::spawn(move || -> anyhow::Result<Vec<String>> {
-                let interactor = crate::server_interactor::get_server_interactor(&target.node.name)?;
+                let interactor =
+                    crate::server_interactor::get_server_interactor(&target.node.name)?;
 
                 let output = interactor.cmd(&cmd)?;
                 if output.exit_code != 0 {

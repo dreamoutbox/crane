@@ -15,22 +15,29 @@ pub fn run_postgres_logs_cmd(
 
     let interactor = connect_to_node(&primary_node, &config)?;
 
-    run_postgres_logs_cmd_internal(&*interactor, since, until, user, db, sql)
+    let pg_logs = run_postgres_logs_wrapper(&*interactor, since, until, user, db, sql)?;
+
+    if !pg_logs.trim().is_empty() {
+        println!("{}", pg_logs);
+    }
+
+    Ok(())
 }
 
-pub fn run_postgres_logs_cmd_internal(
+pub fn run_postgres_logs_wrapper(
     interactor: &dyn ServerInteractor,
     since: Option<&str>,
     until: Option<&str>,
     user: Option<&str>,
     db: Option<&str>,
     sql: Option<&str>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<String> {
     // Check if 'postgres' user exists on the remote node
     let user_check = interactor.cmd("id postgres")?;
     if user_check.exit_code != 0 {
         anyhow::bail!(
-            "PostgreSQL is not installed or the 'postgres' user does not exist on the target node. Please run 'crane deploy' first to set up the database."
+            "PostgreSQL is not installed or the 'postgres' user does not exist on the target node. 
+Please run 'crane deploy' first to set up the database."
         );
     }
 
@@ -92,9 +99,5 @@ pub fn run_postgres_logs_cmd_internal(
         );
     }
 
-    if !output.stdout.trim().is_empty() {
-        println!("{}", output.stdout);
-    }
-
-    Ok(())
+    Ok(output.stdout)
 }

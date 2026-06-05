@@ -2,7 +2,7 @@ use crate::postgres_unit::helper::connect_to_node;
 use crate::postgres_unit::helper::find_node_config_with_fallback;
 use crate::postgres_unit::helper::postgres_get_primary;
 
-pub fn run_promote_cmd(
+pub fn run_postgres_promote_cmd(
     config: &crate::config::Config,
     target_node_str: &str,
 ) -> anyhow::Result<()> {

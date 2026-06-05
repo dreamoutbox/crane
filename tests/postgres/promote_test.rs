@@ -25,7 +25,7 @@ async fn test_promote() {
         .expect("No follower node found in the cluster status");
 
     // run promote function on a follower node
-    crane::commands::postgres_promote::run_promote_cmd(&config, &follower.hostname)
+    crane::commands::postgres_promote::run_postgres_promote_cmd(&config, &follower.hostname)
         .expect("Failed to promote follower node");
 
     // poll for status update to reflect promotion

@@ -44,7 +44,7 @@ pub fn backup_from_config_wrapper(
     )
 }
 
-pub fn run_backup_cmd(
+pub fn run_postgres_backup_cmd(
     config: &crate::config::Config,
     backup_type: &str,
     label: Option<&str>,

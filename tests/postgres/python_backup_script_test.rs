@@ -117,7 +117,7 @@ async fn test_python_backup_script() {
 
     // Step 3: Promote replica2_node follower node to leader
     println!("Promoting follower node: {}", replica2_node.name);
-    crane::commands::postgres_promote::run_promote_cmd(&config, &replica2_node.name)
+    crane::commands::postgres_promote::run_postgres_promote_cmd(&config, &replica2_node.name)
         .expect("Failed to promote follower node");
 
     // Poll for status update to reflect promotion
@@ -164,8 +164,14 @@ async fn test_python_backup_script() {
 
     // Wait for the remaining nodes (now replicas) to be fully ready after promotion
     println!("Waiting for remaining replica nodes to be fully ready after promotion...");
-    let ready = crane::postgres_unit::helper::pg_cluster_wait_all_nodes_ready(&*replica2_interactor, &pg_nodes);
-    assert!(ready, "Not all PostgreSQL nodes became ready in time after promotion");
+    let ready = crane::postgres_unit::helper::pg_cluster_wait_all_nodes_ready(
+        &*replica2_interactor,
+        &pg_nodes,
+    );
+    assert!(
+        ready,
+        "Not all PostgreSQL nodes became ready in time after promotion"
+    );
 
     // Step 5: Run the python backup script on the remaining nodes (now replicas). They should fail.
     println!(

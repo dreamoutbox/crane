@@ -2,7 +2,7 @@ use crate::config;
 use crate::helper::config::config_get_nodes;
 use crate::postgres_unit::helper::{connect_to_node, get_pg_version, pg_clear_dcs_state};
 
-pub fn run_reset_cmd(config: &config::Config, force: bool) -> anyhow::Result<()> {
+pub fn run_postgres_reset_cmd(config: &config::Config, force: bool) -> anyhow::Result<()> {
     let pg_nodes = config_get_nodes(config, "postgres");
     if pg_nodes.is_empty() {
         println!("No PostgreSQL nodes found in configuration.");

@@ -1,10 +1,10 @@
 // RUN:
 // RUST_BACKTRACE=1 cargo nextest run test_backup_restore -- --no-capture
 
+use crane::commands::postgres_restore::run_postgres_restore_cmd;
 use crane::server_interactor::server_interactor_trait::ServerInteractor;
 use crane::{
-    commands::{postgres_backup::backup_from_config_wrapper, postgres_restore::run_restore_cmd},
-    config::read_config_toml_file,
+    commands::postgres_backup::backup_from_config_wrapper, config::read_config_toml_file,
     postgres_unit::helper::postgres_get_primary,
 };
 
@@ -63,7 +63,7 @@ async fn test_backup_restore() {
     // RESTORE FROM FULL BACKUP
     // ============================================================
     println!("Step 7: restore from full backup");
-    run_restore_cmd(&config, &full_backup.id, None, None)
+    run_postgres_restore_cmd(&config, &full_backup.id, None, None)
         .await
         .expect("Restore from full backup failed");
 
@@ -161,7 +161,7 @@ async fn test_backup_restore() {
         "Step 15: restore from backup #1 (type: {}) with pitr: {:?}",
         incr_backup_1.backup_type, pitr_arg
     );
-    run_restore_cmd(&config, &incr_backup_1.id, None, pitr_arg)
+    run_postgres_restore_cmd(&config, &incr_backup_1.id, None, pitr_arg)
         .await
         .expect("Restore from backup #1 failed");
 
@@ -195,7 +195,7 @@ async fn test_backup_restore() {
         "Step 19: restore from incremental backup #2 with --pitr {}",
         pitr_time_before_drop
     );
-    run_restore_cmd(
+    run_postgres_restore_cmd(
         &config,
         &incr_backup_2.id,
         None,

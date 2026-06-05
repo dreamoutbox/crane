@@ -9,7 +9,7 @@ fn test_logs_command_single_instance() {
     let config_path = Path::new("demo/crane.toml");
     let config = crane::config::read_config_toml_file(config_path).unwrap();
 
-    let result = crane::commands::logs::run(
+    let result = crane::commands::logs::run_logs_cmd(
         &config,
         "myapp@1",
         50,
@@ -29,7 +29,7 @@ fn test_logs_command_all_instances() {
     let config_path = Path::new("demo/crane.toml");
     let config = crane::config::read_config_toml_file(config_path).unwrap();
 
-    let result = crane::commands::logs::run(
+    let result = crane::commands::logs::run_logs_cmd(
         &config,
         "myapp",
         100,
@@ -49,8 +49,9 @@ fn test_logs_command_invalid_instance() {
     let config_path = Path::new("demo/crane.toml");
     let config = crane::config::read_config_toml_file(config_path).unwrap();
 
-    let result =
-        crane::commands::logs::run(&config, "myapp@99", 100, None, None, false, false, false);
+    let result = crane::commands::logs::run_logs_cmd(
+        &config, "myapp@99", 100, None, None, false, false, false,
+    );
 
     assert!(result.is_err());
     let err_msg = result.unwrap_err().to_string();

@@ -6,7 +6,7 @@ use crate::{
     s3::{get_s3_config, s3_client::RealS3Client},
 };
 
-pub async fn run_restore_cmd(
+pub async fn run_postgres_restore_cmd(
     config: &crate::config::Config,
     target_backup_id: &str,  // <id>: targetb backup ID
     base_id: Option<&str>,   // --base: stop chain walk here (inclusive)

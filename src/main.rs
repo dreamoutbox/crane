@@ -55,15 +55,15 @@ async fn main() -> anyhow::Result<()> {
                                 .help("The host/IP of the node to promote"),
                         ),
                 )
-                .subcommand(
-                    Command::new("demote")
-                        .about("Demote a node to PostgreSQL follower")
-                        .arg(
-                            Arg::new("node")
-                                .required(true)
-                                .help("The host/IP of the node to demote"),
-                        ),
-                )
+                // .subcommand(
+                //     Command::new("demote")
+                //         .about("Demote a node to PostgreSQL follower")
+                //         .arg(
+                //             Arg::new("node")
+                //                 .required(true)
+                //                 .help("The host/IP of the node to demote"),
+                //         ),
+                // )
                 .subcommand(
                     Command::new("status").about("Get the status of the PostgreSQL cluster"),
                 )
@@ -228,24 +228,25 @@ async fn main() -> anyhow::Result<()> {
             match sub_m.subcommand() {
                 Some(("promote", sub_sub_m)) => {
                     let target_node = sub_sub_m.get_one::<String>("node").unwrap();
-                    if let Err(e) =
-                        crane::commands::postgres_promote::run_promote_cmd(&config, target_node)
-                    {
+                    if let Err(e) = crane::commands::postgres_promote::run_postgres_promote_cmd(
+                        &config,
+                        target_node,
+                    ) {
                         eprintln!("Promotion failed: {}", e);
                         std::process::exit(1);
                     }
                 }
 
-                Some(("demote", sub_sub_m)) => {
-                    let target_node = sub_sub_m.get_one::<String>("node").unwrap();
-                    if let Err(e) =
-                        crane::commands::postgres_demote::run_demote_cmd(&config, target_node)
-                    {
-                        eprintln!("Demotion failed: {}", e);
-                        std::process::exit(1);
-                    }
-                }
-
+                // Some(("demote", sub_sub_m)) => {
+                //     let target_node = sub_sub_m.get_one::<String>("node").unwrap();
+                //     if let Err(e) = crane::commands::postgres_demote::run_postgres_demote_cmd(
+                //         &config,
+                //         target_node,
+                //     ) {
+                //         eprintln!("Demotion failed: {}", e);
+                //         std::process::exit(1);
+                //     }
+                // }
                 Some(("status", _)) => {
                     if let Err(e) =
                         crane::commands::postgres_status::run_postgres_status_command(&config).await
@@ -265,7 +266,7 @@ async fn main() -> anyhow::Result<()> {
                         std::process::exit(1);
                     }
 
-                    if let Err(e) = crane::commands::postgres_backup::run_backup_cmd(
+                    if let Err(e) = crane::commands::postgres_backup::run_postgres_backup_cmd(
                         &config,
                         backup_type,
                         label,
@@ -277,7 +278,9 @@ async fn main() -> anyhow::Result<()> {
 
                 Some(("reset", sub_sub_m)) => {
                     let force = sub_sub_m.get_flag("force");
-                    if let Err(e) = crane::commands::postgres_reset::run_reset_cmd(&config, force) {
+                    if let Err(e) =
+                        crane::commands::postgres_reset::run_postgres_reset_cmd(&config, force)
+                    {
                         eprintln!("Reset failed: {}", e);
                         std::process::exit(1);
                     }
@@ -294,7 +297,7 @@ async fn main() -> anyhow::Result<()> {
                     let target_id = sub_sub_m.get_one::<String>("id").unwrap();
                     let base_id = sub_sub_m.get_one::<String>("base").map(|s| s.as_str());
                     let pitr_time = sub_sub_m.get_one::<String>("pitr").map(|s| s.as_str());
-                    if let Err(e) = crane::commands::postgres_restore::run_restore_cmd(
+                    if let Err(e) = crane::commands::postgres_restore::run_postgres_restore_cmd(
                         &config, target_id, base_id, pitr_time,
                     )
                     .await
@@ -341,7 +344,7 @@ async fn main() -> anyhow::Result<()> {
             let follow = sub_m.get_flag("follow");
             let no_app_instance_id = sub_m.get_flag("no-app-instance-id");
 
-            if let Err(e) = crane::commands::logs::run(
+            if let Err(e) = crane::commands::logs::run_logs_cmd(
                 &config,
                 app_target,
                 lines,
