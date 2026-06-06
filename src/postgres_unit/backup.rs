@@ -54,7 +54,7 @@ pub fn postgres_backup(
     )?;
 
     // 4. Build pg_basebackup command
-    let mut is_incr =
+    let is_incr =
         backup_type.to_lowercase() == "incr" || backup_type.to_lowercase() == "incremental";
     let mut pgbasebackup_cmd = format!(
         "sudo -u postgres PGPASSWORD='{}' {} -h localhost -U replicator -D {} -F t -X s -c fast --manifest-checksums=sha256",
@@ -112,22 +112,11 @@ pub fn postgres_backup(
                 && !current_timeline_id.is_empty()
                 && parent_timeline_id != current_timeline_id
             {
-                println!(
-                    "\n!!!!!!!!!!!!!!!\n
-Timeline mismatch detected: parent backup timeline is {},
-but current database timeline is {}. 
-Falling back to a full backup.
-\n!!!!!!!!!!!!!!!\n",
-                    parent_timeline_id, current_timeline_id
-                );
-
-                is_incr = false;
-                base_id = None;
-
-                // Rebuild pgbasebackup_cmd without --incremental
-                pgbasebackup_cmd = format!(
-                    "sudo -u postgres PGPASSWORD='{}' {} -h localhost -U replicator -D {} -F t -X s -c fast --manifest-checksums=sha256",
-                    replica_pass, pg_basebackup, local_path
+                let _ = interactor.cmd(&format!("sudo rm -rf {}", local_path));
+                anyhow::bail!(
+                    "Timeline mismatch detected: parent backup timeline is {}, but current database timeline is {}. consider full backup first!",
+                    parent_timeline_id,
+                    current_timeline_id
                 );
             } else {
                 pgbasebackup_cmd.push_str(&format!(" --incremental={}", parent_manifest));

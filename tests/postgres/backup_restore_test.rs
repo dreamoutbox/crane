@@ -95,13 +95,19 @@ async fn test_backup_restore() {
     println!("STORE pitr_time_insert_3: {}", pitr_time_insert_3);
 
     // ============================================================
-    // CREATE INCREMENTAL BACKUP #1 (will auto-fallback to FULL after timeline change)
+    // CREATE INCREMENTAL BACKUP #1 (will fail due to timeline mismatch)
     // ============================================================
-    println!("Step 10: create incremental backup #1 (expects FULL fallback after restore)");
+    println!("Step 10: create incremental backup #1 (expects failure due to timeline mismatch)");
     std::thread::sleep(std::time::Duration::from_secs(2));
-    let incr_backup_1 = backup_from_config_wrapper(&config, "incr", Some("incr1"))
-        .expect("Incremental backup #1 failed");
-    // After restore, timeline changes so incremental auto-falls back to FULL
+    let incr_backup_res = backup_from_config_wrapper(&config, "incr", Some("incr1"));
+    assert!(
+        incr_backup_res.is_err(),
+        "Expected incremental backup to fail due to timeline mismatch"
+    );
+
+    println!("Step 10.5: create a full backup to serve as the new base");
+    let incr_backup_1 =
+        backup_from_config_wrapper(&config, "full", Some("incr1")).expect("Full backup failed");
     assert_eq!(incr_backup_1.backup_type, "FULL");
 
     // ============================================================
