@@ -13,12 +13,20 @@ mod postgres {
     include!("helper.rs");
 
     include!("config_test.rs");
+
     include!("logs_test.rs");
-    include!("backup_restore_test.rs");
+
     include!("user_change_password_test.rs");
     include!("user_state_test.rs");
+
     include!("promote_test.rs");
+
     include!("failover_test.rs");
+
     include!("database_persist_test.rs");
+
     include!("python_backup_script_test.rs");
+
+    include!("backup_restore_test.rs");
+    include!("backup_restore_extend_test.rs");
 }
