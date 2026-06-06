@@ -20,6 +20,7 @@ pub async fn run_postgres_restore_cmd(
     );
 
     let s3_config = get_s3_config(&config)?;
+
     let primary_node = match postgres_get_primary(&config)? {
         Some(node) => node,
         None => config

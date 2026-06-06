@@ -11,9 +11,10 @@ pub fn find_node_config<'a>(
     target: &str,
     config: &'a config::Config,
 ) -> Option<&'a config::NodeConfig> {
-    config.nodes.iter().find(|n| {
-        n.host == target || n.internal_ip == target || n.public_ip == target || n.name == target
-    })
+    config
+        .nodes
+        .iter()
+        .find(|n| n.internal_ip == target || n.public_ip == target || n.name == target)
 }
 
 pub fn find_node_config_with_fallback(
@@ -583,12 +584,6 @@ pub fn pg_cluster_wait_all_nodes_ready(
     } else {
         true
     }
-}
-
-/// pg_clear_dcs_state
-/// Clear DCS (etcd) keys for the cluster to prevent conflicts
-pub fn pg_clear_dcs_state(interactor: &dyn ServerInteractor) {
-    let _ = interactor.cmd("sudo env ETCDCTL_API=3 etcdctl del /service/postgres-cluster --prefix");
 }
 
 pub fn backup_postgres_dir(

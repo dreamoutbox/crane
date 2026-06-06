@@ -2,34 +2,34 @@
 
 [[nodes]]
 name = "vps1"
-host = "localhost"
 public_ip = "10.0.0.11"
 internal_ip = "10.0.0.11"
-port = 2221
 roles = ["app", "haproxy", "postgres", "redis"]
 user = "crane"
+ssh_ip = "127.0.0.1"
+ssh_port = 2221
 private_key = "keys/id_ed25519"
 sudo_pass = "${SUDO_PASS_VPS1}"
 
 [[nodes]]
 name = "vps2"
-host = "localhost"
 public_ip = "10.0.0.12"
 internal_ip = "10.0.0.12"
-port = 2222
 roles = ["app", "haproxy", "postgres", "redis"]
 user = "crane"
+ssh_ip = "127.0.0.1"
+ssh_port = 2222
 private_key = "keys/id_ed25519"
 sudo_pass = "${SUDO_PASS_VPS2}"
 
 [[nodes]]
 name = "vps3"
-host = "localhost"
 public_ip = "10.0.0.13"
 internal_ip = "10.0.0.13"
-port = 2223
 roles = ["app", "haproxy", "postgres", "redis"]
 user = "crane"
+ssh_ip = "127.0.0.1"
+ssh_port = 2223
 private_key = "keys/id_ed25519"
 sudo_pass = "${SUDO_PASS_VPS3}"
 
@@ -147,8 +147,7 @@ databases = ["mydb"]
 bucket = "crane1"
 region = "us-east-1"
 endpoint = "http://s3:9000"
-# credentials in .env: S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY
-# or specify here if not using .env
+
 access_key_id = "${S3_ACCESS_KEY_ID}"
 secret_access_key = "${S3_SECRET_ACCESS_KEY}"
 

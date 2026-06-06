@@ -3,7 +3,7 @@
 
 #[tokio::test]
 async fn test_database_persist_after_deploy() {
-    let config_path = std::path::Path::new("tests/postgres/crane.with_app.toml");
+    let config_path = std::path::Path::new("demo/crane.minimal.toml");
     let config = read_config_toml_file(config_path).expect("Failed to load crane.toml");
 
     // Deploy

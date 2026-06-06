@@ -8,7 +8,7 @@ use crate::{
         helper::{
             backup_postgres_dir, configure_postgres_cron_backup, get_pg_version,
             get_postgres_backup_schedule, get_postgres_configs, get_replica_pass,
-            pg_clear_dcs_state, pg_cluster_wait_all_nodes_ready, postgres_get_primary,
+            pg_cluster_wait_all_nodes_ready, postgres_get_primary,
         },
         install::install_postgres,
         setup_postgres_primary::setup_postgres_primary,
@@ -160,7 +160,10 @@ fn inner_setup_postgres_node(
     setup_etcd(&*interactor, &node, &pg_nodes)?;
 
     // Stop & disable standard postgresql systemd service
-    println!("\tStopping and disabling standard PostgreSQL service...");
+    println!(
+        "\tStopping and disabling standard PostgreSQL service on node {}...",
+        node.name
+    );
     let _stop_res = interactor.stop_service("postgresql");
     let _disable_pg_res = interactor.disable_service("postgresql");
 
@@ -200,10 +203,6 @@ fn inner_setup_postgres_node(
         println!("\tWaiting for etcd ready on all nodes...");
         wait_for_etcd_cluster(&*interactor, &pg_nodes, 60)?;
         println!("\tEtcd cluster ready.");
-
-        // 2. Clear DCS (etcd) keys for the cluster to prevent conflicts
-        println!("\tClearing DCS cluster state...");
-        pg_clear_dcs_state(&*interactor);
     }
 
     // Wait for first node to complete quorum check before starting Patroni

@@ -16,7 +16,7 @@ pub async fn get_postgres_status_wrapper(
     let pg_version = get_pg_version(&config);
 
     let mut pgs = Vec::new();
-    let mut pg_primary_host = "Unknown".to_string();
+    let mut pg_primary_name = "Unknown".to_string();
 
     let mut haproxy_status = "Unhealthy".to_string();
     let mut haproxy_active_count = 0;
@@ -25,12 +25,10 @@ pub async fn get_postgres_status_wrapper(
 
     for node in &pg_nodes {
         let node = node.clone();
-        let config = config.clone();
         let pg_version = pg_version.clone();
+        let config = config.clone();
 
         let handle = tokio::task::spawn_blocking(move || -> (PostgresNode, bool) {
-            let address = format!("{}:{}", node.public_ip, node.port);
-            let mut hostname = node.host.clone();
             let mut role = "Unknown".to_string();
             let mut version = pg_version;
             let mut status = "Unhealthy".to_string();
@@ -38,14 +36,6 @@ pub async fn get_postgres_status_wrapper(
 
             match connect_to_node(&node, &config) {
                 Ok(interactor) => {
-                    // 1. Get Hostname
-                    if let Ok(h) = interactor.cmd("hostname") {
-                        let h_trimmed = h.stdout.trim();
-                        if !h_trimmed.is_empty() {
-                            hostname = h_trimmed.to_string();
-                        }
-                    }
-
                     // 2. Check Recovery & DB Version
                     let recovery_cmd =
                         r#"sudo -u postgres psql -t -A -c "select pg_is_in_recovery();""#;
@@ -87,11 +77,10 @@ pub async fn get_postgres_status_wrapper(
 
             (
                 PostgresNode {
-                    hostname,
-                    address,
-                    role,
+                    node,
                     version,
                     status,
+                    role,
                 },
                 haproxy_active,
             )
@@ -101,16 +90,16 @@ pub async fn get_postgres_status_wrapper(
     }
 
     for handle in handles {
-        let (node_info, is_haproxy_active) = handle.await?;
+        let (pg_node, is_haproxy_active) = handle.await?;
 
-        if node_info.role == "Leader" {
-            pg_primary_host = node_info.hostname.clone();
+        if pg_node.role == "Leader" {
+            pg_primary_name = pg_node.node.name.clone();
         }
         if is_haproxy_active {
             haproxy_active_count += 1;
         }
 
-        pgs.push(node_info);
+        pgs.push(pg_node);
     }
 
     if haproxy_active_count == app_nodes.len() {
@@ -121,16 +110,16 @@ pub async fn get_postgres_status_wrapper(
 
     // Identify replicas (all postgres nodes that are not the leader)
     let mut replicas = Vec::new();
-    for status in &pgs {
-        if status.hostname != pg_primary_host {
-            replicas.push(format!("{}:5000", status.hostname));
+    for pg_node in &pgs {
+        if pg_node.node.name != pg_primary_name {
+            replicas.push(format!("{}:5000", pg_node.node.name));
         }
     }
 
     let status_output = PostgresStatusOutput {
         haproxy: HAProxyNode {
             status: haproxy_status,
-            primary: pg_primary_host,
+            primary: pg_primary_name,
             replicas,
         },
         postgres: pgs,
@@ -149,8 +138,8 @@ pub async fn run_postgres_status_command(config: &crate::config::Config) -> anyh
     println!("Status: {}", status.haproxy.status);
 
     for status in &status.postgres {
-        println!("\n{}", status.hostname);
-        println!("Address: {}", status.address);
+        println!("\n{}", status.node.name);
+        println!("Address: {}:{}", status.node.ssh_ip, status.node.ssh_port);
         println!("Role: {}", status.role);
         println!("DB version: {}", status.version);
         println!("Status: {}", status.status);

@@ -25,21 +25,26 @@ async fn test_promote() {
         .expect("No follower node found in the cluster status");
 
     // run promote function on a follower node
-    crane::commands::postgres_promote::run_postgres_promote_cmd(&config, &follower.hostname)
+    crane::commands::postgres_promote::run_postgres_promote_cmd(&config, &follower.node.name)
         .expect("Failed to promote follower node");
 
     // poll for status update to reflect promotion
     let mut promoted_node_is_leader = false;
     let mut new_status = None;
     for _ in 0..15 {
-        if let Ok(st) = crane::commands::postgres_status::get_postgres_status_wrapper(&config).await
+        if let Ok(status_output) =
+            crane::commands::postgres_status::get_postgres_status_wrapper(&config).await
         {
-            if let Some(node) = st.postgres.iter().find(|n| n.hostname == follower.hostname) {
+            if let Some(node) = status_output
+                .postgres
+                .iter()
+                .find(|n| n.node.name == follower.node.name)
+            {
                 dbg!(&node);
 
-                if node.role == "Leader" && st.haproxy.primary == follower.hostname {
+                if node.role == "Leader" && status_output.haproxy.primary == follower.node.name {
                     promoted_node_is_leader = true;
-                    new_status = Some(st);
+                    new_status = Some(status_output);
                     break;
                 }
             }
@@ -52,13 +57,13 @@ async fn test_promote() {
     assert!(
         promoted_node_is_leader,
         "Expected promoted node '{}' to become leader, but it did not",
-        follower.hostname
+        follower.node.name
     );
 
     // assert haproxy point to new leader
     let ns = new_status.unwrap();
     assert_eq!(
-        ns.haproxy.primary, follower.hostname,
+        ns.haproxy.primary, follower.node.name,
         "HAProxy primary should point to the newly promoted leader node"
     );
 }

@@ -155,8 +155,7 @@ bind = "127.0.0.1"
 bucket = "crane1"
 region = "us-east-1"
 endpoint = "http://s3:9000" # omit for AWS S3
-# credentials in .env: S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY
-# or specify here if not using .env
+
 access_key_id = "minio"
 secret_access_key = "miniominio"
 

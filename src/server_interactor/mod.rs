@@ -42,7 +42,7 @@ pub fn get_server_interactor(
         .iter()
         .find(|n| {
             n.name == node_name
-                || n.host == node_name
+                || n.name == node_name
                 || n.internal_ip == node_name
                 || n.public_ip == node_name
         })
@@ -50,10 +50,10 @@ pub fn get_server_interactor(
 
     let private_key = crate::helper::keys::find_private_key_for_user(&node.user, &registry.config)?;
     let ssh = SSHSession::new(
-        node.host.clone(),
+        node.ssh_ip.clone(),
         node.user.clone(),
         private_key,
-        Some(node.port),
+        Some(node.ssh_port),
     );
 
     let distro = get_server_distro(&ssh)?;

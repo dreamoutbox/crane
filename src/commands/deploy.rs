@@ -53,7 +53,7 @@ pub async fn run_deploy_command(
         let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
             println!(
                 "Installing dependencies on {}@{} (port: {}) {:?}",
-                node.user, node.name, node.port, all_deps
+                node.user, node.name, node.ssh_port, all_deps
             );
 
             let interactor = get_server_interactor(&node.name)?;
@@ -270,8 +270,8 @@ fn inner_deploy_single_app(
             app.name,
             node.name,
             node.user,
-            node.host,
-            node.port
+            node.ssh_ip,
+            node.ssh_port
         );
 
         let node_interactor = get_server_interactor(&node.name)?;

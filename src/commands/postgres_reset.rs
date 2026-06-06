@@ -1,6 +1,7 @@
 use crate::config;
+use crate::etcd_unit::etcd_clear_dcs_state;
 use crate::helper::config::config_get_nodes;
-use crate::postgres_unit::helper::{connect_to_node, get_pg_version, pg_clear_dcs_state};
+use crate::postgres_unit::helper::{connect_to_node, get_pg_version};
 
 pub fn run_postgres_reset_cmd(config: &config::Config, force: bool) -> anyhow::Result<()> {
     let pg_nodes = config_get_nodes(config, "postgres");
@@ -39,7 +40,7 @@ pub fn run_postgres_reset_cmd(config: &config::Config, force: bool) -> anyhow::R
     if let Some(first_node) = pg_nodes.first() {
         println!("\nClearing DCS state on {}...", first_node.name);
         let interactor = connect_to_node(first_node, config)?;
-        pg_clear_dcs_state(&*interactor);
+        etcd_clear_dcs_state(&*interactor);
     }
 
     // 3. Remove PostgreSQL data directory on all nodes

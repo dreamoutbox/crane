@@ -1,8 +1,9 @@
 use crate::{
+    etcd_unit::etcd_clear_dcs_state,
     helper::{base64::base64_encode, config::config_get_nodes},
     postgres_unit::{
         entity::BackupMetadata,
-        helper::{cmdw, connect_to_node, pg_clear_dcs_state, pg_cluster_wait_all_nodes_ready},
+        helper::{cmdw, connect_to_node, pg_cluster_wait_all_nodes_ready},
     },
     s3::S3Client,
     server_interactor::server_interactor_trait::ServerInteractor,
@@ -100,7 +101,7 @@ pub async fn postgres_restore(
 
     // 2. Clear DCS (etcd) keys for the cluster to prevent conflicts
     println!("Clearing DCS cluster state...");
-    pg_clear_dcs_state(interactor);
+    etcd_clear_dcs_state(interactor);
 
     // 3. Clear existing data directory on all nodes
     let mut handles = vec![];

@@ -162,3 +162,9 @@ pub fn wait_for_etcd_cluster(
 
     anyhow::bail!("Timeout waiting for etcd quorum to form")
 }
+
+/// pg_clear_dcs_state
+/// Clear DCS (etcd) keys for the cluster to prevent conflicts
+pub fn etcd_clear_dcs_state(interactor: &dyn ServerInteractor) {
+    let _ = interactor.cmd("sudo env ETCDCTL_API=3 etcdctl del /service/postgres-cluster --prefix");
+}

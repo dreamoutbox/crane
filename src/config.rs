@@ -16,12 +16,12 @@ pub struct Config {
 #[derive(Debug, Deserialize, Clone)]
 pub struct NodeConfig {
     pub name: String,
-    pub host: String,
     pub public_ip: String,
     pub internal_ip: String,
-    pub port: u16,
     pub user: String,
     pub roles: Vec<String>,
+    pub ssh_ip: String,
+    pub ssh_port: u16,
     pub private_key: String,
     pub sudo_pass: Option<String>,
 }

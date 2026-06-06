@@ -128,7 +128,7 @@ async fn test_python_backup_script() {
             if let Some(node) = st
                 .postgres
                 .iter()
-                .find(|n| n.hostname == replica2_node.name)
+                .find(|n| n.node.name == replica2_node.name)
             {
                 if node.role == "Leader" && st.haproxy.primary == replica2_node.name {
                     promoted_node_is_leader = true;

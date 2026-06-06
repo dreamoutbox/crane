@@ -28,12 +28,7 @@ async fn test_failover() {
     let primary_node_config = config
         .nodes
         .iter()
-        .find(|n| {
-            n.host == primary.hostname
-                || n.name == primary.hostname
-                || n.internal_ip == primary.hostname
-                || n.public_ip == primary.hostname
-        })
+        .find(|n| n.name == primary.node.name)
         .expect("Failed to find primary node config in nodes list");
 
     // stop service of primary node
@@ -52,7 +47,7 @@ async fn test_failover() {
         {
             let active_leader = st.postgres.iter().find(|n| n.role == "Leader");
             if let Some(leader) = active_leader {
-                if leader.hostname != primary.hostname {
+                if leader.node.name != primary.node.name {
                     new_leader_elected = true;
                     new_status = Some(st);
                     break;
@@ -67,14 +62,14 @@ async fn test_failover() {
     assert!(
         new_leader_elected,
         "Expected a new leader to be elected after old leader '{}' stopped, but it was not",
-        primary.hostname
+        primary.node.name
     );
 
     // assert haproxy point to new leader
     let ns = new_status.unwrap();
     let new_leader = ns.postgres.iter().find(|n| n.role == "Leader").unwrap();
     assert_eq!(
-        ns.haproxy.primary, new_leader.hostname,
+        ns.haproxy.primary, new_leader.node.name,
         "HAProxy primary should point to the newly elected leader node"
     );
 }

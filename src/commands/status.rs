@@ -27,10 +27,9 @@ pub struct NodeAppInstancesStatus {
 
 pub struct NodeStatusResult {
     pub node_name: String,
-    pub node_host: String,
     pub node_public_ip: String,
     pub node_internal_ip: String,
-    pub node_port: u16,
+    pub node_ssh_port: u16,
     pub status: Result<(NodeResourceStatus, NodeAppInstancesStatus), String>,
 }
 
@@ -241,10 +240,9 @@ pub fn run_status_command(
                 idx,
                 NodeStatusResult {
                     node_name: node_clone.name.clone(),
-                    node_host: node_clone.host.clone(),
                     node_public_ip: node_clone.public_ip.clone(),
                     node_internal_ip: node_clone.internal_ip.clone(),
-                    node_port: node_clone.port,
+                    node_ssh_port: node_clone.ssh_port,
                     status: result.map_err(|e| e.to_string()),
                 },
             )
@@ -256,6 +254,7 @@ pub fn run_status_command(
     for _ in 0..config.nodes.len() {
         results.push(None);
     }
+
     for handle in handles {
         if let Ok((idx, res)) = handle.join() {
             results[idx] = Some(res);
@@ -273,7 +272,7 @@ pub fn run_status_command(
         println!("{}", node_res.node_name);
         println!("  Public IP: {}", node_res.node_public_ip);
         println!("  Internal IP: {}", node_res.node_internal_ip);
-        println!("  SSH Port: {}", node_res.node_port);
+        println!("  SSH Port: {}", node_res.node_ssh_port);
 
         match &node_res.status {
             Err(err_str) => {

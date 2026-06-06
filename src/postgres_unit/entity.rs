@@ -1,3 +1,5 @@
+use crate::config::NodeConfig;
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct BackupMetadata {
     pub id: String,
@@ -8,8 +10,8 @@ pub struct BackupMetadata {
     pub base: Option<String>,
     pub local_path: String,
     pub s3_path: String,
-    // pub last_executed_sql_time: Option<String>, // "YYYY-MM-DD HH:MM:SS"
     pub label: Option<String>,
+    // pub last_executed_sql_time: Option<String>, // "YYYY-MM-DD HH:MM:SS"
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
@@ -19,11 +21,10 @@ pub struct BackupRegistry {
 
 #[derive(Debug)]
 pub struct PostgresNode {
-    pub hostname: String,
-    pub address: String,
+    pub node: NodeConfig,
+    pub status: String,
     pub role: String,
     pub version: String,
-    pub status: String,
 }
 
 pub struct HAProxyNode {
