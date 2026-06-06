@@ -76,8 +76,9 @@ async fn test_backup_restore_extend() {
     // ============================================================
     let pitr_insert_2 = testw_insert(interactor.clone(), 2).unwrap();
 
-    // Insert dummy record to ensure there is a transaction after pitr_insert_2
-    // before the backup is taken, so that PITR target time can be reached.
+    // ============================================================
+    // SIMULATE DATA LOSS
+    // ============================================================
     println!("\n\nSIMULATE DATA LOSS\n\n");
     run_sql(&*interactor, "DROP TABLE test_table;");
 
@@ -99,6 +100,60 @@ async fn test_backup_restore_extend() {
     let interactor = crane::postgres_unit::helper::connect_to_node(&primary_node, &config).unwrap();
 
     testw_assert_table(interactor, "1\n2").unwrap();
+
+    // ============================================================
+    // EXPECT ERROR WHEN RUNNING INCREMENTAL TEST
+    // BECAUSE WE AREN'T HAVE BASE FULL BACKUP AFTER RESTORE WITH INCREMENTAL BACKUP
+    // ============================================================
+
+    let incr_backup_result = backup_from_config_wrapper(&config, "incr", None);
+    dbg!(&incr_backup_result);
+    assert!(incr_backup_result.is_err());
+    // expect error contains `consider full backup first!`
+    assert!(
+        incr_backup_result
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("consider full backup first!")
+    );
+
+    // ============================================================
+    // TAKE FULL BACKUP
+    // ============================================================
+    let _backup_full_2 = testw_full_backup(&config, "full2").unwrap();
+
+    // Reconnect to get a fresh interactor
+    let interactor = crane::postgres_unit::helper::connect_to_node(&primary_node, &config).unwrap();
+
+    // ============================================================
+    // INSERT 3 TO TABLE
+    // ============================================================
+    let pitr_insert_3 = testw_insert(interactor.clone(), 3).unwrap();
+
+    // ============================================================
+    // DROP TABLE (SIMULATE DATA LOSS)
+    // ============================================================
+    println!("\n\nSIMULATE DATA LOSS 2\n\n");
+    run_sql(&*interactor, "DROP TABLE test_table;");
+
+    // ============================================================
+    // TAKE INCREMENTAL BACKUP
+    // ============================================================
+    let backup_incr2 = testw_incr_backup(&config, "incr2").unwrap();
+
+    // ============================================================
+    // RESTORE FROM INCREMENTAL BACKUP
+    // ============================================================
+    testw_restore(&config, &backup_incr2, Some(&pitr_insert_3))
+        .await
+        .unwrap();
+
+    // ============================================================
+    // ASSERT 1,2,3 IN TABLE
+    // ============================================================
+    let interactor = crane::postgres_unit::helper::connect_to_node(&primary_node, &config).unwrap();
+    testw_assert_table(interactor, "1\n2\n3").unwrap();
 }
 
 fn testw_full_backup(config: &Config, backup_name: &str) -> anyhow::Result<BackupMetadata> {
