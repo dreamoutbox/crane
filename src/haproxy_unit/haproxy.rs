@@ -56,7 +56,7 @@ pub fn setup_haproxy_unified(
     let haproxy_config_path = "/etc/haproxy/haproxy.cfg";
 
     println!(
-        "\tConfiguring unified HAProxy load balancer on node {} (at: {})",
+        "\tUpdate HAProxy config on node {} (at: {})",
         node.name, haproxy_config_path
     );
 
@@ -302,8 +302,9 @@ pub async fn setup_haproxy_on_each_nodes_wrapper(
     for app_node in app_nodes {
         let app_node = app_node.clone();
         let config = config.clone();
+
         let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
-            println!("\n\tSetting up HAProxy on app node {}...", app_node.name);
+            // println!("\n\tSetting up HAProxy on app node {}...", app_node.name);
 
             let interactor = get_server_interactor(&app_node.name)?;
 
@@ -311,16 +312,20 @@ pub async fn setup_haproxy_on_each_nodes_wrapper(
 
             Ok(())
         });
+
         handles.push(handle);
     }
 
     let mut results = vec![];
+
     for handle in handles {
         results.push(handle.await);
     }
+
     for res in results {
         res??;
     }
+
     Ok(())
 }
 

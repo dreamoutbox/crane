@@ -100,7 +100,7 @@ pub async fn postgres_restore(
     }
 
     // 2. Clear DCS (etcd) keys for the cluster to prevent conflicts
-    println!("Clearing DCS cluster state...");
+    println!("\nClearing Etcd DCS cluster state...");
     etcd_clear_dcs_state(interactor);
 
     // 3. Clear existing data directory on all nodes
@@ -111,7 +111,7 @@ pub async fn postgres_restore(
         let pgdata_dir = pgdata_dir.clone();
 
         let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
-            println!("\tClearing postgres data directory on node {}", node.name);
+            // println!("\tClearing postgres data directory on node {}", node.name);
 
             match connect_to_node(&node, &config) {
                 Ok(interactor) => {
@@ -123,7 +123,7 @@ pub async fn postgres_restore(
                     )?;
 
                     cmdw(&*interactor, &format!("sudo chmod 700 {}", pgdata_dir))?;
-                    println!("\tCleared postgres data directory on node {}", node.name);
+                    println!("\tCleared postgres data on node {}", node.name);
                 }
                 Err(e) => {
                     println!("\tWarning: failed to connect to node {}: {}", node.name, e);
@@ -434,7 +434,7 @@ pub async fn postgres_restore(
     interactor.restart_service("patroni")?;
 
     // Wait for primary node to become the Patroni leader
-    println!("Waiting for primary node to become Patroni leader...");
+    println!("Waiting a node to become Patroni leader...");
     let mut primary_ready = false;
     let check_leader_cmd = "curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8008/primary";
     let start_time = std::time::Instant::now();

@@ -154,9 +154,8 @@ bind = "127.0.0.1"
 [backup.s3]
 bucket = "crane1"
 region = "us-east-1"
-endpoint = "http://s3:9000" # omit for AWS S3
-
-access_key_id = "minio"
+endpoint = "http://127.0.0.1:9000"
+access_key_id = "miniominio"
 secret_access_key = "miniominio"
 
 ```

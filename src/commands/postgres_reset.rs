@@ -30,16 +30,20 @@ pub fn run_postgres_reset_cmd(config: &config::Config, force: bool) -> anyhow::R
     for node in &pg_nodes {
         println!("Connecting to node {}...", node.name);
         let interactor = connect_to_node(node, config)?;
+
         println!("\tStopping Patroni service...");
         let _ = interactor.stop_service("patroni");
+
         // Also kill any remaining postgres processes
         let _ = interactor.cmd("sudo pkill -9 -u postgres postgres");
     }
 
     // 2. Clear DCS (etcd) keys for the cluster to prevent conflicts
     if let Some(first_node) = pg_nodes.first() {
-        println!("\nClearing DCS state on {}...", first_node.name);
+        // run on first node
         let interactor = connect_to_node(first_node, config)?;
+
+        println!("Clearing Etcd DCS cluster state...");
         etcd_clear_dcs_state(&*interactor);
     }
 
@@ -66,10 +70,12 @@ pub fn run_postgres_reset_cmd(config: &config::Config, force: bool) -> anyhow::R
     for node in &pg_nodes {
         println!("Connecting to node {}...", node.name);
         let interactor = connect_to_node(node, config)?;
+
         println!("\tStarting Patroni service...");
         interactor.start_service("patroni")?;
     }
 
     println!("\nPOSTGRESQL RESET COMPLETE");
+
     Ok(())
 }

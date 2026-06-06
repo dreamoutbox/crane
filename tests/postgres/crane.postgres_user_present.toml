@@ -31,13 +31,14 @@ databases = ["mydb"]
 [db.postgres.mydb]
 name = "mydb"
 
+
 [backup.s3]
 bucket = "crane1"
 region = "us-east-1"
-endpoint = "http://s3:9000" # omit for AWS S3
-
+endpoint = "http://127.0.0.1:9000"
 access_key_id = "miniominio"
 secret_access_key = "miniominio"
+
 
 [domain]
 provider = "cloudflare"
