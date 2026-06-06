@@ -36,9 +36,13 @@ pub async fn postgres_restore(
         for item in &chain {
             if let Some(ref taken_at) = item.taken_at {
                 let backup_dt =
-                    chrono::NaiveDateTime::parse_from_str(taken_at, "%Y-%m-%d %H:%M:%S").map_err(
-                        |_| anyhow::anyhow!("Backup has invalid taken_at: '{}'", taken_at),
-                    )?;
+                    chrono::NaiveDateTime::parse_from_str(taken_at, "%Y-%m-%d %H:%M:%S%.f")
+                        .or_else(|_| {
+                            chrono::NaiveDateTime::parse_from_str(taken_at, "%Y-%m-%d %H:%M:%S")
+                        })
+                        .map_err(|_| {
+                            anyhow::anyhow!("Backup has invalid taken_at: '{}'", taken_at)
+                        })?;
 
                 if backup_dt < pitr_dt {
                     filtered_chain.push(item.clone());
@@ -158,6 +162,7 @@ pub async fn postgres_restore(
         let required_files = ["base.tar", "backup_manifest"];
         for file in required_files {
             let s3_key = format!("backups/{}/{}", item.id, file);
+
             let data = s3_client.get_object(&s3_key).map_err(|_| {
                 anyhow::anyhow!(
                     "Backup '{}' is incomplete: required file '{}' not found in S3. \
@@ -166,6 +171,7 @@ pub async fn postgres_restore(
                     file
                 )
             })?;
+
             let temp_path =
                 std::env::temp_dir().join(format!("crane-restore-{}-{}", item.id, file));
             std::fs::write(&temp_path, &data)?;
@@ -353,6 +359,35 @@ pub async fn postgres_restore(
     let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", pg_version);
 
     if let Some(target_time) = pitr_time {
+        // // Populate wal_archive with WAL segments from all backups in the chain
+        // // so that restore_command can find them during PITR recovery.
+        // cmdw(interactor, "sudo mkdir -p /var/lib/postgresql/wal_archive")?;
+        // cmdw(
+        //     interactor,
+        //     "sudo chown postgres:postgres /var/lib/postgresql/wal_archive",
+        // )?;
+        //
+        // for item in &original_chain {
+        //     let wal_tar = format!("/var/lib/postgresql/backups/{}/pg_wal.tar", item.id);
+        //     let test_wal =
+        //         interactor.cmd(&format!("test -f {} && echo 'yes' || echo 'no'", wal_tar))?;
+        //     if test_wal.stdout.trim() == "yes" {
+        //         cmdw(
+        //             interactor,
+        //             &format!(
+        //                 "sudo -u postgres tar -xf {} -C /var/lib/postgresql/wal_archive/",
+        //                 wal_tar
+        //             ),
+        //         )?;
+        //     }
+        // }
+        //
+        // // Also copy any WAL segments already in pgdata/pg_wal/ to wal_archive
+        // let _ = interactor.cmd(&format!(
+        //     "sudo -u postgres bash -c 'cp {}/pg_wal/0000* /var/lib/postgresql/wal_archive/ 2>/dev/null || true'",
+        //     pgdata_dir
+        // ));
+
         // Write PITR settings to postgresql.auto.conf in pgdata_dir
         let pitr_conf_path = format!("{}/postgresql.auto.conf", pgdata_dir);
         let pitr_conf_content = format!(
@@ -384,12 +419,23 @@ pub async fn postgres_restore(
             pg_ctl, pgdata_dir
         ))?;
         if pg_start_out.exit_code != 0 {
-            if let Ok(log_out) = interactor.cmd("sudo cat /tmp/pg_start.log") {
-                println!("--- PostgreSQL Start Log (/tmp/pg_start.log) ---");
-                println!("{}", log_out.stdout);
-                println!("{}", log_out.stderr);
-                println!("------------------------------------------------");
+            if let Ok(pg_start_log_out) = interactor.cmd("sudo -u postgres cat /tmp/pg_start.log") {
+                println!("--- PostgreSQL LOG DUMP (/tmp/pg_start.log) ---");
+                println!("{}", pg_start_log_out.stdout);
+                println!("{}", pg_start_log_out.stderr);
+                println!("\n------------------------------------------------\n");
             }
+
+            if let Ok(pg_log_out) = interactor.cmd(&format!(
+                "sudo -u postgres cat {}/log/*.log {}/log/*.csv",
+                pgdata_dir, pgdata_dir
+            )) {
+                println!("--- PostgreSQL LOG DUMP ({}/log) ---", pgdata_dir);
+                println!("{}", pg_log_out.stdout);
+                println!("{}", pg_log_out.stderr);
+                println!("\n------------------------------------------------\n");
+            }
+
             anyhow::bail!(
                 "Failed to start PostgreSQL directly for PITR: {}",
                 pg_start_out.stderr
@@ -457,15 +503,15 @@ pub async fn postgres_restore(
             .map(|o| o.stdout)
             .unwrap_or_default();
 
-        anyhow::bail!(
-            "Timeout waiting for primary node to become Patroni leader. Logs:\n\n{}",
-            logs
-        );
+        println!("\n\nPatroni LOGS DUMP: {logs}\n\n");
+
+        anyhow::bail!("Timeout waiting for primary node to become Patroni leader.",);
     }
-    println!(
-        "Primary node {} is now the Patroni leader.",
-        primary_node.name
-    );
+
+    // println!(
+    //     "Primary node {} is now the Patroni leader.",
+    //     primary_node.name
+    // );
 
     if pitr_time.is_some() {
         // Clean up PITR settings from postgresql.auto.conf on primary

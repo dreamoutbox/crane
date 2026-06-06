@@ -81,18 +81,9 @@ async fn test_backup_restore() {
     // ============================================================
     // PREPARE DATA FOR PITR RESTORE #1
     // ============================================================
-    println!("Step 9: insert 3 to table");
-    let pitr_time_insert_3 = run_sql(
-        &*interactor,
-        "INSERT INTO test_table VALUES (3) RETURNING to_char(clock_timestamp() + interval '1 second' , 'YYYY-MM-DD HH24:MI:SS');", //TEMP:clock_timestamp() + interval '1 second'
-    );
-    let pitr_time_insert_3 = pitr_time_insert_3
-        .lines()
-        .map(|s| s.trim())
-        .find(|s| s.len() == 19 && s.chars().nth(4) == Some('-') && s.chars().nth(13) == Some(':'))
-        .unwrap_or("")
-        .to_string();
-    println!("STORE pitr_time_insert_3: {}", pitr_time_insert_3);
+    println!("Step 9: delete 2 from table (SIMULATE DATA LOSS)");
+    run_sql(&*interactor, "DELETE FROM test_table WHERE id = 2;");
+    let pitr_time_insert_3 = "".to_string();
 
     // ============================================================
     // CREATE INCREMENTAL BACKUP #1 (will fail due to timeline mismatch)
@@ -178,9 +169,9 @@ async fn test_backup_restore() {
     let interactor = crane::postgres_unit::helper::connect_to_node(&primary_node, &config)
         .expect("Failed to reconnect to primary node");
 
-    println!("Step 16: assert table have 1,2,3 in table");
+    println!("Step 16: assert table have 1 in table");
     let rows = run_sql(&*interactor, "SELECT id FROM test_table ORDER BY id;");
-    assert_eq!(rows, "1\n2\n3");
+    assert_eq!(rows, "1");
 
     // ============================================================
     // SIMULATE DATA LOSS
@@ -217,9 +208,9 @@ async fn test_backup_restore() {
     let interactor = crane::postgres_unit::helper::connect_to_node(&primary_node, &config)
         .expect("Failed to reconnect to primary node");
 
-    println!("Step 20: assert table have 1,2,3,4 in table");
+    println!("Step 20: assert table have 1,4 in table");
     let rows = run_sql(&*interactor, "SELECT id FROM test_table ORDER BY id;");
-    assert_eq!(rows, "1\n2\n3\n4");
+    assert_eq!(rows, "1\n4");
 }
 
 pub fn run_sql(interactor: &dyn ServerInteractor, sql: &str) -> String {

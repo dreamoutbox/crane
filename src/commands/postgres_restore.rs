@@ -96,7 +96,8 @@ pub async fn run_postgres_restore_cmd(
 
         let base_backup = &chain[0];
         if let Some(ref taken_at) = base_backup.taken_at {
-            let base_dt = chrono::NaiveDateTime::parse_from_str(taken_at, "%Y-%m-%d %H:%M:%S")
+            let base_dt = chrono::NaiveDateTime::parse_from_str(taken_at, "%Y-%m-%d %H:%M:%S%.f")
+                .or_else(|_| chrono::NaiveDateTime::parse_from_str(taken_at, "%Y-%m-%d %H:%M:%S"))
                 .map_err(|_| anyhow::anyhow!("Base backup has invalid taken_at: '{}'", taken_at))?;
 
             if pitr_dt <= base_dt {

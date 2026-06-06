@@ -7,13 +7,46 @@ use crane::{config::Config, postgres_unit::entity::BackupMetadata};
 
 #[tokio::test]
 async fn test_backup_restore_extend() {
+    println!("Recreating Docker services...");
+
+    let output_down = std::process::Command::new("docker")
+        .args(["compose", "-f", "docker-compose.dev.yml", "down"])
+        .output()
+        .expect("Failed to execute docker compose down");
+    if !output_down.status.success() {
+        panic!(
+            "docker compose down failed: {}",
+            String::from_utf8_lossy(&output_down.stderr)
+        );
+    }
+
+    let output_up = std::process::Command::new("docker")
+        .args([
+            "compose",
+            "-f",
+            "docker-compose.dev.yml",
+            "up",
+            "-d",
+            "--build",
+        ])
+        .output()
+        .expect("Failed to execute docker compose up -d --build");
+    if !output_up.status.success() {
+        panic!(
+            "docker compose up failed: {}",
+            String::from_utf8_lossy(&output_up.stderr)
+        );
+    }
+
+    tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+
     let config_path = std::path::Path::new("tests/postgres/crane.toml");
     let config = read_config_toml_file(config_path).expect("Failed to load crane.toml");
 
     //Deploy
-    // crane::commands::deploy::run_deploy_command(&config, config_path, true)
-    //     .await
-    //     .expect("deploy failed");
+    crane::commands::deploy::run_deploy_command(&config, config_path, true)
+        .await
+        .expect("deploy failed");
 
     // Retrieve leader node and connect
     let primary_node = postgres_get_primary(&config)
@@ -30,7 +63,8 @@ async fn test_backup_restore_extend() {
     );
 
     println!("Step 2: insert 1 to test_table");
-    run_sql(&*interactor, "INSERT INTO test_table VALUES (1);");
+    // run_sql(&*interactor, "INSERT INTO test_table VALUES (1);");
+    let _pitr_insert_1 = testw_insert(interactor.clone(), 1).unwrap();
 
     // ============================================================
     // FULL BACKUP #1
@@ -42,15 +76,20 @@ async fn test_backup_restore_extend() {
     // ============================================================
     let pitr_insert_2 = testw_insert(interactor.clone(), 2).unwrap();
 
+    // Insert dummy record to ensure there is a transaction after pitr_insert_2
+    // before the backup is taken, so that PITR target time can be reached.
+    println!("\n\nSIMULATE DATA LOSS\n\n");
+    run_sql(&*interactor, "DROP TABLE test_table;");
+
     // ============================================================
     // CREATE INCREMENTAL BACKUP #1
     // ============================================================
-    let backup_incr_insert_2 = testw_incr_backup(&config, "incr_insert_2").unwrap();
+    let backup_incr1 = testw_incr_backup(&config, "incr1").unwrap();
 
     // ============================================================
     // RESTORE FROM INCREMENTAL BACKUP #1
     // ============================================================
-    testw_restore(&config, &backup_incr_insert_2, Some(&pitr_insert_2))
+    testw_restore(&config, &backup_incr1, Some(&pitr_insert_2))
         .await
         .unwrap();
 
@@ -101,30 +140,32 @@ async fn testw_restore(
 }
 
 fn testw_insert(interactor: Arc<dyn ServerInteractor>, value: i32) -> anyhow::Result<String> {
-    println!("Step 9: insert {} to table", value);
-    let _insert = run_sql(
+    println!("Insert {} to table", value);
+    let _pitr_insert_time = run_sql(
         &*interactor,
         &format!("INSERT INTO test_table VALUES ({});", value),
     );
-    std::thread::sleep(std::time::Duration::from_secs(1));
-    let pitr_insert_time = run_sql(
-        &*interactor,
-        "SELECT to_char(clock_timestamp(), 'YYYY-MM-DD HH24:MI:SS.MS');",
-    );
-    let pitr_insert_time = pitr_insert_time
-        .lines()
-        .map(|s| s.trim())
-        .find(|s| s.len() >= 19)
-        .unwrap_or("")
+
+    let pitr_insert_time = chrono::Utc::now()
+        .format("%Y-%m-%d %H:%M:%S%.6f")
         .to_string();
-    println!("\nSTORE pitr_insert_time {}: {}\n", value, pitr_insert_time);
+
+    println!(
+        "\nSTORE pitr_insert_time {}: {:?}\n",
+        value, pitr_insert_time
+    );
+
     Ok(pitr_insert_time)
 }
 
 fn testw_assert_table(interactor: Arc<dyn ServerInteractor>, expected: &str) -> anyhow::Result<()> {
-    println!("Assert test_table content: expected {} rows", expected);
+    println!("\nAssert test_table: expected {}\n", expected);
     let rows = run_sql(&*interactor, "SELECT id FROM test_table ORDER BY id;");
     // dbg!(&rows);
-    assert_eq!(rows, expected, "EXPECT {} BUT GOT {}", expected, rows);
+    assert_eq!(
+        rows, expected,
+        "SELECT test_table EXPECT `{}`. BUT GOT `{}`.",
+        expected, rows
+    );
     Ok(())
 }

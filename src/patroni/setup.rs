@@ -67,9 +67,9 @@ bootstrap:
         shared_buffers: 128MB
         wal_log_hints: "on"
         logging_collector: "on"
-        log_destination: "csvlog"
+        log_destination: "stderr"
         log_statement: "mod"
-        log_min_duration_statement: 0
+        log_min_duration_statement: -1
         log_line_prefix: '%t [%p]: user=%u db=%d app=%a client=%h '
         archive_mode: "on"
         archive_command: "cp %p /var/lib/postgresql/wal_archive/%f"
@@ -111,6 +111,13 @@ postgresql:
         pg_version = *pg_version,
         replica_pass = *replica_pass
     );
+
+    // TEMP DISABLE CSVLOG
+    // logging_collector: "on"
+    // log_destination: "csvlog"
+    // log_statement: "mod"
+    // log_min_duration_statement: 0
+    // log_line_prefix: '%t [%p]: user=%u db=%d app=%a client=%h '
 
     // println!("========== BEGIN PATRONI YAML ==========");
     // println!("{}", patroni_yaml);

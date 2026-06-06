@@ -18,7 +18,7 @@ pub fn postgres_backup(
     label: Option<&str>,
 ) -> anyhow::Result<BackupMetadata> {
     // 1. Get Date and Time from DB Node
-    let date_output = interactor.cmd("date +'%Y%m%d%H%M%S%3N %Y-%m-%d %H:%M:%S'")?;
+    let date_output = interactor.cmd("date +'%Y%m%d%H%M%S%3N %Y-%m-%d %H:%M:%S.%3N'")?;
     let parts: Vec<&str> = date_output.stdout.trim().split_whitespace().collect();
     if parts.len() < 3 {
         anyhow::bail!(
@@ -316,6 +316,63 @@ pub fn postgres_backup(
         interactor,
         "sudo chmod 644 /var/lib/postgresql/backups/registry.toml",
     )?;
+
+    // Force a WAL switch at the end of the backup to ensure that the WAL segment
+    // active during the backup is archived and available for PITR.
+    cmdw(interactor, "sudo mkdir -p /var/lib/postgresql/wal_archive")?;
+    cmdw(
+        interactor,
+        "sudo chown postgres:postgres /var/lib/postgresql/wal_archive",
+    )?;
+
+    let switch_out = interactor
+        .cmd(r#"sudo -u postgres psql -t -A -c "SELECT pg_walfile_name(pg_switch_wal() - 1);""#)?;
+    let wal_filename = switch_out.stdout.trim().to_string();
+    if wal_filename.is_empty() {
+        anyhow::bail!("pg_switch_wal() returned empty filename");
+    }
+    println!(
+        "Switched to new WAL. Switched segment filename: {}",
+        wal_filename
+    );
+
+    // Diagnostic: check actual archive_mode at runtime
+    if let Ok(am_out) = interactor.cmd(r#"sudo -u postgres psql -t -A -c "SHOW archive_mode;""#) {
+        println!("archive_mode = {}", am_out.stdout.trim());
+    }
+    if let Ok(ac_out) = interactor.cmd(r#"sudo -u postgres psql -t -A -c "SHOW archive_command;""#)
+    {
+        println!("archive_command = {}", ac_out.stdout.trim());
+    }
+
+    let pgdata_dir = format!("/var/lib/postgresql/{}/main", pg_version);
+
+    // Try immediate copy from pg_wal before the segment gets recycled
+    let wal_source = format!("{}/pg_wal/{}", pgdata_dir, wal_filename);
+    let wal_dest = format!("/var/lib/postgresql/wal_archive/{}", wal_filename);
+    let immediate_cp = format!("sudo -u postgres cp {} {}", wal_source, wal_dest);
+    match interactor.cmd(&immediate_cp) {
+        Ok(out) if out.exit_code == 0 => {
+            println!("WAL segment {} archived (immediate copy).", wal_filename);
+        }
+        _ => {
+            // File may already be in wal_archive via the archiver, or already recycled
+            let check_cmd = format!(
+                "sudo -u postgres test -f {} && echo 'yes' || echo 'no'",
+                wal_dest
+            );
+            if let Ok(check_out) = interactor.cmd(&check_cmd) {
+                if check_out.stdout.trim() == "yes" {
+                    println!("WAL segment {} already in archive.", wal_filename);
+                } else {
+                    println!(
+                        "WARNING: WAL segment {} not found in pg_wal or wal_archive. PITR may fail.",
+                        wal_filename
+                    );
+                }
+            }
+        }
+    }
 
     println!(
         "\nBACKUP {} {} completed\n",
