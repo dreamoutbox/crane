@@ -40,7 +40,7 @@ async fn test_promote() {
                 .iter()
                 .find(|n| n.node.name == follower.node.name)
             {
-                dbg!(&node);
+                // dbg!(&node);
 
                 if node.role == "Leader" && status_output.haproxy.primary == follower.node.name {
                     promoted_node_is_leader = true;

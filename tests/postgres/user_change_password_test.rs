@@ -1,19 +1,24 @@
+use crate::helper::{pg_allow_host_machine, reset_docker_compose, try_connect};
+
 // RUN:
 // RUST_LIB_BACKTRACE=0 RUST_BACKTRACE=1 cargo nextest run test_user_change_password -- --no-capture
 
-use std::process::Command;
-
 #[tokio::test]
 async fn test_user_change_password() {
+    println!("Recreating Docker compose...");
+    reset_docker_compose().await;
+
     //Deploy config with postgres user old password
     let old_config_path =
         std::path::Path::new("tests/postgres/crane.postgres_user_old_password.toml");
     let old_config =
         crane::config::read_config_toml_file(old_config_path).expect("Failed to load config");
-    crane::commands::deploy::run_deploy_command(&old_config, old_config_path, true).await.expect("deploy failed");
+    crane::commands::deploy::run_deploy_command(&old_config, old_config_path, true)
+        .await
+        .expect("deploy failed");
 
     // Allow host machine connection to Docker container
-    allow_host_connection(old_config_path);
+    pg_allow_host_machine(&old_config);
 
     //Assert user can connect postgres with old-password
     let conn_old = try_connect("u1", "old-password", "mydb");
@@ -28,10 +33,12 @@ async fn test_user_change_password() {
         std::path::Path::new("tests/postgres/crane.postgres_user_new_password.toml");
     let new_config =
         crane::config::read_config_toml_file(new_config_path).expect("Failed to load config");
-    crane::commands::deploy::run_deploy_command(&new_config, new_config_path, true).await.expect("deploy failed");
+    crane::commands::deploy::run_deploy_command(&new_config, new_config_path, true)
+        .await
+        .expect("deploy failed");
 
     // Allow host machine connection again since configuration was redeployed
-    allow_host_connection(new_config_path);
+    pg_allow_host_machine(&new_config);
 
     //Assert user can't connect postgres with old password
     let conn_old_fail = try_connect("u1", "old-password", "mydb");

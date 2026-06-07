@@ -1,4 +1,7 @@
-static POSTGRES_LOGS_COMMANDS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+use crate::{
+    mock_interactor_log_recorder::{MockServerInteractorLogsRecorder, POSTGRES_LOGS_COMMANDS},
+    mock_interactor_user_not_exist::MockServerInteractorUserNotExist,
+};
 
 #[test]
 fn test_postgres_logs_command() {

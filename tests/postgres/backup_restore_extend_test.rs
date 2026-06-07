@@ -1,44 +1,20 @@
 // RUN:
 // RUST_BACKTRACE=1 cargo nextest run test_backup_restore_extend -- --no-capture
 
+use crate::helper::{reset_docker_compose, run_sql};
+use crane::commands::postgres_backup::backup_from_config_wrapper;
+use crane::commands::postgres_restore::run_postgres_restore_cmd;
+use crane::config::{Config, read_config_toml_file};
+use crane::postgres_unit::entity::BackupMetadata;
+use crane::postgres_unit::helper::postgres_get_primary;
+use crane::server_interactor::get_server_interactor;
+use crane::server_interactor::server_interactor_trait::ServerInteractor;
 use std::sync::Arc;
-
-use crane::{config::Config, postgres_unit::entity::BackupMetadata};
 
 #[tokio::test]
 async fn test_backup_restore_extend() {
-    println!("Recreating Docker services...");
-
-    let output_down = std::process::Command::new("docker")
-        .args(["compose", "-f", "docker-compose.dev.yml", "down"])
-        .output()
-        .expect("Failed to execute docker compose down");
-    if !output_down.status.success() {
-        panic!(
-            "docker compose down failed: {}",
-            String::from_utf8_lossy(&output_down.stderr)
-        );
-    }
-
-    let output_up = std::process::Command::new("docker")
-        .args([
-            "compose",
-            "-f",
-            "docker-compose.dev.yml",
-            "up",
-            "-d",
-            "--build",
-        ])
-        .output()
-        .expect("Failed to execute docker compose up -d --build");
-    if !output_up.status.success() {
-        panic!(
-            "docker compose up failed: {}",
-            String::from_utf8_lossy(&output_up.stderr)
-        );
-    }
-
-    tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+    println!("Recreating Docker compose...");
+    reset_docker_compose().await;
 
     let config_path = std::path::Path::new("tests/postgres/crane.toml");
     let config = read_config_toml_file(config_path).expect("Failed to load crane.toml");

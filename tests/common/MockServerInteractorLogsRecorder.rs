@@ -1,4 +1,12 @@
+use crane::{
+    server_interactor::server_interactor_trait::{ServerInteractor, ServiceRegister, UserRegister},
+    ssh::CmdOutput,
+};
+
 pub struct MockServerInteractorLogsRecorder;
+
+pub static POSTGRES_LOGS_COMMANDS: std::sync::Mutex<Vec<String>> =
+    std::sync::Mutex::new(Vec::new());
 
 impl ServerInteractor for MockServerInteractorLogsRecorder {
     fn whoami(&self) -> anyhow::Result<String> {
@@ -112,10 +120,20 @@ impl ServerInteractor for MockServerInteractorLogsRecorder {
     fn firewall_reset(&self) -> anyhow::Result<()> {
         Ok(())
     }
-    fn firewall_allow_port(&self, _port: u16, _proto: &str, _source: Option<&str>) -> anyhow::Result<()> {
+    fn firewall_allow_port(
+        &self,
+        _port: u16,
+        _proto: &str,
+        _source: Option<&str>,
+    ) -> anyhow::Result<()> {
         Ok(())
     }
-    fn firewall_deny_port(&self, _port: u16, _proto: &str, _source: Option<&str>) -> anyhow::Result<()> {
+    fn firewall_deny_port(
+        &self,
+        _port: u16,
+        _proto: &str,
+        _source: Option<&str>,
+    ) -> anyhow::Result<()> {
         Ok(())
     }
     fn firewall_allow_source(&self, _source: &str) -> anyhow::Result<()> {

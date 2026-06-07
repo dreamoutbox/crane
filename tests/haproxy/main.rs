@@ -1,12 +1,9 @@
 use crane::haproxy_unit::haproxy::{install_haproxy, setup_haproxy_unified};
-use crane::server_interactor::server_interactor_trait::{
-    ServerInteractor, ServiceRegister, UserRegister,
-};
-use crane::ssh::CmdOutput;
-use std::cell::RefCell;
-use std::collections::HashMap;
 
-include!("../common/mock_interactor.rs");
+#[path = "../common/mock_interactor.rs"]
+pub mod mock_interactor;
+
+use mock_interactor::MockInteractor;
 
 #[test]
 fn test_haproxy_install() {

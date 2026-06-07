@@ -164,25 +164,6 @@ async fn test_deploy() {
     let primary_interactor =
         get_server_interactor(&primary_node.name).expect("Failed to connect to primary node");
 
-    let pg_hba_path = "/etc/postgresql/17/main/pg_hba.conf";
-    let add_rule_cmd = format!(
-        "echo 'host all all 10.0.0.0/24 scram-sha-256' | sudo tee -a {}",
-        pg_hba_path
-    );
-    primary_interactor
-        .cmd(&add_rule_cmd)
-        .expect("failed to add pg_hba rule");
-    primary_interactor
-        .cmd("sudo -u postgres psql -c 'SELECT pg_reload_conf();'")
-        .expect("failed to reload pg config");
-
-    primary_interactor
-        .firewall_allow_source("10.0.0.0/24")
-        .expect("failed to allow subnet in firewall");
-    primary_interactor
-        .firewall_reload()
-        .expect("failed to reload firewall");
-
     let primary_port = match primary_node.name.as_str() {
         "vps1" => "5001",
         "vps2" => "5002",

@@ -5,10 +5,10 @@ fn test_get_postgres_configs() {
     let toml_str = r#"
             [[nodes]]
             name = "vps1"
-            host = "localhost"
-            public_ip = "localhost"
+            public_ip = "127.0.0.1"
             internal_ip = "10.0.0.11"
-            port = 2221
+            ssh_ip = "127.0.0.1"
+            ssh_port = 2221
             user = "admin"
             roles = ["postgres"]
             private_key = "dummy"

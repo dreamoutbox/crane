@@ -1,32 +1,24 @@
-mod postgres {
-    use crane::s3::S3Client;
-    use crane::ssh::CmdOutput;
+#[path = "../common/mock_interactor.rs"]
+pub mod mock_interactor;
 
-    use crane::server_interactor::server_interactor_trait::{ServiceRegister, UserRegister};
-    use std::cell::RefCell;
-    use std::collections::HashMap;
+#[path = "../common/MockServerInteractorLogsRecorder.rs"]
+pub mod mock_interactor_log_recorder;
 
-    include!("../common/mock_interactor.rs");
-    include!("../common/mock_s3.rs");
-    include!("../common/MockServerInteractorLogsRecorder.rs");
-    include!("../common/MockServerInteractorUserNotExist.rs");
-    include!("helper.rs");
+#[path = "../common/mock_s3.rs"]
+pub mod mock_s3;
 
-    include!("config_test.rs");
+#[path = "../common/MockServerInteractorUserNotExist.rs"]
+pub mod mock_interactor_user_not_exist;
 
-    include!("logs_test.rs");
+pub mod helper;
 
-    include!("user_change_password_test.rs");
-    include!("user_state_test.rs");
-
-    include!("promote_test.rs");
-
-    include!("failover_test.rs");
-
-    include!("database_persist_test.rs");
-
-    include!("python_backup_script_test.rs");
-
-    include!("backup_restore_test.rs");
-    include!("backup_restore_extend_test.rs");
-}
+mod backup_restore_extend_test;
+mod backup_restore_test;
+mod config_test;
+mod database_persist_test;
+mod failover_test;
+mod logs_test;
+mod promote_test;
+mod python_backup_script_test;
+mod user_change_password_test;
+mod user_state_test;

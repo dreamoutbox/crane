@@ -1,8 +1,9 @@
 // RUN:
 // RUST_BACKTRACE=1 cargo nextest run test_backup_restore -- --no-capture
 
+use crate::helper::run_sql;
 use crane::commands::postgres_restore::run_postgres_restore_cmd;
-use crane::server_interactor::server_interactor_trait::ServerInteractor;
+use crane::server_interactor::get_server_interactor;
 use crane::{
     commands::postgres_backup::backup_from_config_wrapper, config::read_config_toml_file,
     postgres_unit::helper::postgres_get_primary,
@@ -211,11 +212,4 @@ async fn test_backup_restore() {
     println!("Step 20: assert table have 1,4 in table");
     let rows = run_sql(&*interactor, "SELECT id FROM test_table ORDER BY id;");
     assert_eq!(rows, "1\n4");
-}
-
-pub fn run_sql(interactor: &dyn ServerInteractor, sql: &str) -> String {
-    let cmd = format!("sudo -u postgres psql -d mydb -t -A -c {:?}", sql);
-    let out = interactor.cmd(&cmd).expect("SQL execution failed");
-    assert_eq!(out.exit_code, 0, "SQL failed: {}", out.stderr);
-    out.stdout.trim().to_string()
 }

@@ -1,7 +1,7 @@
-mod parse_config_test;
-
 use crane::config::resolve_placeholders;
 use std::collections::HashMap;
+
+mod parse_config_test;
 
 #[test]
 fn test_resolve_placeholders_success() {

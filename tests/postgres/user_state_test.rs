@@ -1,6 +1,8 @@
 // RUN:
 // RUST_LIB_BACKTRACE=0 RUST_BACKTRACE=1 cargo nextest run test_user_state -- --no-capture
 
+use crate::helper::{pg_allow_host_machine, try_connect};
+
 #[tokio::test]
 async fn test_user_state() {
     //Deploy config with postgres user present
@@ -8,11 +10,16 @@ async fn test_user_state() {
         std::path::Path::new("tests/postgres/crane.postgres_user_present.toml");
     let user_present_config = crane::config::read_config_toml_file(user_present_config_path)
         .expect("Failed to load config");
-    crane::commands::deploy::run_deploy_command(&user_present_config, user_present_config_path, true).await
-        .expect("deploy failed");
+    crane::commands::deploy::run_deploy_command(
+        &user_present_config,
+        user_present_config_path,
+        true,
+    )
+    .await
+    .expect("deploy failed");
 
     // Allow host machine connection to Docker container
-    allow_host_connection(user_present_config_path);
+    pg_allow_host_machine(&user_present_config);
 
     //Assert user can connect postgres
     let conn_old = try_connect("u1", "u1", "mydb");
@@ -27,11 +34,12 @@ async fn test_user_state() {
         std::path::Path::new("tests/postgres/crane.postgres_user_absent.toml");
     let user_absent_config = crane::config::read_config_toml_file(user_absent_config_path)
         .expect("Failed to load config");
-    crane::commands::deploy::run_deploy_command(&user_absent_config, user_absent_config_path, true).await
+    crane::commands::deploy::run_deploy_command(&user_absent_config, user_absent_config_path, true)
+        .await
         .expect("deploy failed");
 
     // Allow host machine connection again since configuration was redeployed
-    allow_host_connection(user_absent_config_path);
+    pg_allow_host_machine(&user_absent_config);
 
     //Assert user can't connect postgres
     let conn_old_fail = try_connect("u1", "u1", "mydb");

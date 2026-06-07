@@ -1,8 +1,17 @@
 // RUN:
 // RUST_BACKTRACE=1 cargo nextest run test_database_persist_after_deploy -- --no-capture
 
+use crate::helper::{reset_docker_compose, run_sql};
+use crane::{
+    config::read_config_toml_file, postgres_unit::helper::postgres_get_primary,
+    server_interactor::get_server_interactor,
+};
+
 #[tokio::test]
 async fn test_database_persist_after_deploy() {
+    println!("Recreating Docker compose...");
+    reset_docker_compose().await;
+
     let config_path = std::path::Path::new("demo/crane.minimal.toml");
     let config = read_config_toml_file(config_path).expect("Failed to load crane.toml");
 

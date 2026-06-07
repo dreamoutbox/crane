@@ -1,4 +1,7 @@
+use crane::s3::S3Client;
 #[allow(unused)]
+use std::cell::RefCell;
+use std::collections::HashMap;
 
 struct MockS3Client {
     objects: RefCell<HashMap<String, Vec<u8>>>,

@@ -1,3 +1,8 @@
+use crane::{
+    server_interactor::server_interactor_trait::{ServerInteractor, ServiceRegister, UserRegister},
+    ssh::CmdOutput,
+};
+
 pub struct MockServerInteractorUserNotExist;
 
 impl ServerInteractor for MockServerInteractorUserNotExist {
@@ -111,10 +116,20 @@ impl ServerInteractor for MockServerInteractorUserNotExist {
     fn firewall_reset(&self) -> anyhow::Result<()> {
         Ok(())
     }
-    fn firewall_allow_port(&self, _port: u16, _proto: &str, _source: Option<&str>) -> anyhow::Result<()> {
+    fn firewall_allow_port(
+        &self,
+        _port: u16,
+        _proto: &str,
+        _source: Option<&str>,
+    ) -> anyhow::Result<()> {
         Ok(())
     }
-    fn firewall_deny_port(&self, _port: u16, _proto: &str, _source: Option<&str>) -> anyhow::Result<()> {
+    fn firewall_deny_port(
+        &self,
+        _port: u16,
+        _proto: &str,
+        _source: Option<&str>,
+    ) -> anyhow::Result<()> {
         Ok(())
     }
     fn firewall_allow_source(&self, _source: &str) -> anyhow::Result<()> {

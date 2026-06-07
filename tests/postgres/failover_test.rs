@@ -1,8 +1,15 @@
 // RUN:
 // RUST_BACKTRACE=1 cargo nextest run --test postgres -- test_failover --no-capture
 
+use crane::server_interactor::get_server_interactor;
+
+use crate::helper::reset_docker_compose;
+
 #[tokio::test]
 async fn test_failover() {
+    println!("Recreating Docker compose...");
+    reset_docker_compose().await;
+
     let config_path = std::path::Path::new("tests/postgres/crane.toml");
     let config =
         crane::config::read_config_toml_file(config_path).expect("Failed to load crane.toml");

@@ -1,8 +1,8 @@
+// RUN:
+// cargo nextest run --test app_instance -- --nocapture
+
 use std::path::Path;
 use std::process::Command;
-
-// RUN:
-// cargo nextest run --test app_instance --nocapture
 
 #[tokio::test]
 async fn test_app_instances_can_connect_each_other() {

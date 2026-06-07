@@ -1,16 +1,22 @@
+use crane::server_interactor::server_interactor_trait::{
+    ServerInteractor, ServiceRegister, UserRegister,
+};
+use crane::ssh::CmdOutput;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::process::Child;
 
 #[allow(unused)]
 
 pub struct MockInteractor {
-    commands: RefCell<Vec<String>>,
-    files: RefCell<HashMap<String, String>>,
-    simulated_dates: Vec<String>,
+    pub commands: RefCell<Vec<String>>,
+    pub files: RefCell<HashMap<String, String>>,
+    pub simulated_dates: Vec<String>,
 }
 
 impl MockInteractor {
     #[allow(dead_code)]
-    fn new(simulated_dates: Vec<String>) -> Self {
+    pub fn new(simulated_dates: Vec<String>) -> Self {
         Self {
             commands: RefCell::new(Vec::new()),
             files: RefCell::new(HashMap::new()),
@@ -161,10 +167,20 @@ impl ServerInteractor for MockInteractor {
     fn firewall_reset(&self) -> anyhow::Result<()> {
         Ok(())
     }
-    fn firewall_allow_port(&self, _port: u16, _proto: &str, _source: Option<&str>) -> anyhow::Result<()> {
+    fn firewall_allow_port(
+        &self,
+        _port: u16,
+        _proto: &str,
+        _source: Option<&str>,
+    ) -> anyhow::Result<()> {
         Ok(())
     }
-    fn firewall_deny_port(&self, _port: u16, _proto: &str, _source: Option<&str>) -> anyhow::Result<()> {
+    fn firewall_deny_port(
+        &self,
+        _port: u16,
+        _proto: &str,
+        _source: Option<&str>,
+    ) -> anyhow::Result<()> {
         Ok(())
     }
     fn firewall_allow_source(&self, _source: &str) -> anyhow::Result<()> {
