@@ -173,24 +173,31 @@
 ## How It Works
 
 1. **Multiplexed SSH**: Crane opens a single multiplexed master SSH connection (`ControlMaster`) to each node.
-2. **Security Provisioning**: Resets and configures the host firewall (UFW) to only expose ports 22, 80, and 443 publicly, and fully whitelist inter-node communication.
+2. **Security Provisioning**: configures the nodes firewall (UFW) to only expose ports 22, 80, and 443 publicly, and fully whitelist inter-node communication.
 3. **Database Topology**: Configures Patroni and etcd clusters on nodes with the `postgres` role.
 4. **App Delivery**: Compresses the application, transfers it over SCP, extracts it, merges environmental variables, starts the systemd service instances, and polls health checks.
 5. **Reverse Proxying**: Hooks up HAProxy/Traefik reverse proxies to distribute incoming public traffic across the running instances.
 
 ---
 
-## Maintenance Commands
+## Basic Commands
 
 | Command | Description |
 | :--- | :--- |
+| `crane deploy` | Deploy the application and database cluster. |
 | `crane status` | Display cluster status, node health, and app instances. |
+| `crane logs <app>` | Stream application standard output/error logs. |
+
+## PostgreSQL Management Commands
+
+| Command | Description |
+| :--- | :--- |
 | `crane pg status` | Inspect the PostgreSQL active primary/replica topologies and replication lag. |
 | `crane pg promote --node <host>` | Force-promote a specific node to primary database leader. |
 | `crane pg backup <full\|incr>` | Trigger a manual full or incremental cluster database backup to S3. |
 | `crane pg list` | List available database backups. |
 | `crane pg restore <backup_id> [--pitr <TIME>]` | Restore the database state from an S3 backup ID. with  Point-in-time recovery support. --pitr \<YYYY-MM-DD HH:MM:SS\> |
-| `crane logs <app>` | Stream application standard output/error logs. |
+
 
 ---
 
@@ -211,7 +218,7 @@
    # Setup dev SSH keys
    ./setup-ssh.sh
 
-   # Setup docker for simulate VPS setup
+   # Setup docker for simulate VPS servers setup
    ./setup-docker.sh
    ```
 2. **Run Code Verification**:
