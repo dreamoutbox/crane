@@ -104,6 +104,7 @@ pub async fn reset_docker_compose() {
     println!("Checking SSH connectivity to vps1-3...");
     for port in [2221, 2222, 2223] {
         let mut attempt = 1;
+
         loop {
             let status = std::process::Command::new("ssh")
                 .args([
@@ -135,13 +136,15 @@ pub async fn reset_docker_compose() {
                             port
                         );
                     }
+
                     attempt += 1;
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 }
             }
         }
     }
-    println!("✓ Connection verification succeeded for all VPS instances");
+
+    println!("Connection to all VPS ready");
 }
 
 pub fn run_sql(interactor: &dyn ServerInteractor, sql: &str) -> String {

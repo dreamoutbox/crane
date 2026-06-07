@@ -40,33 +40,33 @@ async fn test_backup_restore_extend() {
 
     println!("Step 2: insert 1 to test_table");
     // run_sql(&*interactor, "INSERT INTO test_table VALUES (1);");
-    let _pitr_insert_1 = testw_insert(interactor.clone(), 1).unwrap();
+    let _pitr_insert_1 = tw_insert(interactor.clone(), 1).unwrap();
 
     // ============================================================
     // FULL BACKUP #1
     // ============================================================
-    let _backup_meta_full_1 = testw_full_backup(&config, "full1").unwrap();
+    let _backup_meta_full_1 = tw_full_backup(&config, "full1").unwrap();
 
     // ============================================================
     // INSERT 2
     // ============================================================
-    let pitr_insert_2 = testw_insert(interactor.clone(), 2).unwrap();
+    let pitr_insert_2 = tw_insert(interactor.clone(), 2).unwrap();
 
     // ============================================================
     // SIMULATE DATA LOSS
     // ============================================================
     println!("\n\nSIMULATE DATA LOSS\n\n");
-    run_sql(&*interactor, "DROP TABLE test_table;");
+    let _time_before_drop = tw_drop(interactor.clone()).await;
 
     // ============================================================
     // CREATE INCREMENTAL BACKUP #1
     // ============================================================
-    let backup_incr1 = testw_incr_backup(&config, "incr1").unwrap();
+    let backup_incr1 = tw_incr_backup(&config, "incr1").unwrap();
 
     // ============================================================
     // RESTORE FROM INCREMENTAL BACKUP #1
     // ============================================================
-    testw_restore(&config, &backup_incr1, Some(&pitr_insert_2))
+    tw_restore(&config, &backup_incr1, Some(&pitr_insert_2))
         .await
         .unwrap();
 
@@ -75,7 +75,7 @@ async fn test_backup_restore_extend() {
     // ============================================================
     let interactor = get_server_interactor(&primary_node.name).unwrap();
 
-    testw_assert_table(interactor, "1\n2").unwrap();
+    tw_assert_table(interactor, "1\n2").unwrap();
 
     // ============================================================
     // EXPECT ERROR WHEN RUNNING INCREMENTAL TEST
@@ -97,7 +97,7 @@ async fn test_backup_restore_extend() {
     // ============================================================
     // TAKE FULL BACKUP
     // ============================================================
-    let _backup_full_2 = testw_full_backup(&config, "full2").unwrap();
+    let _backup_full_2 = tw_full_backup(&config, "full2").unwrap();
 
     // Reconnect to get a fresh interactor
     let interactor = get_server_interactor(&primary_node.name).unwrap();
@@ -105,23 +105,23 @@ async fn test_backup_restore_extend() {
     // ============================================================
     // INSERT 3 TO TABLE
     // ============================================================
-    let pitr_insert_3 = testw_insert(interactor.clone(), 3).unwrap();
+    let _pitr_insert_3 = tw_insert(interactor.clone(), 3).unwrap();
 
     // ============================================================
     // DROP TABLE (SIMULATE DATA LOSS)
     // ============================================================
     println!("\n\nSIMULATE DATA LOSS 2\n\n");
-    run_sql(&*interactor, "DROP TABLE test_table;");
+    let time_before_drop = tw_drop(interactor.clone()).await;
 
     // ============================================================
     // TAKE INCREMENTAL BACKUP
     // ============================================================
-    let backup_incr2 = testw_incr_backup(&config, "incr2").unwrap();
+    let backup_incr2 = tw_incr_backup(&config, "incr2").unwrap();
 
     // ============================================================
     // RESTORE FROM INCREMENTAL BACKUP
     // ============================================================
-    testw_restore(&config, &backup_incr2, Some(&pitr_insert_3))
+    tw_restore(&config, &backup_incr2, Some(&time_before_drop))
         .await
         .unwrap();
 
@@ -129,10 +129,10 @@ async fn test_backup_restore_extend() {
     // ASSERT 1,2,3 IN TABLE
     // ============================================================
     let interactor = get_server_interactor(&primary_node.name).unwrap();
-    testw_assert_table(interactor, "1\n2\n3").unwrap();
+    tw_assert_table(interactor, "1\n2\n3").unwrap();
 }
 
-fn testw_full_backup(config: &Config, backup_name: &str) -> anyhow::Result<BackupMetadata> {
+fn tw_full_backup(config: &Config, backup_name: &str) -> anyhow::Result<BackupMetadata> {
     println!("Create full backup");
 
     let backup_meta =
@@ -143,7 +143,7 @@ fn testw_full_backup(config: &Config, backup_name: &str) -> anyhow::Result<Backu
     Ok(backup_meta)
 }
 
-fn testw_incr_backup(config: &Config, backup_name: &str) -> anyhow::Result<BackupMetadata> {
+fn tw_incr_backup(config: &Config, backup_name: &str) -> anyhow::Result<BackupMetadata> {
     println!("Create incremental backup");
 
     let backup_meta = backup_from_config_wrapper(&config, "incr", Some(backup_name))
@@ -153,7 +153,7 @@ fn testw_incr_backup(config: &Config, backup_name: &str) -> anyhow::Result<Backu
     Ok(backup_meta)
 }
 
-async fn testw_restore(
+async fn tw_restore(
     config: &Config,
     backup_meta: &BackupMetadata,
     pitr: Option<&str>,
@@ -170,27 +170,31 @@ async fn testw_restore(
     Ok(())
 }
 
-fn testw_insert(interactor: Arc<dyn ServerInteractor>, value: i32) -> anyhow::Result<String> {
+fn get_time_for_pitr() -> String {
+    let pitr_time = chrono::Utc::now()
+        .format("%Y-%m-%d %H:%M:%S%.6f")
+        .to_string();
+
+    pitr_time
+}
+
+fn tw_insert(interactor: Arc<dyn ServerInteractor>, value: i32) -> anyhow::Result<String> {
     println!("Insert {} to table", value);
     let _pitr_insert_time = run_sql(
         &*interactor,
         &format!("INSERT INTO test_table VALUES ({});", value),
     );
 
-    let pitr_insert_time = chrono::Utc::now()
-        .format("%Y-%m-%d %H:%M:%S%.6f")
-        .to_string();
+    let insert_time = get_time_for_pitr();
 
-    println!(
-        "\nSTORE pitr_insert_time {}: {:?}\n",
-        value, pitr_insert_time
-    );
+    println!("\ntw_insert {} insert_time={:?}\n", value, insert_time);
 
-    Ok(pitr_insert_time)
+    Ok(insert_time)
 }
 
-fn testw_assert_table(interactor: Arc<dyn ServerInteractor>, expected: &str) -> anyhow::Result<()> {
+fn tw_assert_table(interactor: Arc<dyn ServerInteractor>, expected: &str) -> anyhow::Result<()> {
     println!("\nAssert test_table: expected {}\n", expected);
+
     let rows = run_sql(&*interactor, "SELECT id FROM test_table ORDER BY id;");
     // dbg!(&rows);
     assert_eq!(
@@ -198,5 +202,19 @@ fn testw_assert_table(interactor: Arc<dyn ServerInteractor>, expected: &str) -> 
         "SELECT test_table EXPECT `{}`. BUT GOT `{}`.",
         expected, rows
     );
+
     Ok(())
+}
+
+async fn tw_drop(interactor: Arc<dyn ServerInteractor>) -> String {
+    let time_before_drop = get_time_for_pitr();
+
+    println!(
+        "\nDROP table test_table. time_before_drop: {}\n",
+        time_before_drop
+    );
+
+    run_sql(&*interactor, "DROP TABLE test_table;");
+
+    time_before_drop
 }
