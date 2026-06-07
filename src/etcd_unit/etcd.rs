@@ -1,13 +1,10 @@
 use crate::{
-    config, helper::server::wait_for_service_status,
+    config,
     server_interactor::server_interactor_trait::ServerInteractor,
 };
 
 fn install_etcd(interactor: &dyn ServerInteractor) -> anyhow::Result<()> {
-    let installed = interactor
-        .cmd("which etcd")
-        .map(|out| out.exit_code == 0)
-        .unwrap_or(false);
+    let installed = interactor.check_binary("etcd").unwrap_or(false);
 
     if !installed {
         println!("\tInstalling etcd-server and etcd-client...");
@@ -32,20 +29,17 @@ pub fn setup_etcd(
 
     install_etcd(interactor)?;
 
-    let etcd_configured = interactor
-        .cmd("test -f /etc/default/etcd")
-        .map(|out| out.exit_code == 0)
-        .unwrap_or(false);
+    let etcd_configured = interactor.exists("/etc/default/etcd").unwrap_or(false);
     if !etcd_configured {
         // Stop etcd cleanly and remove data directory; wait to ensure it is fully stopped
         let _ = interactor.stop_service("etcd");
-        let _ = wait_for_service_status(interactor, "etcd", "inactive", 30);
-        let _ = interactor.cmd("sudo rm -rf /var/lib/etcd/");
+        let _ = interactor.wait_for_service_status("etcd", "inactive", 30);
+        let _ = interactor.rm("/var/lib/etcd/");
 
         // Recreate with correct ownership so the etcd service user can write to it
-        interactor.cmd("sudo mkdir -p /var/lib/etcd")?;
-        interactor.cmd("sudo chown etcd:etcd /var/lib/etcd")?;
-        interactor.cmd("sudo chmod 700 /var/lib/etcd")?;
+        interactor.mkdir("/var/lib/etcd")?;
+        interactor.chown("/var/lib/etcd", "etcd", "etcd")?;
+        interactor.chmod("/var/lib/etcd", "700")?;
     }
 
     let initial_cluster = pg_nodes
@@ -57,8 +51,7 @@ pub fn setup_etcd(
     // Use "existing" if etcd member data already exists to avoid re-triggering
     // Patroni DCS re-bootstrap (and pg_basebackup) on every redeploy.
     let has_etcd_data = interactor
-        .cmd("test -d /var/lib/etcd/default.etcd/member")
-        .map(|o| o.exit_code == 0)
+        .exists("/var/lib/etcd/default.etcd/member")
         .unwrap_or(false);
     let cluster_state = if has_etcd_data { "existing" } else { "new" };
 
@@ -87,8 +80,8 @@ ETCD_ADVERTISE_CLIENT_URLS="http://{internal_ip}:2379"
 
     let etcd_default_path = "/etc/default/etcd";
     interactor.create_file(etcd_default_path, &etcd_default)?;
-    interactor.cmd(&format!("sudo chown root:root '{}'", etcd_default_path))?;
-    interactor.cmd(&format!("sudo chmod 644 '{}'", etcd_default_path))?;
+    interactor.chown(etcd_default_path, "root", "root")?;
+    interactor.chmod(etcd_default_path, "644")?;
 
     Ok(())
 }

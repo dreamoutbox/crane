@@ -300,13 +300,12 @@ fn inner_deploy_single_app(
         // Ensure correct ownership of extracted files
         node_interactor.chown(&app_dir, &app.deploy_user, &app.deploy_user)?;
         // Chmod the entrypoint to be executable
-        node_interactor.cmd(&format!(
-            "sudo chmod +x '{}/{}'",
-            app_dir,
-            app.entrypoint.trim_start_matches("./")
-        ))?;
+        node_interactor.chmod(
+            &format!("{}/{}", app_dir, app.entrypoint.trim_start_matches("./")),
+            "+x",
+        )?;
         // Remove the remote temporary zip file
-        node_interactor.cmd(&format!("rm -f '{}'", temp_zip_path))?;
+        node_interactor.rm(&temp_zip_path)?;
 
         // Run pre-deploy script if configured
         if let Some(ref pre_script) = app.pre_deploy_script {
@@ -318,7 +317,7 @@ fn inner_deploy_single_app(
                 clean_script_path
             );
 
-            node_interactor.cmd(&format!("sudo chmod +x '{}'", script_full_path))?;
+            node_interactor.chmod(&script_full_path, "+x")?;
             let out = node_interactor.cmd(&format!(
                 "sudo -u '{}' '{}'",
                 app.deploy_user, script_full_path
@@ -416,13 +415,9 @@ fn inner_deploy_single_app(
             let start_time = std::time::Instant::now();
 
             while start_time.elapsed().as_secs() < timeout_secs {
-                let curl_cmd = format!(
-                    "curl -s -o /dev/null -w \"%{{http_code}}\" http://127.0.0.1:{}{}",
-                    port, health_path
-                );
-
-                if let Ok(code) = node_interactor.cmd(&curl_cmd) {
-                    if code.stdout.trim() == "200" {
+                let url = format!("http://127.0.0.1:{}{}", port, health_path);
+                if let Ok(code) = node_interactor.check_http_status(&url) {
+                    if code == 200 {
                         healthy = true;
                         break;
                     }

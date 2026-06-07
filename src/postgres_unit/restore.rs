@@ -184,7 +184,7 @@ pub async fn postgres_restore(
                 Ok(interactor) => {
                     let _ = interactor.stop_service("patroni");
                     let _ = interactor.stop_service("postgresql --no-block");
-                    let _ = interactor.cmd("sudo pkill -9 -u postgres postgres");
+                    let _ = interactor.kill_postgres_processes();
                 }
                 Err(e) => {
                     println!("Warning: failed to connect to node {}: {}", node.name, e);
@@ -470,8 +470,7 @@ pub async fn postgres_restore(
         let mut recovery_complete = false;
 
         while start_time.elapsed() < timeout {
-            let check_res =
-                interactor.cmd("sudo -u postgres psql -t -A -c \"SELECT pg_is_in_recovery();\"");
+            let check_res = interactor.psql(Some("SELECT pg_is_in_recovery();"), None, None, true);
             if let Ok(out) = check_res {
                 if out.stdout.trim() == "f" {
                     recovery_complete = true;
@@ -487,7 +486,7 @@ pub async fn postgres_restore(
             "sudo -u postgres {} -D {} stop -m fast",
             pg_ctl, pgdata_dir
         ));
-        let _ = interactor.cmd("sudo rm -f /tmp/pg_start.log");
+        let _ = interactor.rm("/tmp/pg_start.log");
 
         if !recovery_complete {
             anyhow::bail!(
@@ -504,13 +503,12 @@ pub async fn postgres_restore(
     // Wait for primary node to become the Patroni leader
     println!("Waiting a node to become Patroni leader...");
     let mut primary_ready = false;
-    let check_leader_cmd = "curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8008/primary";
     let start_time = std::time::Instant::now();
     let timeout = std::time::Duration::from_secs(300); // 5 minutes
 
     while start_time.elapsed() < timeout {
-        if let Ok(out) = interactor.cmd(check_leader_cmd) {
-            if out.stdout.trim() == "200" {
+        if let Ok(code) = interactor.check_http_status("http://127.0.0.1:8008/primary") {
+            if code == 200 {
                 primary_ready = true;
                 break;
             }
@@ -542,7 +540,7 @@ pub async fn postgres_restore(
             "sudo -u postgres sed -i '/restore_command/d;/recovery_target/d' {}",
             pitr_conf_path
         ));
-        let _ = interactor.cmd("sudo -u postgres psql -c \"SELECT pg_reload_conf();\"");
+        let _ = interactor.psql(Some("SELECT pg_reload_conf();"), None, None, false);
     }
 
     // Start Patroni on replica nodes

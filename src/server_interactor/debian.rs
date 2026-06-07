@@ -259,11 +259,7 @@ impl ServerInteractor for DebianInteractor {
         &self,
         user_register: super::server_interactor_trait::UserRegister,
     ) -> anyhow::Result<()> {
-        // Check if user exists. If not, create it.
-        let user_check = self
-            .ssh
-            .run_cmd(&self.wrap_sudo(&format!("id -u {}", user_register.username)))?;
-        if user_check.exit_code != 0 {
+        if !self.user_exists(&user_register.username)? {
             let create_result = self.run_stdout(&format!(
                 "sudo useradd -m -s /bin/bash {}",
                 user_register.username
@@ -500,5 +496,144 @@ impl ServerInteractor for DebianInteractor {
     fn tar_extract(&self, archive: &str, dest: &str) -> anyhow::Result<()> {
         self.run_stdout(&format!("sudo tar -xf '{}' -C '{}'", archive, dest))?;
         Ok(())
+    }
+
+    fn user_exists(&self, username: &str) -> anyhow::Result<bool> {
+        let user_check = self
+            .ssh
+            .run_cmd(&self.wrap_sudo(&format!("id -u {}", username)))?;
+        Ok(user_check.exit_code == 0)
+    }
+
+    fn check_binary(&self, binary: &str) -> anyhow::Result<bool> {
+        let check = self.cmd(&format!("which {}", binary))?;
+        Ok(check.exit_code == 0 && !check.stdout.trim().is_empty())
+    }
+
+    fn check_http_status(&self, url: &str) -> anyhow::Result<u16> {
+        let cmd = format!("curl -s -o /dev/null -w \"%{{http_code}}\" {}", url);
+        let out = self.cmd(&cmd)?;
+        let code = out.stdout.trim().parse::<u16>().unwrap_or(0);
+        Ok(code)
+    }
+
+    fn update_etc_hosts(&self, hostname: &str, ip: &str) -> anyhow::Result<()> {
+        let cmd = format!(
+            r#"sudo sh -c 'grep -v " {hostname}" /etc/hosts > /tmp/hosts.tmp && echo "{ip} {hostname}" >> /tmp/hosts.tmp && cp /tmp/hosts.tmp /etc/hosts && rm /tmp/hosts.tmp'"#,
+            hostname = hostname,
+            ip = ip
+        );
+        self.run_stdout(&cmd)?;
+        Ok(())
+    }
+
+    fn generate_self_signed_cert(
+        &self,
+        key_path: &str,
+        crt_path: &str,
+        cert_path: &str,
+    ) -> anyhow::Result<()> {
+        self.run_stdout(&format!(
+            "sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout '{}' -out '{}' -subj '/CN=localhost'",
+            key_path, crt_path
+        ))?;
+        self.run_stdout(&format!(
+            "sudo sh -c 'cat \"{}\" \"{}\" > \"{}\"'",
+            crt_path, key_path, cert_path
+        ))?;
+        self.chmod(cert_path, "600")?;
+        Ok(())
+    }
+
+    fn wait_for_service_status(
+        &self,
+        service_name: &str,
+        service_status: &str,
+        timeout: u64,
+    ) -> anyhow::Result<bool> {
+        let start_time = std::time::Instant::now();
+        let timeout_dur = std::time::Duration::from_secs(timeout);
+        let mut met_status = false;
+
+        while start_time.elapsed() < timeout_dur {
+            let status = self.cmd(&format!("sudo systemctl is-active {}", service_name))?;
+            if status.stdout.trim() == service_status {
+                met_status = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1000));
+        }
+        Ok(met_status)
+    }
+
+    fn install_postgres(&self, version: &str) -> anyhow::Result<()> {
+        let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", version);
+        let pg_installed = self.exists(&pg_ctl).unwrap_or(false);
+
+        if !pg_installed {
+            println!("\tEnsuring GnuPG and Curl are installed...");
+            self.install_dependencies(vec!["curl".to_string(), "gnupg".to_string()])?;
+
+            println!("\tAdding official PostgreSQL repository for version {version}");
+            self.rm("/etc/apt/trusted.gpg.d/postgresql.gpg")?;
+            self.cmd("sudo sh -c 'echo \"deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main\" > /etc/apt/sources.list.d/pgdg.list'")?;
+            self.cmd("curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg")?;
+
+            println!("\tUpdating package lists...");
+            self.cmd("sudo apt-get update")?;
+
+            println!(
+                "\tInstalling postgresql-{version}, postgresql-client-{version}, python3-boto3"
+            );
+            self.install_dependencies(vec![
+                format!("postgresql-{}", version),
+                format!("postgresql-client-{}", version),
+                "python3-boto3".to_string(),
+            ])?;
+
+            println!("\tEnabling PostgreSQL service for boot...");
+            self.enable_service("postgresql")?;
+
+            println!("\tStarting PostgreSQL cluster...");
+            let start_cmd = format!(
+                "sudo -u postgres {} -D /var/lib/postgresql/{}/main -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf -c restore_command=false\" start > /dev/null 2>&1 < /dev/null",
+                pg_ctl, version, version
+            );
+            let _ = self.cmd(&start_cmd);
+        } else {
+            println!("\tPostgreSQL {} is already installed.", version);
+        }
+
+        Ok(())
+    }
+
+    fn kill_postgres_processes(&self) -> anyhow::Result<()> {
+        let _ = self.cmd("sudo pkill -9 -u postgres postgres");
+        Ok(())
+    }
+
+    fn psql(
+        &self,
+        command: Option<&str>,
+        file: Option<&str>,
+        dbname: Option<&str>,
+        tuples_only: bool,
+    ) -> anyhow::Result<CmdOutput> {
+        let mut psql_cmd = "sudo -u postgres psql".to_string();
+        if tuples_only {
+            psql_cmd.push_str(" -t -A");
+        }
+        if let Some(db) = dbname {
+            psql_cmd.push_str(&format!(" -d '{}'", db));
+        }
+        if let Some(c) = command {
+            psql_cmd.push_str(&format!(
+                " -c \"{}\"",
+                c.replace('"', "\\\"").replace('$', "\\$")
+            ));
+        } else if let Some(f) = file {
+            psql_cmd.push_str(&format!(" -f '{}'", f));
+        }
+        self.cmd(&psql_cmd)
     }
 }

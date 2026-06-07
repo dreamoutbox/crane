@@ -30,6 +30,7 @@ pub fn run_postgres_promote_cmd(
             leader.name, target_conf_node.name
         );
         let target_interactor = get_server_interactor(&target_conf_node.name)?;
+
         let switch_cmd = format!(
             "sudo patronictl -c /etc/patroni/config.yml switchover --leader {} --candidate {} --scheduled now --force",
             leader.name, target_conf_node.name
@@ -59,6 +60,7 @@ pub fn run_postgres_promote_cmd(
         );
 
         let target_interactor = get_server_interactor(&target_conf_node.name)?;
+
         let failover_cmd = format!(
             "sudo patronictl -c /etc/patroni/config.yml failover --candidate {} --force",
             target_conf_node.name

@@ -36,7 +36,7 @@ pub fn run_postgres_reset_cmd(config: &config::Config, force: bool) -> anyhow::R
         let _ = interactor.stop_service("patroni");
 
         // Also kill any remaining postgres processes
-        let _ = interactor.cmd("sudo pkill -9 -u postgres postgres");
+        let _ = interactor.kill_postgres_processes();
     }
 
     // 2. Clear DCS (etcd) keys for the cluster to prevent conflicts
@@ -55,15 +55,7 @@ pub fn run_postgres_reset_cmd(config: &config::Config, force: bool) -> anyhow::R
         let interactor = get_server_interactor(&node.name)?;
         let data_dir = format!("/var/lib/postgresql/{}/main", pg_version);
         println!("\tRemoving directory {}...", data_dir);
-        let remove_cmd = format!("sudo rm -rf {}", data_dir);
-        let remove_out = interactor.cmd(&remove_cmd)?;
-        if remove_out.exit_code != 0 {
-            anyhow::bail!(
-                "Failed to remove data directory on node {}: {}",
-                node.name,
-                remove_out.stderr
-            );
-        }
+        interactor.rm(&data_dir)?;
     }
 
     // 4. Start Patroni on all nodes

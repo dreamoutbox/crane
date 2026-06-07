@@ -21,21 +21,15 @@ pub fn pg_get_primary(config: &config::Config) -> anyhow::Result<Option<config::
     for node in pg_nodes {
         if let Ok(interactor) = get_server_interactor(&node.name) {
             // First check via Patroni REST API
-            let curl_patroni_primary_cmd =
-                "curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8008/primary";
-            let curl_patroni_get_primary = interactor.cmd(curl_patroni_primary_cmd);
-            // dbg!(&curl_patroni_get_primary);
-
-            let is_patroni_primary = if let Ok(output) = curl_patroni_get_primary {
-                output.stdout.trim() == "200"
+            let is_patroni_primary = if let Ok(code) = interactor.check_http_status("http://127.0.0.1:8008/primary") {
+                code == 200
             } else {
                 false
             };
 
             if is_patroni_primary {
                 // Verify it's actually writable (out of recovery)
-                let cmd = r#"sudo -u postgres psql -t -A -c "select pg_is_in_recovery();""#;
-                if let Ok(output) = interactor.cmd(cmd) {
+                if let Ok(output) = interactor.psql(Some("select pg_is_in_recovery();"), None, None, true) {
                     // dbg!(&output);
 
                     if output.stdout.trim() == "f" {
@@ -44,8 +38,7 @@ pub fn pg_get_primary(config: &config::Config) -> anyhow::Result<Option<config::
                 }
             } else {
                 // Fallback for mock interactor and compatibility
-                let cmd = r#"sudo -u postgres psql -t -A -c "select pg_is_in_recovery();""#;
-                if let Ok(output) = interactor.cmd(cmd) {
+                if let Ok(output) = interactor.psql(Some("select pg_is_in_recovery();"), None, None, true) {
                     if output.stdout.trim() == "f" {
                         return Ok(Some(node));
                     }
@@ -73,8 +66,11 @@ pub fn get_backups_data_from_s3(s3_client: &dyn S3Client) -> anyhow::Result<Vec<
 
 /// get current timeline id
 pub fn get_pg_current_timeline_id(interactor: &dyn ServerInteractor) -> anyhow::Result<String> {
-    let db_tli_out = interactor.cmd(
-        r#"sudo -u postgres psql -t -A -c "SELECT timeline_id FROM pg_control_checkpoint();""#,
+    let db_tli_out = interactor.psql(
+        Some("SELECT timeline_id FROM pg_control_checkpoint();"),
+        None,
+        None,
+        true,
     )?;
     let current_timeline_id = db_tli_out.stdout.trim().to_string();
     Ok(current_timeline_id)
@@ -143,35 +139,26 @@ pub fn backup_pg_dir(
 
     let old_main_dir = format!("/var/lib/postgresql/{}/main", *pg_version);
     let backup_main_dir = format!("{}/main", backup_parent);
-    let dir_exists = interactor
-        .cmd(&format!("test -d {}", old_main_dir))
-        .map(|out| out.exit_code == 0)
-        .unwrap_or(false);
+    let dir_exists = interactor.exists(&old_main_dir).unwrap_or(false);
     if dir_exists {
         println!(
             "\tBacking up old postgres data directory {} to {}",
             old_main_dir, backup_main_dir
         );
-        interactor.cmd(&format!("sudo mkdir -p {}", backup_parent))?;
-        interactor.cmd(&format!("sudo mv {} {}", old_main_dir, backup_main_dir))?;
+        interactor.mkdir(&backup_parent)?;
+        interactor.mv(&old_main_dir, &backup_main_dir)?;
     }
 
     let failed_main_dir = format!("/var/lib/postgresql/{}/main.failed", *pg_version);
     let backup_failed_dir = format!("{}/main.failed", backup_parent);
-    let failed_exists = interactor
-        .cmd(&format!("test -d {}", failed_main_dir))
-        .map(|out| out.exit_code == 0)
-        .unwrap_or(false);
+    let failed_exists = interactor.exists(&failed_main_dir).unwrap_or(false);
     if failed_exists {
         println!(
             "\tBacking up failed data directory {} to {}...",
             failed_main_dir, backup_failed_dir
         );
-        interactor.cmd(&format!("sudo mkdir -p {}", backup_parent))?;
-        interactor.cmd(&format!(
-            "sudo mv {} {}",
-            failed_main_dir, backup_failed_dir
-        ))?;
+        interactor.mkdir(&backup_parent)?;
+        interactor.mv(&failed_main_dir, &backup_failed_dir)?;
     }
 
     Ok(())

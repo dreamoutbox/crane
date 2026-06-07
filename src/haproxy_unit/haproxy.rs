@@ -5,10 +5,7 @@ use crate::{
 
 pub fn install_haproxy(interactor: &dyn ServerInteractor) -> anyhow::Result<()> {
     // Check if HAProxy binary is already installed
-    let check = interactor.cmd("which haproxy");
-    let installed = check.is_ok() && !check.unwrap().stdout.trim().is_empty();
-
-    if !installed {
+    if !interactor.check_binary("haproxy")? {
         println!("\tInstalling HAProxy on remote server...");
         interactor.install_dependencies(vec!["haproxy".to_string()])?;
     }
@@ -23,24 +20,12 @@ fn ensure_self_signed_cert(interactor: &dyn ServerInteractor) -> anyhow::Result<
     let crt_path = "/etc/ssl/private/crane_self_signed.crt";
 
     // Ensure cert directory exists
-    interactor.cmd(&format!("sudo mkdir -p {}", cert_dir))?;
+    interactor.mkdir(cert_dir)?;
 
     // Check if the pem file exists
-    let check = interactor.cmd(&format!("sudo test -f {}", cert_path));
-    if check.is_err() || check.unwrap().exit_code != 0 {
+    if !interactor.exists(cert_path)? {
         println!("\tGenerating self-signed certificate for SSL/TLS termination...");
-
-        interactor.cmd(&format!(
-            "sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout {} -out {} -subj \"/CN=localhost\"",
-            key_path, crt_path
-        ))?;
-
-        interactor.cmd(&format!(
-            "sudo sh -c 'cat {} {} > {}'",
-            crt_path, key_path, cert_path
-        ))?;
-
-        interactor.cmd(&format!("sudo chmod 600 {}", cert_path))?;
+        interactor.generate_self_signed_cert(key_path, crt_path, cert_path)?;
     }
 
     Ok(cert_path.to_string())
@@ -190,8 +175,7 @@ backend postgres_replica_back
         custom_certs.dedup();
 
         for cert in custom_certs {
-            let check = interactor.cmd(&format!("sudo test -f {}", cert));
-            if check.is_ok() && check.unwrap().exit_code == 0 {
+            if interactor.exists(&cert)? {
                 cert_args.push_str(&format!(" crt {}", cert));
             } else {
                 println!(

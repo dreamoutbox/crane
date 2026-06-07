@@ -165,24 +165,20 @@ fn inner_setup_postgres_node(
     let _stop_res = interactor.stop_service("postgresql");
     let _disable_pg_res = interactor.disable_service("postgresql");
 
-    let patroni_configured = interactor
-        .cmd("test -f /etc/patroni/config.yml")
-        .map(|out| out.exit_code == 0)
-        .unwrap_or(false);
+    let patroni_configured = interactor.exists("/etc/patroni/config.yml").unwrap_or(false);
 
     if !patroni_configured {
-        // Stop and kill Patroni before cleaning up config and bootstrapping
         let _stop_patroni_res = interactor.stop_service("patroni");
-        let _ = interactor.cmd("sudo pkill -9 -u postgres postgres");
+        let _ = interactor.kill_postgres_processes();
 
         // Backup existing postgres main directory
         backup_pg_dir(&pg_version, &*interactor)?;
     }
 
     // Configure WAL archive directory
-    interactor.cmd("sudo mkdir -p /var/lib/postgresql/wal_archive")?;
-    interactor.cmd("sudo chown postgres:postgres /var/lib/postgresql/wal_archive")?;
-    interactor.cmd("sudo chmod 700 /var/lib/postgresql/wal_archive")?;
+    interactor.mkdir("/var/lib/postgresql/wal_archive")?;
+    interactor.chown("/var/lib/postgresql/wal_archive", "postgres", "postgres")?;
+    interactor.chmod("/var/lib/postgresql/wal_archive", "700")?;
 
     let patroni_config_changed =
         install_patroni(&pg_version, &replica_pass, &pg_nodes, &node, &*interactor)?;
@@ -210,8 +206,8 @@ fn inner_setup_postgres_node(
     // Skip restart if config is unchanged and Patroni REST API is already healthy.
     let patroni_already_healthy = !patroni_config_changed
         && interactor
-            .cmd("curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8008/health")
-            .map(|o| o.stdout.trim() == "200")
+            .check_http_status("http://127.0.0.1:8008/health")
+            .map(|code| code == 200)
             .unwrap_or(false);
 
     if patroni_already_healthy {

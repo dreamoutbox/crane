@@ -34,8 +34,7 @@ pub fn run_postgres_logs_wrapper(
     sql: Option<&str>,
 ) -> anyhow::Result<String> {
     // Check if 'postgres' user exists on the remote node
-    let user_check = interactor.cmd("id postgres")?;
-    if user_check.exit_code != 0 {
+    if !interactor.user_exists("postgres")? {
         anyhow::bail!(
             "PostgreSQL is not installed or the 'postgres' user does not exist on the target node. 
 Please run 'crane deploy' first to set up the database."
@@ -43,8 +42,12 @@ Please run 'crane deploy' first to set up the database."
     }
 
     // 1. Query the current CSV log path dynamically
-    let log_path_cmd = "sudo -u postgres psql -tAc \"SELECT current_setting('data_directory') || '/' || pg_current_logfile('csvlog')\"";
-    let log_path_output = interactor.cmd(log_path_cmd)?;
+    let log_path_output = interactor.psql(
+        Some("SELECT current_setting('data_directory') || '/' || pg_current_logfile('csvlog')"),
+        None,
+        None,
+        true,
+    )?;
     if log_path_output.exit_code != 0 {
         anyhow::bail!(
             "Failed to query PostgreSQL log path: {}",
@@ -88,8 +91,7 @@ Please run 'crane deploy' first to set up the database."
 
     let run_output = interactor.cmd(&py_cmd);
 
-    // 4. Always clean up the temporary script
-    let _ = interactor.cmd(&format!("rm -f {}", script_path));
+    let _ = interactor.rm(script_path);
 
     let output = run_output?;
     if output.exit_code != 0 {

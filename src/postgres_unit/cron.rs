@@ -18,9 +18,11 @@ pub fn configure_postgres_cron_backup(
         })?;
 
         // Ensure directories exist
-        interactor.cmd("sudo mkdir -p /etc/crane /opt/crane /var/lib/postgresql/backups")?;
-        interactor.cmd("sudo chown postgres:postgres /var/lib/postgresql/backups")?;
-        interactor.cmd("sudo chmod 755 /var/lib/postgresql/backups")?;
+        interactor.mkdir("/etc/crane")?;
+        interactor.mkdir("/opt/crane")?;
+        interactor.mkdir("/var/lib/postgresql/backups")?;
+        interactor.chown("/var/lib/postgresql/backups", "postgres", "postgres")?;
+        interactor.chmod("/var/lib/postgresql/backups", "755")?;
 
         // Write postgres-backup-config.toml
         let s3_toml_str = format!(
@@ -47,13 +49,13 @@ replica_pass = "{}"
         );
         // Write postgres-backup-config.toml directly
         interactor.create_file("/etc/crane/postgres-backup-config.toml", &s3_toml_str)?;
-        interactor.cmd("sudo chown root:root /etc/crane/postgres-backup-config.toml")?;
-        interactor.cmd("sudo chmod 600 /etc/crane/postgres-backup-config.toml")?;
+        interactor.chown("/etc/crane/postgres-backup-config.toml", "root", "root")?;
+        interactor.chmod("/etc/crane/postgres-backup-config.toml", "600")?;
 
         // Write postgres-backup.py directly
         interactor.create_file("/opt/crane/postgres-backup.py", PYTHON_BACKUP_SCRIPT)?;
-        interactor.cmd("sudo chown root:root /opt/crane/postgres-backup.py")?;
-        interactor.cmd("sudo chmod 755 /opt/crane/postgres-backup.py")?;
+        interactor.chown("/opt/crane/postgres-backup.py", "root", "root")?;
+        interactor.chmod("/opt/crane/postgres-backup.py", "755")?;
 
         // Write cron schedule
         let full_cron = interval_to_cron(&schedule.full_backup_every);
@@ -68,8 +70,8 @@ replica_pass = "{}"
             full_cron, incr_cron
         );
         interactor.create_file("/etc/cron.d/postgres-backup", &cron_content)?;
-        interactor.cmd("sudo chown root:root /etc/cron.d/postgres-backup")?;
-        interactor.cmd("sudo chmod 644 /etc/cron.d/postgres-backup")?;
+        interactor.chown("/etc/cron.d/postgres-backup", "root", "root")?;
+        interactor.chmod("/etc/cron.d/postgres-backup", "644")?;
     }
 
     Ok(())

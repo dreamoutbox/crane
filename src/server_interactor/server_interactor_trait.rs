@@ -39,6 +39,12 @@ pub trait ServerInteractor {
     fn service_daemon_reload(&self) -> anyhow::Result<()>;
     fn enable_service(&self, service_name: &str) -> anyhow::Result<()>;
     fn disable_service(&self, service_name: &str) -> anyhow::Result<()>;
+    fn wait_for_service_status(
+        &self,
+        service_name: &str,
+        service_status: &str,
+        timeout: u64,
+    ) -> anyhow::Result<bool>;
 
     // USERS
     fn create_user(&self, user_register: UserRegister) -> anyhow::Result<()>;
@@ -51,9 +57,43 @@ pub trait ServerInteractor {
     fn firewall_enable(&self, enable: bool) -> anyhow::Result<()>;
     fn firewall_reload(&self) -> anyhow::Result<()>;
     fn firewall_reset(&self) -> anyhow::Result<()>;
-    fn firewall_allow_port(&self, port: u16, proto: &str, source: Option<&str>) -> anyhow::Result<()>;
-    fn firewall_deny_port(&self, port: u16, proto: &str, source: Option<&str>) -> anyhow::Result<()>;
+    fn firewall_allow_port(
+        &self,
+        port: u16,
+        proto: &str,
+        source: Option<&str>,
+    ) -> anyhow::Result<()>;
+    fn firewall_deny_port(
+        &self,
+        port: u16,
+        proto: &str,
+        source: Option<&str>,
+    ) -> anyhow::Result<()>;
     fn firewall_allow_source(&self, source: &str) -> anyhow::Result<()>;
+
+    // UTILITIES & HELPER METHODS
+    fn user_exists(&self, username: &str) -> anyhow::Result<bool>;
+    fn check_binary(&self, binary: &str) -> anyhow::Result<bool>;
+    fn check_http_status(&self, url: &str) -> anyhow::Result<u16>;
+    fn update_etc_hosts(&self, hostname: &str, ip: &str) -> anyhow::Result<()>;
+    fn generate_self_signed_cert(
+        &self,
+        key_path: &str,
+        crt_path: &str,
+        cert_path: &str,
+    ) -> anyhow::Result<()>;
+
+    fn kill_postgres_processes(&self) -> anyhow::Result<()>;
+
+    fn psql(
+        &self,
+        command: Option<&str>,
+        file: Option<&str>,
+        dbname: Option<&str>,
+        tuples_only: bool,
+    ) -> anyhow::Result<CmdOutput>;
+
+    fn install_postgres(&self, version: &str) -> anyhow::Result<()>;
 }
 
 pub struct ServiceRegister {

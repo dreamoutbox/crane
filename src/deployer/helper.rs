@@ -51,15 +51,7 @@ pub fn deploy_update_etc_hosts(
     entries: &[(String, String)], // (hostname, ip)
 ) -> anyhow::Result<()> {
     for (hostname, ip) in entries {
-        // println!("\t- pointing {} -> {}", hostname, ip);
-        // Remove old entry for this hostname, then append the new one.
-        // We use a temp file approach to avoid sed -i portability issues.
-        let cmd = format!(
-            r#"sudo sh -c 'grep -v " {hostname}" /etc/hosts > /tmp/hosts.tmp && echo "{ip} {hostname}" >> /tmp/hosts.tmp && cp /tmp/hosts.tmp /etc/hosts && rm /tmp/hosts.tmp'"#,
-            hostname = hostname,
-            ip = ip,
-        );
-        interactor.cmd(&cmd)?;
+        interactor.update_etc_hosts(hostname, ip)?;
     }
     Ok(())
 }

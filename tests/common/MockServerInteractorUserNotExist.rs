@@ -155,4 +155,59 @@ impl ServerInteractor for MockServerInteractorUserNotExist {
     fn tar_extract(&self, _archive: &str, _dest: &str) -> anyhow::Result<()> {
         Ok(())
     }
+
+    fn user_exists(&self, username: &str) -> anyhow::Result<bool> {
+        if username == "postgres" {
+            Ok(false)
+        } else {
+            Ok(true)
+        }
+    }
+
+    fn check_binary(&self, _binary: &str) -> anyhow::Result<bool> {
+        Ok(true)
+    }
+
+    fn check_http_status(&self, _url: &str) -> anyhow::Result<u16> {
+        Ok(200)
+    }
+
+    fn update_etc_hosts(&self, _hostname: &str, _ip: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn generate_self_signed_cert(&self, _key_path: &str, _crt_path: &str, _cert_path: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn wait_for_service_status(
+        &self,
+        _service_name: &str,
+        _service_status: &str,
+        _timeout: u64,
+    ) -> anyhow::Result<bool> {
+        Ok(true)
+    }
+
+    fn install_postgres(&self, _version: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn kill_postgres_processes(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn psql(
+        &self,
+        _command: Option<&str>,
+        _file: Option<&str>,
+        _dbname: Option<&str>,
+        _tuples_only: bool,
+    ) -> anyhow::Result<CmdOutput> {
+        Ok(CmdOutput {
+            stdout: "".to_string(),
+            stderr: "".to_string(),
+            exit_code: 0,
+        })
+    }
 }

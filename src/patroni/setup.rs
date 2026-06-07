@@ -128,8 +128,7 @@ postgresql:
 
     // Compare with existing config; only write (and signal a change) if different
     let existing_config = interactor
-        .cmd("sudo cat /etc/patroni/config.yml")
-        .map(|o| o.stdout)
+        .read_file("/etc/patroni/config.yml")
         .unwrap_or_default();
     let config_changed = existing_config.trim() != patroni_yaml.trim();
 

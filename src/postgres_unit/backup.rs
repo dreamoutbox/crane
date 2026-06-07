@@ -43,7 +43,12 @@ pub fn postgres_backup(
     interactor.chown(&local_path, "postgres", "postgres")?;
 
     // 3. Grant pg_read_server_files to replicator (idempotent)
-    interactor.cmd(r#"sudo -u postgres psql -c "GRANT pg_read_server_files TO replicator;""#)?;
+    interactor.psql(
+        Some("GRANT pg_read_server_files TO replicator;"),
+        None,
+        None,
+        false,
+    )?;
 
     // 4. Build pg_basebackup command
     let is_incr =
@@ -90,7 +95,7 @@ pub fn postgres_backup(
                 && !current_timeline_id.is_empty()
                 && parent_timeline_id != current_timeline_id
             {
-                let _ = interactor.cmd(&format!("sudo rm -rf {}", local_path));
+                let _ = interactor.rm(&local_path);
                 anyhow::bail!(
                     "Timeline mismatch detected: parent backup timeline is {}, but current database timeline is {}. consider full backup first!",
                     parent_timeline_id,
@@ -106,21 +111,25 @@ pub fn postgres_backup(
 
     if is_incr && pg_version.parse::<i32>().unwrap_or(0) >= 17 {
         // Get the current WAL LSN before switching, to use as the synchronization target.
-        let lsn_out =
-            interactor.cmd(r#"sudo -u postgres psql -t -A -c "SELECT pg_current_wal_lsn();""#)?;
+        let lsn_out = interactor.psql(Some("SELECT pg_current_wal_lsn();"), None, None, true)?;
         let target_lsn = lsn_out.stdout.trim().to_string();
 
         // Force a WAL switch so the active segment is closed for summarization, and CHECKPOINT to flush summaries.
-        let _ = interactor.cmd(r#"sudo -u postgres psql -c "SELECT pg_switch_wal(); CHECKPOINT;""#);
+        let _ = interactor.psql(
+            Some("SELECT pg_switch_wal(); CHECKPOINT;"),
+            None,
+            None,
+            false,
+        );
 
         // Poll WAL summarizer until summarized_lsn >= target_lsn.
         let max_retries = 30;
         let query = format!(
-            r#"sudo -u postgres psql -t -A -c "SELECT summarized_lsn >= '{}'::pg_lsn FROM pg_get_wal_summarizer_state();""#,
+            "SELECT summarized_lsn >= '{}'::pg_lsn FROM pg_get_wal_summarizer_state();",
             target_lsn
         );
         for attempt in 1..=max_retries {
-            let state = interactor.cmd(&query)?;
+            let state = interactor.psql(Some(&query), None, None, true)?;
             let output = state.stdout.trim();
             if output == "t" {
                 println!(
@@ -132,8 +141,11 @@ pub fn postgres_backup(
 
             if attempt == max_retries {
                 // Get current full state for debugging info on failure
-                let debug_state = interactor.cmd(
-                    r#"sudo -u postgres psql -t -A -c "SELECT summarized_lsn, pending_lsn FROM pg_get_wal_summarizer_state();""#
+                let debug_state = interactor.psql(
+                    Some("SELECT summarized_lsn, pending_lsn FROM pg_get_wal_summarizer_state();"),
+                    None,
+                    None,
+                    true,
                 )?;
 
                 anyhow::bail!(
@@ -275,8 +287,12 @@ pub fn postgres_backup(
     interactor.mkdir("/var/lib/postgresql/wal_archive")?;
     interactor.chown("/var/lib/postgresql/wal_archive", "postgres", "postgres")?;
 
-    let switch_out = interactor
-        .cmd(r#"sudo -u postgres psql -t -A -c "SELECT pg_walfile_name(pg_switch_wal() - 1);""#)?;
+    let switch_out = interactor.psql(
+        Some("SELECT pg_walfile_name(pg_switch_wal() - 1);"),
+        None,
+        None,
+        true,
+    )?;
     let wal_filename = switch_out.stdout.trim().to_string();
     if wal_filename.is_empty() {
         anyhow::bail!("pg_switch_wal() returned empty filename");
@@ -287,11 +303,10 @@ pub fn postgres_backup(
     );
 
     // Diagnostic: check actual archive_mode at runtime
-    if let Ok(am_out) = interactor.cmd(r#"sudo -u postgres psql -t -A -c "SHOW archive_mode;""#) {
+    if let Ok(am_out) = interactor.psql(Some("SHOW archive_mode;"), None, None, true) {
         println!("archive_mode = {}", am_out.stdout.trim());
     }
-    if let Ok(ac_out) = interactor.cmd(r#"sudo -u postgres psql -t -A -c "SHOW archive_command;""#)
-    {
+    if let Ok(ac_out) = interactor.psql(Some("SHOW archive_command;"), None, None, true) {
         println!("archive_command = {}", ac_out.stdout.trim());
     }
 

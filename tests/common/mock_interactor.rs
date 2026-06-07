@@ -215,4 +215,75 @@ impl ServerInteractor for MockInteractor {
         self.commands.borrow_mut().push(format!("sudo tar -xf '{}' -C '{}'", archive, dest));
         Ok(())
     }
+
+    fn user_exists(&self, username: &str) -> anyhow::Result<bool> {
+        let _ = self.cmd(&format!("id -u {}", username))?;
+        Ok(true)
+    }
+
+    fn check_binary(&self, binary: &str) -> anyhow::Result<bool> {
+        let _ = self.cmd(&format!("which {}", binary))?;
+        Ok(true)
+    }
+
+    fn check_http_status(&self, url: &str) -> anyhow::Result<u16> {
+        let out = self.cmd(&format!("curl -s -o /dev/null -w \"HTTP_CODE\" {}", url))?;
+        if out.stdout.trim() == "200" {
+            Ok(200)
+        } else {
+            Ok(0)
+        }
+    }
+
+    fn update_etc_hosts(&self, hostname: &str, ip: &str) -> anyhow::Result<()> {
+        let _ = self.cmd(&format!("update_etc_hosts {} {}", hostname, ip))?;
+        Ok(())
+    }
+
+    fn generate_self_signed_cert(&self, key_path: &str, crt_path: &str, cert_path: &str) -> anyhow::Result<()> {
+        let _ = self.cmd(&format!("generate_self_signed_cert {} {} {}", key_path, crt_path, cert_path))?;
+        Ok(())
+    }
+
+    fn wait_for_service_status(
+        &self,
+        service_name: &str,
+        service_status: &str,
+        timeout: u64,
+    ) -> anyhow::Result<bool> {
+        let _ = self.cmd(&format!("wait_for_service_status {} {} {}", service_name, service_status, timeout))?;
+        Ok(true)
+    }
+
+    fn install_postgres(&self, version: &str) -> anyhow::Result<()> {
+        let _ = self.cmd(&format!("install_postgres {}", version))?;
+        Ok(())
+    }
+
+    fn kill_postgres_processes(&self) -> anyhow::Result<()> {
+        let _ = self.cmd("sudo pkill -9 -u postgres postgres")?;
+        Ok(())
+    }
+
+    fn psql(
+        &self,
+        command: Option<&str>,
+        file: Option<&str>,
+        dbname: Option<&str>,
+        tuples_only: bool,
+    ) -> anyhow::Result<CmdOutput> {
+        let mut cmd = "sudo -u postgres psql".to_string();
+        if tuples_only {
+            cmd.push_str(" -t -A");
+        }
+        if let Some(db) = dbname {
+            cmd.push_str(&format!(" -d {}", db));
+        }
+        if let Some(c) = command {
+            cmd.push_str(&format!(" -c \"{}\"", c));
+        } else if let Some(f) = file {
+            cmd.push_str(&format!(" -f '{}'", f));
+        }
+        self.cmd(&cmd)
+    }
 }

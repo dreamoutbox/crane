@@ -1,5 +1,7 @@
-use crate::{config::{PostgresDbConfig, PostgresUserConfig}, server_interactor::server_interactor_trait::ServerInteractor};
-
+use crate::{
+    config::{PostgresDbConfig, PostgresUserConfig},
+    server_interactor::server_interactor_trait::ServerInteractor,
+};
 
 pub async fn setup_postgres_primary(
     interactor: std::sync::Arc<dyn ServerInteractor + Send + Sync>,
@@ -16,31 +18,15 @@ pub async fn setup_postgres_primary(
     let user_configs = user_configs.to_vec();
 
     tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
-        let run_psql = |cmd: &str| -> anyhow::Result<crate::ssh::CmdOutput> {
-            let out = interactor_clone.cmd(cmd)?;
-            if out.exit_code != 0 {
-                anyhow::bail!("psql command failed: {}\nStderr: {}", cmd, out.stderr);
-            }
-            Ok(out)
-        };
-
-
-        
         // Idempotently create databases sequentially
         for db in &db_configs {
             println!("\n\tSetting up database '{}'...", db.name);
 
             let check_db_sql = format!("SELECT 1 FROM pg_database WHERE datname = '{}'", db.name);
-            let db_exists = run_psql(&format!(
-                "sudo -u postgres psql -t -A -c \"{}\"",
-                check_db_sql
-            ))?;
+            let db_exists = interactor_clone.psql(Some(&check_db_sql), None, None, true)?;
 
             if db_exists.stdout.trim() != "1" {
-                run_psql(&format!(
-                    "sudo -u postgres psql -c \"CREATE DATABASE {};\"",
-                    db.name
-                ))?;
+                interactor_clone.psql(Some(&format!("CREATE DATABASE {};", db.name)), None, None, false)?;
             }
         }
 
@@ -65,21 +51,27 @@ pub async fn setup_postgres_primary(
                         user.user, db_name
                     );
 
-                    let _ = interactor_clone.cmd(&format!(
-                        "sudo -u postgres psql -d {} -c \"REVOKE ALL ON SCHEMA public FROM {};\"",
-                        db_name, user.user
-                    ));
+                    let _ = interactor_clone.psql(
+                        Some(&format!("REVOKE ALL ON SCHEMA public FROM {};", user.user)),
+                        None,
+                        Some(db_name),
+                        false,
+                    );
 
-                    let _ = interactor_clone.cmd(&format!(
-                        "sudo -u postgres psql -c \"REVOKE ALL PRIVILEGES ON DATABASE {} FROM {};\"",
-                        db_name, user.user
-                    ));
+                    let _ = interactor_clone.psql(
+                        Some(&format!("REVOKE ALL PRIVILEGES ON DATABASE {} FROM {};", db_name, user.user)),
+                        None,
+                        None,
+                        false,
+                    );
                 }
 
-                run_psql(&format!(
-                    "sudo -u postgres psql -c \"DROP ROLE IF EXISTS {};\"",
-                    user.user
-                ))?;
+                interactor_clone.psql(
+                    Some(&format!("DROP ROLE IF EXISTS {};", user.user)),
+                    None,
+                    None,
+                    false,
+                )?;
             } else if user_state == "present" {
                 println!("\tSetting up user '{}'...", user.user);
 
@@ -98,8 +90,8 @@ pub async fn setup_postgres_primary(
                 );
                 let tmp_sql = format!("/tmp/crane_user_{}.sql", user.user);
                 interactor_clone.create_file(&tmp_sql, &user_sql)?;
-                let psql_res = run_psql(&format!("sudo -u postgres psql -f '{}'", tmp_sql));
-                let _ = interactor_clone.cmd(&format!("sudo rm -f '{}'", tmp_sql));
+                let psql_res = interactor_clone.psql(None, Some(&tmp_sql), None, false);
+                let _ = interactor_clone.rm(&tmp_sql);
                 psql_res?;
 
                 for db_ref in &user.databases {
@@ -114,21 +106,24 @@ pub async fn setup_postgres_primary(
                         user.user, db_name
                     );
 
-                    run_psql(&format!(
-                        "sudo -u postgres psql -c \"GRANT ALL PRIVILEGES ON DATABASE {} TO {};\"",
-                        db_name, user.user
-                    ))?;
+                    interactor_clone.psql(
+                        Some(&format!("GRANT ALL PRIVILEGES ON DATABASE {} TO {};", db_name, user.user)),
+                        None,
+                        None,
+                        false,
+                    )?;
 
-                    run_psql(&format!(
-                        "sudo -u postgres psql -d {} -c \"GRANT ALL ON SCHEMA public TO {};\"",
-                        db_name, user.user
-                    ))?;
+                    interactor_clone.psql(
+                        Some(&format!("GRANT ALL ON SCHEMA public TO {};", user.user)),
+                        None,
+                        Some(db_name),
+                        false,
+                    )?;
                 }
             } else {
                 anyhow::bail!("unknown user state: {}", user_state);
             }
         }
-
 
         Ok(())
     })
