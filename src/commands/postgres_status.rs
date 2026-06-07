@@ -2,8 +2,9 @@ use crate::{
     helper::config::config_get_nodes,
     postgres_unit::{
         entity::{HAProxyNode, PostgresNode, PostgresStatusOutput},
-        helper::{connect_to_node, get_pg_version},
+        helper::get_pg_version,
     },
+    server_interactor::get_server_interactor,
 };
 
 pub async fn get_postgres_status_wrapper(
@@ -26,7 +27,6 @@ pub async fn get_postgres_status_wrapper(
     for node in &pg_nodes {
         let node = node.clone();
         let pg_version = pg_version.clone();
-        let config = config.clone();
 
         let handle = tokio::task::spawn_blocking(move || -> (PostgresNode, bool) {
             let mut role = "Unknown".to_string();
@@ -34,7 +34,7 @@ pub async fn get_postgres_status_wrapper(
             let mut status = "Unhealthy".to_string();
             let mut haproxy_active = false;
 
-            match connect_to_node(&node, &config) {
+            match get_server_interactor(&node.name) {
                 Ok(interactor) => {
                     // 2. Check Recovery & DB Version
                     let recovery_cmd =

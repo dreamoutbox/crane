@@ -32,9 +32,8 @@ async fn test_failover() {
         .expect("Failed to find primary node config in nodes list");
 
     // stop service of primary node
-    let primary_interactor =
-        crane::postgres_unit::helper::connect_to_node(primary_node_config, &config)
-            .expect("Failed to connect to primary node");
+    let primary_interactor = get_server_interactor(&primary_node_config.name)
+        .expect("Failed to connect to primary node");
     primary_interactor
         .stop_service("patroni")
         .expect("Failed to stop patroni service on primary node");

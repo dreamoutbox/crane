@@ -1,7 +1,8 @@
 use crate::config;
 use crate::etcd_unit::etcd_clear_dcs_state;
 use crate::helper::config::config_get_nodes;
-use crate::postgres_unit::helper::{connect_to_node, get_pg_version};
+use crate::postgres_unit::helper::get_pg_version;
+use crate::server_interactor::get_server_interactor;
 
 pub fn run_postgres_reset_cmd(config: &config::Config, force: bool) -> anyhow::Result<()> {
     let pg_nodes = config_get_nodes(config, "postgres");
@@ -29,7 +30,7 @@ pub fn run_postgres_reset_cmd(config: &config::Config, force: bool) -> anyhow::R
     println!("\nStopping Patroni on all PostgreSQL nodes...");
     for node in &pg_nodes {
         println!("Connecting to node {}...", node.name);
-        let interactor = connect_to_node(node, config)?;
+        let interactor = get_server_interactor(&node.name)?;
 
         println!("\tStopping Patroni service...");
         let _ = interactor.stop_service("patroni");
@@ -41,7 +42,7 @@ pub fn run_postgres_reset_cmd(config: &config::Config, force: bool) -> anyhow::R
     // 2. Clear DCS (etcd) keys for the cluster to prevent conflicts
     if let Some(first_node) = pg_nodes.first() {
         // run on first node
-        let interactor = connect_to_node(first_node, config)?;
+        let interactor = get_server_interactor(&first_node.name)?;
 
         println!("Clearing Etcd DCS cluster state...");
         etcd_clear_dcs_state(&*interactor);
@@ -51,7 +52,7 @@ pub fn run_postgres_reset_cmd(config: &config::Config, force: bool) -> anyhow::R
     println!("\nRemoving PostgreSQL data directory on all nodes...");
     for node in &pg_nodes {
         println!("Connecting to node {}...", node.name);
-        let interactor = connect_to_node(node, config)?;
+        let interactor = get_server_interactor(&node.name)?;
         let data_dir = format!("/var/lib/postgresql/{}/main", pg_version);
         println!("\tRemoving directory {}...", data_dir);
         let remove_cmd = format!("sudo rm -rf {}", data_dir);
@@ -69,7 +70,7 @@ pub fn run_postgres_reset_cmd(config: &config::Config, force: bool) -> anyhow::R
     println!("\nStarting Patroni on all PostgreSQL nodes...");
     for node in &pg_nodes {
         println!("Connecting to node {}...", node.name);
-        let interactor = connect_to_node(node, config)?;
+        let interactor = get_server_interactor(&node.name)?;
 
         println!("\tStarting Patroni service...");
         interactor.start_service("patroni")?;

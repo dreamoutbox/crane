@@ -3,10 +3,10 @@ use crate::{
     helper::{base64::base64_encode, config::config_get_nodes},
     postgres_unit::{
         entity::BackupMetadata,
-        helper::{cmdw, connect_to_node, pg_cluster_wait_all_nodes_ready},
+        helper::{cmdw, pg_cluster_wait_all_nodes_ready},
     },
     s3::S3Client,
-    server_interactor::server_interactor_trait::ServerInteractor,
+    server_interactor::{get_server_interactor, server_interactor_trait::ServerInteractor},
 };
 
 pub async fn postgres_restore(
@@ -76,7 +76,6 @@ pub async fn postgres_restore(
     let mut handles = vec![];
     for node in &pg_nodes {
         let node = node.clone();
-        let config = config.clone();
 
         let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
             println!(
@@ -84,7 +83,7 @@ pub async fn postgres_restore(
                 node.name
             );
 
-            match connect_to_node(&node, &config) {
+            match get_server_interactor(&node.name) {
                 Ok(interactor) => {
                     let _ = interactor.stop_service("patroni");
                     let _ = interactor.stop_service("postgresql --no-block");
@@ -111,13 +110,12 @@ pub async fn postgres_restore(
     let mut handles = vec![];
     for node in &pg_nodes {
         let node = node.clone();
-        let config = config.clone();
         let pgdata_dir = pgdata_dir.clone();
 
         let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
             // println!("\tClearing postgres data directory on node {}", node.name);
 
-            match connect_to_node(&node, &config) {
+            match get_server_interactor(&node.name) {
                 Ok(interactor) => {
                     let _ = interactor.cmd(&format!("sudo rm -rf {}", pgdata_dir));
 
@@ -530,11 +528,10 @@ pub async fn postgres_restore(
             continue;
         }
         let node = node.clone();
-        let config = config.clone();
 
         let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
             println!("Starting Patroni on replica node {}...", node.name);
-            let node_interactor = connect_to_node(&node, &config)?;
+            let node_interactor = get_server_interactor(&node.name)?;
             node_interactor.restart_service("patroni")?;
             Ok(())
         });

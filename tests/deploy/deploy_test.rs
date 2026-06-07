@@ -2,6 +2,7 @@ use std::path::Path;
 use std::process::Command;
 
 use crane::postgres_unit::helper::postgres_get_primary;
+use crane::server_interactor::get_server_interactor;
 
 // RUN:
 // cargo nextest run test_deploy --nocapture
@@ -160,8 +161,8 @@ async fn test_deploy() {
         .expect("Failed to get leader node")
         .expect("No active PostgreSQL leader found");
 
-    let primary_interactor = crane::postgres_unit::helper::connect_to_node(&primary_node, &config)
-        .expect("Failed to connect to primary node");
+    let primary_interactor =
+        get_server_interactor(&primary_node.name).expect("Failed to connect to primary node");
 
     let pg_hba_path = "/etc/postgresql/17/main/pg_hba.conf";
     let add_rule_cmd = format!(

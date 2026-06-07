@@ -23,8 +23,8 @@ async fn test_backup_restore() {
         .expect("Failed to get leader node")
         .expect("No active PostgreSQL leader found");
 
-    let interactor = crane::postgres_unit::helper::connect_to_node(&primary_node, &config)
-        .expect("Failed to connect to primary node");
+    let interactor =
+        get_server_interactor(&primary_node.name).expect("Failed to connect to primary node");
 
     println!("Step 1: DROP and CREATE test_table");
     run_sql(
@@ -71,8 +71,8 @@ async fn test_backup_restore() {
     //  ASSERT DATA FROM FULL BACKUP
     // ============================================================
     // Reconnect after restore (since postgres was restarted)
-    let interactor = crane::postgres_unit::helper::connect_to_node(&primary_node, &config)
-        .expect("Failed to reconnect to primary node");
+    let interactor =
+        get_server_interactor(&primary_node.name).expect("Failed to reconnect to primary node");
 
     println!("Step 8: assert table have 1,2 in table");
     let rows = run_sql(&*interactor, "SELECT id FROM test_table ORDER BY id;");
@@ -166,8 +166,8 @@ async fn test_backup_restore() {
     // ASSERT DATA FROM INCREMENTAL BACKUP TEST #1
     // ============================================================
     // Reconnect after restore
-    let interactor = crane::postgres_unit::helper::connect_to_node(&primary_node, &config)
-        .expect("Failed to reconnect to primary node");
+    let interactor =
+        get_server_interactor(&primary_node.name).expect("Failed to reconnect to primary node");
 
     println!("Step 16: assert table have 1 in table");
     let rows = run_sql(&*interactor, "SELECT id FROM test_table ORDER BY id;");
@@ -205,8 +205,8 @@ async fn test_backup_restore() {
     // ASSERT DATA FROM INCREMENTAL BACKUP TEST #2
     // ============================================================
     // Reconnect after restore
-    let interactor = crane::postgres_unit::helper::connect_to_node(&primary_node, &config)
-        .expect("Failed to reconnect to primary node");
+    let interactor =
+        get_server_interactor(&primary_node.name).expect("Failed to reconnect to primary node");
 
     println!("Step 20: assert table have 1,4 in table");
     let rows = run_sql(&*interactor, "SELECT id FROM test_table ORDER BY id;");

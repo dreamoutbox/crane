@@ -16,8 +16,8 @@ async fn test_database_persist_after_deploy() {
         .expect("Failed to get leader node")
         .expect("No active PostgreSQL leader found");
 
-    let interactor = crane::postgres_unit::helper::connect_to_node(&primary_node, &config)
-        .expect("Failed to connect to primary node");
+    let interactor =
+        get_server_interactor(&primary_node.name).expect("Failed to connect to primary node");
 
     // create table api_counter in database
     run_sql(
@@ -41,8 +41,8 @@ async fn test_database_persist_after_deploy() {
         .expect("deploy failed");
 
     // Reconnect to leader after deploy
-    let interactor = crane::postgres_unit::helper::connect_to_node(&primary_node, &config)
-        .expect("Failed to connect to primary node");
+    let interactor =
+        get_server_interactor(&primary_node.name).expect("Failed to connect to primary node");
 
     // assert value is still 1
     let val_str_after = run_sql(&*interactor, "SELECT value FROM api_counter WHERE id = 1;");

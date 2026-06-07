@@ -33,12 +33,12 @@ async fn test_python_backup_script() {
     let replica2_node = replicas[1];
 
     // Connect to all nodes via ServerInteractor explicitly
-    let primary_interactor = crane::postgres_unit::helper::connect_to_node(&primary_node, &config)
-        .expect("primary connection failed");
-    let replica1_interactor = crane::postgres_unit::helper::connect_to_node(replica1_node, &config)
-        .expect("replica1 connection failed");
-    let replica2_interactor = crane::postgres_unit::helper::connect_to_node(replica2_node, &config)
-        .expect("replica2 connection failed");
+    let primary_interactor =
+        get_server_interactor(&primary_node.name).expect("primary connection failed");
+    let replica1_interactor =
+        get_server_interactor(&replica1_node.name).expect("replica1 connection failed");
+    let replica2_interactor =
+        get_server_interactor(&replica2_node.name).expect("replica2 connection failed");
 
     // Wait for all replica nodes to be fully ready
     println!("Waiting for replica nodes to be fully ready...");

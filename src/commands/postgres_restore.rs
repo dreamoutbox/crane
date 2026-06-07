@@ -1,9 +1,10 @@
 use crate::{
     postgres_unit::{
         entity::BackupRegistry,
-        helper::{connect_to_node, get_backups_from_s3, get_pg_version, postgres_get_primary},
+        helper::{get_backups_from_s3, get_pg_version, postgres_get_primary},
     },
     s3::{get_s3_config, s3_client::RealS3Client},
+    server_interactor::get_server_interactor,
 };
 
 pub async fn run_postgres_restore_cmd(
@@ -111,7 +112,7 @@ pub async fn run_postgres_restore_cmd(
         }
     }
 
-    let interactor = connect_to_node(&primary_node, &config)?;
+    let interactor = get_server_interactor(&primary_node.name)?;
 
     println!("Restoring database to backup ID: {}\n", target_backup_id);
     if let Some(t) = pitr_time {

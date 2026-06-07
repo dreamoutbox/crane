@@ -53,8 +53,8 @@ async fn test_backup_restore_extend() {
         .expect("Failed to get leader node")
         .expect("No active PostgreSQL leader found");
 
-    let interactor = crane::postgres_unit::helper::connect_to_node(&primary_node, &config)
-        .expect("Failed to connect to primary node");
+    let interactor =
+        get_server_interactor(&primary_node.name).expect("Failed to connect to primary node");
 
     println!("Step 1: DROP and CREATE test_table");
     run_sql(
@@ -97,7 +97,7 @@ async fn test_backup_restore_extend() {
     // ============================================================
     // ASSERT DATA FROM INCREMENTAL BACKUP TEST #1
     // ============================================================
-    let interactor = crane::postgres_unit::helper::connect_to_node(&primary_node, &config).unwrap();
+    let interactor = get_server_interactor(&primary_node.name).unwrap();
 
     testw_assert_table(interactor, "1\n2").unwrap();
 
@@ -124,7 +124,7 @@ async fn test_backup_restore_extend() {
     let _backup_full_2 = testw_full_backup(&config, "full2").unwrap();
 
     // Reconnect to get a fresh interactor
-    let interactor = crane::postgres_unit::helper::connect_to_node(&primary_node, &config).unwrap();
+    let interactor = get_server_interactor(&primary_node.name).unwrap();
 
     // ============================================================
     // INSERT 3 TO TABLE
@@ -152,7 +152,7 @@ async fn test_backup_restore_extend() {
     // ============================================================
     // ASSERT 1,2,3 IN TABLE
     // ============================================================
-    let interactor = crane::postgres_unit::helper::connect_to_node(&primary_node, &config).unwrap();
+    let interactor = get_server_interactor(&primary_node.name).unwrap();
     testw_assert_table(interactor, "1\n2\n3").unwrap();
 }
 

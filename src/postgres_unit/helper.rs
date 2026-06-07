@@ -29,7 +29,7 @@ pub fn find_node_config_with_fallback(
     let pg_nodes = config_get_nodes(&config, "postgres");
 
     for node in pg_nodes {
-        if let Ok(interactor) = connect_to_node(&node, config) {
+        if let Ok(interactor) = get_server_interactor(&node.name) {
             if let Ok(h) = interactor.cmd("hostname") {
                 if h.stdout.trim() == target {
                     return Some(node);
@@ -39,13 +39,6 @@ pub fn find_node_config_with_fallback(
     }
 
     None
-}
-
-pub fn connect_to_node(
-    node: &config::NodeConfig,
-    _config: &config::Config,
-) -> anyhow::Result<std::sync::Arc<dyn ServerInteractor + Send + Sync>> {
-    get_server_interactor(&node.name)
 }
 
 pub fn get_pg_version(config: &config::Config) -> String {
@@ -149,7 +142,7 @@ pub fn postgres_get_primary(config: &config::Config) -> anyhow::Result<Option<co
     let pg_nodes = config_get_nodes(config, "postgres");
 
     for node in pg_nodes {
-        if let Ok(interactor) = connect_to_node(&node, config) {
+        if let Ok(interactor) = get_server_interactor(&node.name) {
             // First check via Patroni REST API
             let curl_patroni_primary_cmd =
                 "curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8008/primary";

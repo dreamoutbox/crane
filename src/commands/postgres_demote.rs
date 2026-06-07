@@ -1,6 +1,6 @@
-// ======================
+// ====================================
 // OBSOLETE: no longer useful
-// ======================
+// ====================================
 //
 // use crate::postgres_unit::helper::{
 //     connect_to_node, find_node_config_with_fallback, postgres_get_primary,

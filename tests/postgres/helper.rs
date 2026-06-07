@@ -1,3 +1,5 @@
+use crane::server_interactor::get_server_interactor;
+
 fn try_connect(user: &str, password: &str, db: &str) -> Result<String, String> {
     let output = Command::new("psql")
         .env("PGPASSWORD", password)
@@ -23,8 +25,8 @@ fn allow_host_connection(config_path: &std::path::Path) {
     let primary_node = postgres_get_primary(&config)
         .expect("Failed to get leader node")
         .expect("No active PostgreSQL leader found");
-    let primary_interactor = crane::postgres_unit::helper::connect_to_node(&primary_node, &config)
-        .expect("Failed to connect to primary node");
+    let primary_interactor =
+        get_server_interactor(&primary_node.name).expect("Failed to connect to primary node");
 
     let pg_version = crane::postgres_unit::helper::get_pg_version(&config);
     let pg_hba_path = format!("/etc/postgresql/{}/main/pg_hba.conf", pg_version);
