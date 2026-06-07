@@ -2,7 +2,7 @@
 // RUST_BACKTRACE=1 cargo nextest run test_backup_restore -- --no-capture
 
 use crate::helper::run_sql;
-use crane::commands::postgres_restore::run_postgres_restore_cmd;
+use crane::postgres_unit::restore::postgres_restore;
 use crane::server_interactor::get_server_interactor;
 use crane::{
     commands::postgres_backup::backup_from_config_wrapper, config::read_config_toml_file,
@@ -64,7 +64,7 @@ async fn test_backup_restore() {
     // RESTORE FROM FULL BACKUP
     // ============================================================
     println!("Step 7: restore from full backup");
-    run_postgres_restore_cmd(&config, &full_backup.id, None, None)
+    postgres_restore(&config, &full_backup.id, None, None)
         .await
         .expect("Restore from full backup failed");
 
@@ -159,7 +159,7 @@ async fn test_backup_restore() {
         "Step 15: restore from backup #1 (type: {}) with pitr: {:?}",
         incr_backup_1.backup_type, pitr_arg
     );
-    run_postgres_restore_cmd(&config, &incr_backup_1.id, None, pitr_arg)
+    postgres_restore(&config, &incr_backup_1.id, None, pitr_arg)
         .await
         .expect("Restore from backup #1 failed");
 
@@ -193,7 +193,7 @@ async fn test_backup_restore() {
         "Step 19: restore from incremental backup #2 with --pitr {}",
         pitr_time_before_drop
     );
-    run_postgres_restore_cmd(
+    postgres_restore(
         &config,
         &incr_backup_2.id,
         None,

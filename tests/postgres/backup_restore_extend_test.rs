@@ -3,10 +3,10 @@
 
 use crate::helper::{reset_docker_compose, run_sql};
 use crane::commands::postgres_backup::backup_from_config_wrapper;
-use crane::commands::postgres_restore::run_postgres_restore_cmd;
 use crane::config::{Config, read_config_toml_file};
 use crane::postgres_unit::entity::BackupMetadata;
 use crane::postgres_unit::helper::pg_get_primary;
+use crane::postgres_unit::restore::postgres_restore;
 use crane::server_interactor::get_server_interactor;
 use crane::server_interactor::server_interactor_trait::ServerInteractor;
 use std::sync::Arc;
@@ -163,7 +163,7 @@ async fn tw_restore(
         backup_meta.id, pitr
     );
 
-    run_postgres_restore_cmd(&config, &backup_meta.id, None, pitr)
+    postgres_restore(&config, &backup_meta.id, None, pitr)
         .await
         .expect("Restore from backup failed");
 
