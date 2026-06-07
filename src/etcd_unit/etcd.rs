@@ -3,7 +3,7 @@ use crate::{
     server_interactor::server_interactor_trait::ServerInteractor,
 };
 
-pub fn install_etcd(interactor: &dyn ServerInteractor) -> anyhow::Result<()> {
+fn install_etcd(interactor: &dyn ServerInteractor) -> anyhow::Result<()> {
     let installed = interactor
         .cmd("which etcd")
         .map(|out| out.exit_code == 0)
@@ -29,6 +29,8 @@ pub fn setup_etcd(
     pg_nodes: &[config::NodeConfig],
 ) -> anyhow::Result<()> {
     println!("\tSetup etcd cluster on node {}...", node.name);
+
+    install_etcd(interactor)?;
 
     let etcd_configured = interactor
         .cmd("test -f /etc/default/etcd")
@@ -163,7 +165,7 @@ pub fn wait_for_etcd_cluster(
     anyhow::bail!("Timeout waiting for etcd quorum to form")
 }
 
-/// pg_clear_dcs_state
+/// etcd_clear_dcs_state
 /// Clear DCS (etcd) keys for the cluster to prevent conflicts
 pub fn etcd_clear_dcs_state(interactor: &dyn ServerInteractor) {
     let _ = interactor.cmd("sudo env ETCDCTL_API=3 etcdctl del /service/postgres-cluster --prefix");

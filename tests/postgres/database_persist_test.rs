@@ -3,7 +3,7 @@
 
 use crate::helper::{reset_docker_compose, run_sql};
 use crane::{
-    config::read_config_toml_file, postgres_unit::helper::postgres_get_primary,
+    config::read_config_toml_file, postgres_unit::helper::pg_get_primary,
     server_interactor::get_server_interactor,
 };
 
@@ -21,7 +21,7 @@ async fn test_database_persist_after_deploy() {
         .expect("deploy failed");
 
     // Retrieve leader node and connect
-    let primary_node = postgres_get_primary(&config)
+    let primary_node = pg_get_primary(&config)
         .expect("Failed to get leader node")
         .expect("No active PostgreSQL leader found");
 

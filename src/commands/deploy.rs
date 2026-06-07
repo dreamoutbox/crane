@@ -1,7 +1,7 @@
+use crate::config::get_postgres_dbs_and_users_config;
 use crate::deployer::helper::{deploy_update_etc_hosts, deploy_zip_app};
 use crate::deployer::users::deploy_setup_app_users;
 use crate::helper::config::config_get_nodes;
-use crate::postgres_unit::helper::get_postgres_configs;
 use crate::postgres_unit::setup::postgres_setup_wrapper;
 use crate::server_interactor::get_server_interactor;
 use std::path::Path;
@@ -212,7 +212,7 @@ fn inner_deploy_single_app(
     }
 
     if let Some(ref app_db_deps) = app.database {
-        let (db_configs, user_configs) = get_postgres_configs(config);
+        let (db_configs, user_configs) = get_postgres_dbs_and_users_config(config);
         for db_dep in app_db_deps {
             let user_name = &db_dep.user;
             let user_pass = user_configs

@@ -1,5 +1,5 @@
 use crate::postgres_unit::PYTHON_PARSE_PG_LOG_SCRIPT;
-use crate::postgres_unit::helper::postgres_get_primary;
+use crate::postgres_unit::helper::pg_get_primary;
 use crate::server_interactor::get_server_interactor;
 use crate::server_interactor::server_interactor_trait::ServerInteractor;
 
@@ -11,7 +11,7 @@ pub fn run_postgres_logs_cmd(
     db: Option<&str>,
     sql: Option<&str>,
 ) -> anyhow::Result<()> {
-    let primary_node = postgres_get_primary(config)?
+    let primary_node = pg_get_primary(config)?
         .ok_or_else(|| anyhow::anyhow!("No active PostgreSQL primary/leader found in cluster"))?;
 
     let interactor = get_server_interactor(&primary_node.name)?;

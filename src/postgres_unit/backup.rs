@@ -1,7 +1,7 @@
 use crate::{
     postgres_unit::{
         entity::{BackupMetadata, BackupRegistry},
-        helper::{cmdw, get_backups_from_s3, get_postgres_current_timeline_id},
+        helper::{cmdw, get_backups_data_from_s3, get_pg_current_timeline_id},
     },
     s3::S3Client,
     server_interactor::server_interactor_trait::ServerInteractor,
@@ -106,7 +106,7 @@ pub fn postgres_backup(
             ))?;
             let parent_timeline_id = parent_tli_out.stdout.trim();
 
-            let current_timeline_id = get_postgres_current_timeline_id(interactor)?;
+            let current_timeline_id = get_pg_current_timeline_id(interactor)?;
 
             if !parent_timeline_id.is_empty()
                 && !current_timeline_id.is_empty()
@@ -300,7 +300,7 @@ pub fn postgres_backup(
 
     // 10. Update backup registry on S3 and local
     let registry_key = "backups/registry.toml";
-    let backups = get_backups_from_s3(s3_client)?;
+    let backups = get_backups_data_from_s3(s3_client)?;
     let mut registry = BackupRegistry { backups };
 
     registry.backups.push(meta.clone());

@@ -1,5 +1,5 @@
 use crate::postgres_unit::entity::BackupMetadata;
-use crate::postgres_unit::helper::get_backups_from_s3;
+use crate::postgres_unit::helper::get_backups_data_from_s3;
 use crate::s3::get_s3_config;
 use crate::s3::s3_client::RealS3Client;
 
@@ -9,7 +9,7 @@ pub fn list_postgres_backups_wrapper(
     let s3_config = get_s3_config(&config)?;
     let s3_client = RealS3Client::new(&s3_config)?;
 
-    let backups = get_backups_from_s3(&s3_client)?;
+    let backups = get_backups_data_from_s3(&s3_client)?;
 
     Ok(backups)
 }

@@ -1,4 +1,4 @@
-use crane::postgres_unit::helper::postgres_get_primary;
+use crane::postgres_unit::helper::pg_get_primary;
 use crane::server_interactor::get_server_interactor;
 use crane::server_interactor::server_interactor_trait::ServerInteractor;
 use std::process::Command;
@@ -44,7 +44,7 @@ pub fn pg_allow_host_machine(config: &crane::config::Config) {
     //     .cmd("sudo -u postgres psql -c 'SELECT pg_reload_conf();'")
     //     .expect("failed to reload pg config");
 
-    let primary_node = postgres_get_primary(config)
+    let primary_node = pg_get_primary(config)
         .expect("Failed to get leader node")
         .expect("No active PostgreSQL leader found");
 

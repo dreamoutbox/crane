@@ -2,7 +2,7 @@
 // RUST_BACKTRACE=1 cargo nextest run test_python_backup_script -- --no-capture
 
 use crane::{
-    config::read_config_toml_file, postgres_unit::helper::postgres_get_primary,
+    config::read_config_toml_file, postgres_unit::helper::pg_get_primary,
     server_interactor::get_server_interactor,
 };
 
@@ -24,7 +24,7 @@ async fn test_python_backup_script() {
     );
 
     // Discover the current primary node dynamically
-    let primary_node = postgres_get_primary(&config)
+    let primary_node = pg_get_primary(&config)
         .expect("Failed to get primary node")
         .expect("No active PostgreSQL leader found");
 

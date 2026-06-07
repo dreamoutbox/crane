@@ -6,7 +6,7 @@ use crane::commands::postgres_restore::run_postgres_restore_cmd;
 use crane::server_interactor::get_server_interactor;
 use crane::{
     commands::postgres_backup::backup_from_config_wrapper, config::read_config_toml_file,
-    postgres_unit::helper::postgres_get_primary,
+    postgres_unit::helper::pg_get_primary,
 };
 
 #[tokio::test]
@@ -20,7 +20,7 @@ async fn test_backup_restore() {
         .expect("deploy failed");
 
     // Retrieve leader node and connect
-    let primary_node = postgres_get_primary(&config)
+    let primary_node = pg_get_primary(&config)
         .expect("Failed to get leader node")
         .expect("No active PostgreSQL leader found");
 

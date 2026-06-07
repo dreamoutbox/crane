@@ -1,5 +1,5 @@
 pub mod backup;
-pub mod demote;
+pub mod cron;
 pub mod entity;
 pub mod helper;
 pub mod install;

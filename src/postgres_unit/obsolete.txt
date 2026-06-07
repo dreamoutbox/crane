@@ -1,0 +1,152 @@
+
+// OBSOLETE SINCE WE USE PATRONI
+// fn update_config_value(content: &str, key: &str, value: &str) -> String {
+//     let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+//     let mut found = false;
+
+//     for line in &mut lines {
+//         let trimmed = line.trim();
+//         let mut key_part = trimmed;
+//         if key_part.starts_with('#') {
+//             key_part = key_part[1..].trim();
+//         }
+//         if key_part.starts_with(key) {
+//             let rest = key_part[key.len()..].trim();
+//             if rest.starts_with('=') {
+//                 *line = format!("{} = {}", key, value);
+//                 found = true;
+//                 break;
+//             }
+//         }
+//     }
+
+//     if !found {
+//         lines.push(format!("{} = {}", key, value));
+//     }
+
+//     lines.join("\n") + "\n"
+// }
+
+// OBSOLETE SINCE WE USE PATRONI
+// pub fn configure_postgresql_conf(
+//     interactor: &dyn ServerInteractor,
+//     version: &str,
+// ) -> anyhow::Result<()> {
+//     let pg_conf_path = format!("/etc/postgresql/{}/main/postgresql.conf", version);
+//     let existing_conf = interactor.cmd(&format!("sudo cat '{}'", pg_conf_path))?;
+//     let mut updated_conf = existing_conf.stdout.clone();
+
+//     updated_conf = update_config_value(&updated_conf, "listen_addresses", "'*'");
+//     updated_conf = update_config_value(&updated_conf, "wal_level", "'replica'");
+//     updated_conf = update_config_value(&updated_conf, "max_wal_senders", "10");
+//     updated_conf = update_config_value(&updated_conf, "hot_standby", "'on'");
+//     updated_conf = update_config_value(&updated_conf, "log_statement", "'mod'");
+//     updated_conf = update_config_value(&updated_conf, "log_min_duration_statement", "-1");
+//     updated_conf = update_config_value(
+//         &updated_conf,
+//         "log_line_prefix",
+//         "'%t [%p]: user=%u db=%d app=%a client=%h '",
+//     );
+//     updated_conf = update_config_value(&updated_conf, "log_destination", "'csvlog'");
+//     updated_conf = update_config_value(&updated_conf, "logging_collector", "'on'");
+
+//     // WAL archiving for PITR support
+//     interactor.cmd("sudo mkdir -p /var/lib/postgresql/wal_archive")?;
+//     interactor.cmd("sudo chown postgres:postgres /var/lib/postgresql/wal_archive")?;
+//     interactor.cmd("sudo chmod 700 /var/lib/postgresql/wal_archive")?;
+//     updated_conf = update_config_value(&updated_conf, "archive_mode", "'on'");
+//     updated_conf = update_config_value(
+//         &updated_conf,
+//         "archive_command",
+//         "'cp %p /var/lib/postgresql/wal_archive/%f'",
+//     );
+
+//     if version.parse::<i32>().unwrap_or(0) >= 17 {
+//         updated_conf = update_config_value(&updated_conf, "summarize_wal", "'on'");
+//     }
+
+//     if updated_conf != existing_conf.stdout {
+//         interactor.create_file(&pg_conf_path, &updated_conf)?;
+//         interactor.cmd(&format!("sudo chown postgres:postgres '{}'", pg_conf_path))?;
+//         interactor.cmd(&format!("sudo chmod 644 '{}'", pg_conf_path))?;
+//     }
+
+//     Ok(())
+// }
+
+// OBSOLETE SINCE WE USE PATRONI
+// pub fn configure_postgres_primary_rules(
+//     interactor: &dyn ServerInteractor,
+//     version: &str,
+//     replica_user: &str,
+//     follower_ips: &[String],
+//     app_node_ips: &[String],
+// ) -> anyhow::Result<()> {
+//     // 1. Configure postgresql.conf parameters directly
+//     configure_postgresql_conf(interactor, version)?;
+
+//     // 2. Configure pg_hba.conf
+//     let pg_hba_path = format!("/etc/postgresql/{}/main/pg_hba.conf", version);
+//     let existing_hba = interactor.cmd(&format!("sudo cat '{}'", pg_hba_path))?;
+//     let mut updated_hba = existing_hba.stdout.clone();
+
+//     // Allow local connections without password (trust)
+//     updated_hba = updated_hba.replace(
+//         "local   all             postgres                                peer",
+//         "local   all             postgres                                trust",
+//     );
+//     updated_hba = updated_hba.replace(
+//         "local   all             all                                     peer",
+//         "local   all             all                                     trust",
+//     );
+//     updated_hba = updated_hba.replace(
+//         "host    all             all             127.0.0.1/32            scram-sha-256",
+//         "host    all             all             127.0.0.1/32            trust",
+//     );
+//     updated_hba = updated_hba.replace(
+//         "host    all             all             ::1/128                 scram-sha-256",
+//         "host    all             all             ::1/128                 trust",
+//     );
+
+//     let mut new_rules = String::new();
+//     for follower in follower_ips {
+//         let rule = format!(
+//             "host replication {} {}/32 scram-sha-256",
+//             replica_user, follower
+//         );
+//         if !updated_hba.contains(&rule) {
+//             new_rules.push_str(&format!("{}\n", rule));
+//         }
+//     }
+//     for app_ip in app_node_ips {
+//         let rule = format!("host all all {}/32 scram-sha-256", app_ip);
+//         if !updated_hba.contains(&rule) {
+//             new_rules.push_str(&format!("{}\n", rule));
+//         }
+//     }
+
+//     if !new_rules.is_empty() {
+//         if !updated_hba.ends_with('\n') {
+//             updated_hba.push('\n');
+//         }
+//         updated_hba.push_str("\n# Crane replication & client connections\n");
+//         updated_hba.push_str(&new_rules);
+//     }
+
+//     if updated_hba != existing_hba.stdout {
+//         interactor.create_file(&pg_hba_path, &updated_hba)?;
+//         interactor.cmd(&format!("sudo chown postgres:postgres '{}'", pg_hba_path))?;
+//         interactor.cmd(&format!("sudo chmod 640 '{}'", pg_hba_path))?;
+//     }
+
+//     // Restart PostgreSQL cluster to apply replication config
+//     println!("\tRestarting PostgreSQL cluster to apply replication config...");
+//     let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", version);
+//     let restart_cmd = format!(
+//         "sudo -u postgres {} -D /var/lib/postgresql/{}/main -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf -c restore_command=false\" restart > /dev/null 2>&1 < /dev/null",
+//         pg_ctl, version, version
+//     );
+//     interactor.cmd(&restart_cmd)?;
+
+//     Ok(())
+// }

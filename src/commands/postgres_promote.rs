@@ -1,28 +1,25 @@
-use crate::postgres_unit::helper::find_node_config_with_fallback;
-use crate::postgres_unit::helper::postgres_get_primary;
+use crate::config::find_node_config;
+use crate::postgres_unit::helper::pg_get_primary;
 use crate::server_interactor::get_server_interactor;
 
 pub fn run_postgres_promote_cmd(
     config: &crate::config::Config,
-    target_node_str: &str,
+    target_node: &str,
 ) -> anyhow::Result<()> {
-    let target_conf_node = find_node_config_with_fallback(target_node_str, &config)
-        .ok_or_else(|| anyhow::anyhow!("Node '{}' not found in configuration", target_node_str))?;
+    let target_conf_node = find_node_config(&config, target_node)
+        .ok_or_else(|| anyhow::anyhow!("Node '{}' not found in configuration", target_node))?;
 
     if !target_conf_node.roles.contains(&"postgres".to_string()) {
-        anyhow::bail!(
-            "Node '{}' does not have the 'postgres' role",
-            target_node_str
-        );
+        anyhow::bail!("Node '{}' does not have the 'postgres' role", target_node);
     }
 
-    let current_leader = postgres_get_primary(&config)?;
+    let current_leader = pg_get_primary(&config)?;
 
     if let Some(ref leader) = current_leader {
         if leader.internal_ip == target_conf_node.internal_ip {
             println!(
                 "Node '{}' is already the active PostgreSQL leader.",
-                target_node_str
+                target_node
             );
             return Ok(());
         }

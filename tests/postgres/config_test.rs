@@ -1,41 +1,42 @@
-use crane::postgres_unit::helper::get_postgres_configs;
+use crane::config::get_postgres_dbs_and_users_config;
 
 #[test]
 fn test_get_postgres_configs() {
     let toml_str = r#"
-            [[nodes]]
-            name = "vps1"
-            public_ip = "127.0.0.1"
-            internal_ip = "10.0.0.11"
-            ssh_ip = "127.0.0.1"
-            ssh_port = 2221
-            user = "admin"
-            roles = ["postgres"]
-            private_key = "dummy"
+[[nodes]]
+name = "vps1"
+public_ip = "127.0.0.1"
+internal_ip = "10.0.0.11"
+ssh_ip = "127.0.0.1"
+ssh_port = 2221
+user = "admin"
+roles = ["postgres"]
+private_key = "dummy"
 
-            [app.myapp]
-            name = "myapp"
-            deploy_dir = "./demo"
-            entrypoint = "./myapp"
-            deploy_user = "deployman"
-            port_start = 3000
-            instances = 1
+[app.myapp]
+name = "myapp"
+deploy_dir = "./demo"
+entrypoint = "./myapp"
+deploy_user = "deployman"
+port_start = 3000
+instances = 1
 
-            [db.postgres]
-            enabled = true
-            version = "17"
-            replica_pass = "replica"
+[db.postgres]
+enabled = true
+version = "17"
+replica_pass = "replica"
 
-            [[db.postgres.users]]
-            user = "app1"
-            password = "app1"
-            databases = ["myapp"]
+[[db.postgres.users]]
+user = "app1"
+password = "app1"
+databases = ["myapp"]
 
-            [db.postgres.myapp]
-            name = "myapp"
-        "#;
+[db.postgres.myapp]
+name = "myapp"
+"#;
+
     let config: crane::config::Config = toml::from_str(toml_str).unwrap();
-    let (dbs, users) = get_postgres_configs(&config);
+    let (dbs, users) = get_postgres_dbs_and_users_config(&config);
 
     assert_eq!(dbs.len(), 1);
     assert_eq!(dbs[0].name, "myapp");

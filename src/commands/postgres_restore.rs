@@ -1,7 +1,7 @@
 use crate::{
     postgres_unit::{
         entity::BackupRegistry,
-        helper::{get_backups_from_s3, get_pg_version, postgres_get_primary},
+        helper::{get_backups_data_from_s3, get_pg_version, pg_get_primary},
     },
     s3::{get_s3_config, s3_client::RealS3Client},
     server_interactor::get_server_interactor,
@@ -22,7 +22,7 @@ pub async fn run_postgres_restore_cmd(
 
     let s3_config = get_s3_config(&config)?;
 
-    let primary_node = match postgres_get_primary(&config)? {
+    let primary_node = match pg_get_primary(&config)? {
         Some(node) => node,
         None => config
             .nodes
@@ -35,7 +35,7 @@ pub async fn run_postgres_restore_cmd(
     let pg_version = get_pg_version(&config);
     let s3_client = RealS3Client::new(&s3_config)?;
 
-    let backups = get_backups_from_s3(&s3_client)?;
+    let backups = get_backups_data_from_s3(&s3_client)?;
     let registry = BackupRegistry { backups };
 
     let target_backup = registry

@@ -543,7 +543,7 @@ pub async fn postgres_restore(
     }
 
     // Wait for all replica nodes to join and reach "running" state
-    println!("Waiting for replica nodes to join the cluster...");
+    println!("Waiting for all nodes to join the cluster...");
     pg_cluster_wait_all_nodes_ready(interactor, &pg_nodes);
 
     Ok(())

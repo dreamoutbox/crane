@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex, RwLock};
 
 pub mod debian;
 pub mod server_interactor_trait;
+pub mod server_path;
 
 pub struct ConnectionRegistry {
     pub config: crate::config::Config,

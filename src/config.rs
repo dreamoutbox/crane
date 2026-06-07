@@ -254,3 +254,73 @@ fn load_env_file<P: AsRef<Path>>(path: P) -> anyhow::Result<HashMap<String, Stri
 
     Ok(map)
 }
+
+pub fn find_node_config<'a>(config: &'a Config, target: &str) -> Option<&'a NodeConfig> {
+    config
+        .nodes
+        .iter()
+        .find(|n| n.internal_ip == target || n.public_ip == target || n.name == target)
+}
+
+pub fn get_pg_replica_pass(config: &Config) -> String {
+    config
+        .db
+        .as_ref()
+        .and_then(|db| db.postgres.as_ref())
+        .map(|pg| pg.replica_pass.clone())
+        .unwrap_or_else(|| "replica".to_string())
+}
+
+// Parses databases and users configs from config
+pub fn get_postgres_dbs_and_users_config(
+    config: &crate::config::Config,
+) -> (Vec<PostgresDbConfig>, Vec<PostgresUserConfig>) {
+    let mut db_configs = Vec::new();
+    let mut user_configs = std::collections::HashMap::new();
+
+    if let Some(ref db) = config.db {
+        if let Some(ref pg) = db.postgres {
+            // 1. Parse databases
+            for (_key, val) in &pg.databases {
+                db_configs.push(PostgresDbConfig {
+                    name: val.name.clone(),
+                });
+            }
+
+            // 2. config postgres users
+            if let Some(ref users_list) = pg.users {
+                for u in users_list {
+                    let user_entry =
+                        user_configs
+                            .entry(u.user.clone())
+                            .or_insert_with(|| PostgresUserConfig {
+                                user: u.user.clone(),
+                                password: u.password.clone(),
+                                databases: Vec::new(),
+                                state: u.state.clone(),
+                            });
+
+                    for db_name in &u.databases {
+                        if !user_entry.databases.contains(db_name) {
+                            user_entry.databases.push(db_name.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let users = user_configs.into_values().collect();
+
+    (db_configs, users)
+}
+
+pub fn get_postgres_backup_schedule_config(
+    config: &crate::config::Config,
+) -> Option<PostgresBackupSchedule> {
+    config
+        .db
+        .as_ref()
+        .and_then(|db| db.postgres.as_ref())
+        .and_then(|pg| pg.backup.clone())
+}

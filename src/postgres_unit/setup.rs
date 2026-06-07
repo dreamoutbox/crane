@@ -1,15 +1,14 @@
 use crate::{
-    config,
-    etcd_unit::{install_etcd, setup_etcd, start_etcd, wait_for_etcd_cluster},
+    config::{
+        self, get_pg_replica_pass, get_postgres_backup_schedule_config,
+        get_postgres_dbs_and_users_config,
+    },
+    etcd_unit::{setup_etcd, start_etcd, wait_for_etcd_cluster},
     haproxy_unit::haproxy::setup_haproxy_on_each_nodes_wrapper,
     helper::config::config_get_nodes,
     patroni::install_patroni,
     postgres_unit::{
-        helper::{
-            backup_postgres_dir, configure_postgres_cron_backup, get_pg_version,
-            get_postgres_backup_schedule, get_postgres_configs, get_replica_pass,
-            pg_cluster_wait_all_nodes_ready, postgres_get_primary,
-        },
+        helper::{backup_pg_dir, get_pg_version, pg_cluster_wait_all_nodes_ready, pg_get_primary},
         install::install_postgres,
         setup_postgres_primary::setup_postgres_primary,
     },
@@ -21,9 +20,9 @@ pub async fn postgres_setup_wrapper(
     app_nodes: &Vec<config::NodeConfig>,
 ) -> Result<(), anyhow::Error> {
     let pg_version = get_pg_version(&config);
-    let replica_pass = get_replica_pass(&config);
+    let replica_pass = get_pg_replica_pass(&config);
 
-    let schedule = get_postgres_backup_schedule(config);
+    let schedule = get_postgres_backup_schedule_config(config);
     let s3_config = if schedule.is_some() {
         Some(crate::s3::get_s3_config(config)?)
     } else {
@@ -84,7 +83,7 @@ pub async fn postgres_setup_wrapper(
     println!("\tWaiting for Patroni leader election...");
     let mut primary_node = None;
     for _ in 0..100 {
-        if let Ok(Some(leader)) = postgres_get_primary(config) {
+        if let Ok(Some(leader)) = pg_get_primary(config) {
             primary_node = Some(leader);
             break;
         }
@@ -107,7 +106,7 @@ pub async fn postgres_setup_wrapper(
     let leader_interactor = interactors
         .remove(&primary.name)
         .ok_or_else(|| anyhow::anyhow!("Leader interactor not found in setup map"))?;
-    let (db_configs, user_configs) = get_postgres_configs(config);
+    let (db_configs, user_configs) = get_postgres_dbs_and_users_config(config);
 
     setup_postgres_primary(
         leader_interactor.clone(),
@@ -152,11 +151,10 @@ fn inner_setup_postgres_node(
 
     let interactor = get_server_interactor(&node.name)?;
 
-    // Ensure postgres binaries are installed first
+    // Ensure postgres installed first
     install_postgres(&*interactor, &pg_version)?;
 
     // Install & configure etcd (configure only, do NOT start yet)
-    install_etcd(&*interactor)?;
     setup_etcd(&*interactor, &node, &pg_nodes)?;
 
     // Stop & disable standard postgresql systemd service
@@ -178,7 +176,7 @@ fn inner_setup_postgres_node(
         let _ = interactor.cmd("sudo pkill -9 -u postgres postgres");
 
         // Backup existing postgres main directory
-        backup_postgres_dir(&pg_version, &*interactor)?;
+        backup_pg_dir(&pg_version, &*interactor)?;
     }
 
     // Configure WAL archive directory
@@ -249,7 +247,8 @@ fn inner_setup_postgres_node(
         "\tSetting up automated cron backups on node {}...",
         node.name
     );
-    configure_postgres_cron_backup(
+
+    crate::postgres_unit::cron::configure_postgres_cron_backup(
         &*interactor,
         &pg_version,
         &replica_pass,
