@@ -1,7 +1,7 @@
 use crate::{
     postgres_unit::{
         entity::{BackupMetadata, BackupRegistry},
-        helper::{cmdw, get_backups_data_from_s3, get_pg_current_timeline_id},
+        helper::{get_backups_data_from_s3, get_pg_current_timeline_id},
     },
     s3::S3Client,
     server_interactor::server_interactor_trait::ServerInteractor,
@@ -36,22 +36,14 @@ pub fn postgres_backup(
     let pg_verifybackup = format!("/usr/lib/postgresql/{}/bin/pg_verifybackup", pg_version);
 
     // 2. Ensure Backup Directories exist
-    cmdw(interactor, "sudo mkdir -p /var/lib/postgresql/backups")?;
-    cmdw(
-        interactor,
-        "sudo chown postgres:postgres /var/lib/postgresql/backups",
-    )?;
-    cmdw(interactor, "sudo chmod 755 /var/lib/postgresql/backups")?;
-    cmdw(
-        interactor,
-        &format!("sudo -u postgres mkdir -p {}", local_path),
-    )?;
+    interactor.mkdir("/var/lib/postgresql/backups")?;
+    interactor.chown("/var/lib/postgresql/backups", "postgres", "postgres")?;
+    interactor.chmod("/var/lib/postgresql/backups", "755")?;
+    interactor.mkdir(&local_path)?;
+    interactor.chown(&local_path, "postgres", "postgres")?;
 
     // 3. Grant pg_read_server_files to replicator (idempotent)
-    cmdw(
-        interactor,
-        r#"sudo -u postgres psql -c "GRANT pg_read_server_files TO replicator;""#,
-    )?;
+    interactor.cmd(r#"sudo -u postgres psql -c "GRANT pg_read_server_files TO replicator;""#)?;
 
     // 4. Build pg_basebackup command
     let is_incr =
@@ -69,34 +61,20 @@ pub fn postgres_backup(
                 format!("/var/lib/postgresql/backups/{}/backup_manifest", parent.id);
 
             // Check if parent manifest is present locally
-            let test_manifest = interactor.cmd(&format!(
-                "test -f {} && echo 'yes' || echo 'no'",
-                parent_manifest
-            ))?;
-            if test_manifest.stdout.trim() != "yes" {
+            if !interactor.exists(&parent_manifest)? {
                 // Recreate parent directory and restore manifest from S3
-                cmdw(
-                    interactor,
-                    &format!(
-                        "sudo -u postgres mkdir -p /var/lib/postgresql/backups/{}",
-                        parent.id
-                    ),
-                )?;
-                cmdw(
-                    interactor,
-                    &format!("sudo chmod 755 /var/lib/postgresql/backups/{}", parent.id),
-                )?;
+                let parent_dir = format!("/var/lib/postgresql/backups/{}", parent.id);
+                interactor.mkdir(&parent_dir)?;
+                interactor.chown(&parent_dir, "postgres", "postgres")?;
+                interactor.chmod(&parent_dir, "755")?;
                 let s3_key = format!("backups/{}/backup_manifest", parent.id);
                 let manifest_data = s3_client.get_object(&s3_key)?;
 
                 // Write back on VPS
                 let content = String::from_utf8_lossy(&manifest_data);
                 interactor.create_file(&parent_manifest, &content)?;
-                cmdw(
-                    interactor,
-                    &format!("sudo chown postgres:postgres {}", parent_manifest),
-                )?;
-                cmdw(interactor, &format!("sudo chmod 644 {}", parent_manifest))?;
+                interactor.chown(&parent_manifest, "postgres", "postgres")?;
+                interactor.chmod(&parent_manifest, "644")?;
             }
 
             // Check parent's timeline vs current database's timeline
@@ -179,7 +157,7 @@ pub fn postgres_backup(
     println!("\nRunning pg_basebackup command: {}\n", pgbasebackup_cmd);
     let pgbasebackup_out = interactor.cmd(&pgbasebackup_cmd)?;
     if pgbasebackup_out.exit_code != 0 {
-        let _ = interactor.cmd(&format!("sudo rm -rf {}", local_path));
+        let _ = interactor.rm(&local_path);
         anyhow::bail!(
             "pg_basebackup failed with exit code {}: {}",
             pgbasebackup_out.exit_code,
@@ -189,56 +167,35 @@ pub fn postgres_backup(
 
     // 6. Verify Backup (requires extracting tar to a temp directory first)
     let verify_dir = format!("/var/lib/postgresql/backups/{}_verify", id);
-    cmdw(
-        interactor,
-        &format!("sudo -u postgres mkdir -p {}", verify_dir),
-    )?;
-    cmdw(
-        interactor,
-        &format!(
-            "sudo -u postgres tar -xf {}/base.tar -C {}",
-            local_path, verify_dir
-        ),
-    )?;
+    interactor.mkdir(&verify_dir)?;
+    interactor.chown(&verify_dir, "postgres", "postgres")?;
+    interactor.tar_extract(&format!("{}/base.tar", local_path), &verify_dir)?;
+    interactor.chown(&verify_dir, "postgres", "postgres")?;
 
     // Check if pg_wal.tar exists and extract it
-    let test_wal = interactor.cmd(&format!(
-        "test -f {}/pg_wal.tar && echo 'yes' || echo 'no'",
-        local_path
-    ))?;
-    if test_wal.stdout.trim() == "yes" {
-        cmdw(
-            interactor,
-            &format!("sudo -u postgres mkdir -p {}/pg_wal", verify_dir),
-        )?;
-        cmdw(
-            interactor,
-            &format!(
-                "sudo -u postgres tar -xf {}/pg_wal.tar -C {}/pg_wal/",
-                local_path, verify_dir
-            ),
-        )?;
+    let wal_path = format!("{}/pg_wal.tar", local_path);
+    if interactor.exists(&wal_path)? {
+        let verify_wal_dir = format!("{}/pg_wal", verify_dir);
+        interactor.mkdir(&verify_wal_dir)?;
+        interactor.chown(&verify_wal_dir, "postgres", "postgres")?;
+        interactor.tar_extract(&format!("{}/pg_wal.tar", local_path), &verify_wal_dir)?;
+        interactor.chown(&verify_wal_dir, "postgres", "postgres")?;
     }
 
     // Copy backup_manifest to verify_dir
-    cmdw(
-        interactor,
-        &format!("sudo cp {}/backup_manifest {}/", local_path, verify_dir),
-    )?;
-    cmdw(
-        interactor,
-        &format!("sudo chown -R postgres:postgres {}", verify_dir),
-    )?;
+    let manifest_path = format!("{}/backup_manifest", local_path);
+    interactor.cp(&manifest_path, &verify_dir)?;
+    interactor.chown(&verify_dir, "postgres", "postgres")?;
 
     let verify_cmd = format!("sudo -u postgres {} {}", pg_verifybackup, verify_dir);
     println!("Running pg_verifybackup command: {}", verify_cmd);
     let verify_out = interactor.cmd(&verify_cmd)?;
 
     // Clean up verify directory
-    let _ = interactor.cmd(&format!("sudo rm -rf {}", verify_dir));
+    let _ = interactor.rm(&verify_dir);
 
     if verify_out.exit_code != 0 {
-        let _ = interactor.cmd(&format!("sudo rm -rf {}", local_path));
+        let _ = interactor.rm(&local_path);
 
         anyhow::bail!(
             "pg_verifybackup verification failed with exit code {}: {}",
@@ -248,7 +205,7 @@ pub fn postgres_backup(
     }
 
     // Adjust permissions so that the SSH user can read and download the backup files
-    cmdw(interactor, &format!("sudo chmod -R 755 {}", local_path))?;
+    interactor.chmod(&local_path, "755")?;
 
     // 7. Get List of generated backup files to upload
     let files_list = interactor.ls(&local_path)?;
@@ -289,10 +246,8 @@ pub fn postgres_backup(
     // 9. Write metadata descriptor file locally and upload to S3
     let meta_toml = toml::to_string(&meta)?;
     interactor.create_file(&format!("{}/metadata.toml", local_path), &meta_toml)?;
-    cmdw(
-        interactor,
-        &format!("sudo chown postgres:postgres {}/metadata.toml", local_path),
-    )?;
+    let metadata_file = format!("{}/metadata.toml", local_path);
+    interactor.chown(&metadata_file, "postgres", "postgres")?;
     s3_client.put_object(
         &format!("backups/{}/metadata.toml", id),
         meta_toml.as_bytes(),
@@ -308,22 +263,17 @@ pub fn postgres_backup(
     s3_client.put_object(registry_key, registry_toml.as_bytes())?;
 
     interactor.create_file("/var/lib/postgresql/backups/registry.toml", &registry_toml)?;
-    cmdw(
-        interactor,
-        "sudo chown postgres:postgres /var/lib/postgresql/backups/registry.toml",
+    interactor.chown(
+        "/var/lib/postgresql/backups/registry.toml",
+        "postgres",
+        "postgres",
     )?;
-    cmdw(
-        interactor,
-        "sudo chmod 644 /var/lib/postgresql/backups/registry.toml",
-    )?;
+    interactor.chmod("/var/lib/postgresql/backups/registry.toml", "644")?;
 
     // Force a WAL switch at the end of the backup to ensure that the WAL segment
     // active during the backup is archived and available for PITR.
-    cmdw(interactor, "sudo mkdir -p /var/lib/postgresql/wal_archive")?;
-    cmdw(
-        interactor,
-        "sudo chown postgres:postgres /var/lib/postgresql/wal_archive",
-    )?;
+    interactor.mkdir("/var/lib/postgresql/wal_archive")?;
+    interactor.chown("/var/lib/postgresql/wal_archive", "postgres", "postgres")?;
 
     let switch_out = interactor
         .cmd(r#"sudo -u postgres psql -t -A -c "SELECT pg_walfile_name(pg_switch_wal() - 1);""#)?;
@@ -355,14 +305,11 @@ pub fn postgres_backup(
         Ok(out) if out.exit_code == 0 => {
             println!("WAL segment {} archived (immediate copy).", wal_filename);
         }
+
         _ => {
             // File may already be in wal_archive via the archiver, or already recycled
-            let check_cmd = format!(
-                "sudo -u postgres test -f {} && echo 'yes' || echo 'no'",
-                wal_dest
-            );
-            if let Ok(check_out) = interactor.cmd(&check_cmd) {
-                if check_out.stdout.trim() == "yes" {
+            if let Ok(exists) = interactor.exists(&wal_dest) {
+                if exists {
                     println!("WAL segment {} already in archive.", wal_filename);
                 } else {
                     println!(

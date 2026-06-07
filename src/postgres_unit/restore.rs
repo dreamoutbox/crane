@@ -1,10 +1,10 @@
 use crate::{
     etcd_unit::etcd_clear_dcs_state,
-    helper::{base64::base64_encode, config::config_get_nodes},
+    helper::config::config_get_nodes,
     postgres_unit::{
         entity::BackupRegistry,
         helper::{
-            cmdw, get_backups_data_from_s3, get_pg_version, pg_cluster_wait_all_nodes_ready,
+            get_backups_data_from_s3, get_pg_version, pg_cluster_wait_all_nodes_ready,
             pg_get_primary,
         },
     },
@@ -214,14 +214,10 @@ pub async fn postgres_restore(
 
             match get_server_interactor(&node.name) {
                 Ok(interactor) => {
-                    let _ = interactor.cmd(&format!("sudo rm -rf {}", pgdata_dir));
-
-                    cmdw(
-                        &*interactor,
-                        &format!("sudo -u postgres mkdir -p {}", pgdata_dir),
-                    )?;
-
-                    cmdw(&*interactor, &format!("sudo chmod 700 {}", pgdata_dir))?;
+                    let _ = interactor.rm(&pgdata_dir);
+                    interactor.mkdir(&pgdata_dir)?;
+                    interactor.chown(&pgdata_dir, "postgres", "postgres")?;
+                    interactor.chmod(&pgdata_dir, "700")?;
                     println!("\tCleared postgres data on node {}", node.name);
                 }
                 Err(e) => {
@@ -238,20 +234,15 @@ pub async fn postgres_restore(
     }
 
     // 2. Download all backups in the chain from S3 to VPS local backups dir
-    cmdw(interactor, "sudo mkdir -p /var/lib/postgresql/backups")?;
-    cmdw(
-        interactor,
-        "sudo chown postgres:postgres /var/lib/postgresql/backups",
-    )?;
-    cmdw(interactor, "sudo chmod 755 /var/lib/postgresql/backups")?;
+    interactor.mkdir("/var/lib/postgresql/backups")?;
+    interactor.chown("/var/lib/postgresql/backups", "postgres", "postgres")?;
+    interactor.chmod("/var/lib/postgresql/backups", "755")?;
 
     for item in &chain {
         let remote_dir = format!("/var/lib/postgresql/backups/{}", item.id);
-        cmdw(
-            interactor,
-            &format!("sudo -u postgres mkdir -p {}", remote_dir),
-        )?;
-        cmdw(interactor, &format!("sudo chmod 755 {}", remote_dir))?;
+        interactor.mkdir(&remote_dir)?;
+        interactor.chown(&remote_dir, "postgres", "postgres")?;
+        interactor.chmod(&remote_dir, "755")?;
 
         // base.tar and backup_manifest are required; pg_wal.tar is optional
         let required_files = ["base.tar", "backup_manifest"];
@@ -276,15 +267,9 @@ pub async fn postgres_restore(
             let _ = std::fs::remove_file(temp_path);
 
             let remote_file = format!("{}/{}", remote_dir, file);
-            cmdw(
-                interactor,
-                &format!("sudo mv {} {}", remote_temp_file, remote_file),
-            )?;
-            cmdw(
-                interactor,
-                &format!("sudo chown postgres:postgres {}", remote_file),
-            )?;
-            cmdw(interactor, &format!("sudo chmod 644 {}", remote_file))?;
+            interactor.mv(&remote_temp_file, &remote_file)?;
+            interactor.chown(&remote_file, "postgres", "postgres")?;
+            interactor.chmod(&remote_file, "644")?;
         }
 
         // pg_wal.tar is optional
@@ -299,96 +284,56 @@ pub async fn postgres_restore(
             let _ = std::fs::remove_file(temp_path);
 
             let remote_file = format!("{}/pg_wal.tar", remote_dir);
-            cmdw(
-                interactor,
-                &format!("sudo mv {} {}", remote_temp_file, remote_file),
-            )?;
-            cmdw(
-                interactor,
-                &format!("sudo chown postgres:postgres {}", remote_file),
-            )?;
-            cmdw(interactor, &format!("sudo chmod 644 {}", remote_file))?;
+            interactor.mv(&remote_temp_file, &remote_file)?;
+            interactor.chown(&remote_file, "postgres", "postgres")?;
+            interactor.chmod(&remote_file, "644")?;
         }
     }
 
     if chain.len() <= 1 {
         // 3. Clear data directory
-        cmdw(interactor, &format!("sudo rm -rf {}", pgdata_dir))?;
-        cmdw(
-            interactor,
-            &format!("sudo -u postgres mkdir -p {}", pgdata_dir),
-        )?;
-        cmdw(interactor, &format!("sudo chmod 700 {}", pgdata_dir))?;
+        interactor.rm(&pgdata_dir)?;
+        interactor.mkdir(&pgdata_dir)?;
+        interactor.chown(&pgdata_dir, "postgres", "postgres")?;
+        interactor.chmod(&pgdata_dir, "700")?;
 
         // 4. Extract base.tar
-        cmdw(
-            interactor,
-            &format!(
-                "sudo -u postgres tar -xf /var/lib/postgresql/backups/{}/base.tar -C {}",
-                backup.id, pgdata_dir
-            ),
-        )?;
+        let base_tar_path = format!("/var/lib/postgresql/backups/{}/base.tar", backup.id);
+        interactor.tar_extract(&base_tar_path, &pgdata_dir)?;
+        interactor.chown(&pgdata_dir, "postgres", "postgres")?;
 
         // 5. Extract pg_wal.tar if present
-        let test_wal = interactor.cmd(&format!(
-            "test -f /var/lib/postgresql/backups/{}/pg_wal.tar && echo 'yes' || echo 'no'",
-            backup.id
-        ))?;
-        if test_wal.stdout.trim() == "yes" {
-            cmdw(
-                interactor,
-                &format!("sudo -u postgres mkdir -p {}/pg_wal", pgdata_dir),
-            )?;
+        let wal_path = format!("/var/lib/postgresql/backups/{}/pg_wal.tar", backup.id);
+        if interactor.exists(&wal_path)? {
+            let pg_wal_dir = format!("{}/pg_wal", pgdata_dir);
+            interactor.mkdir(&pg_wal_dir)?;
+            interactor.chown(&pg_wal_dir, "postgres", "postgres")?;
 
-            cmdw(
-                interactor,
-                &format!(
-                    "sudo -u postgres tar -xf /var/lib/postgresql/backups/{}/pg_wal.tar -C {}/pg_wal/",
-                    backup.id, pgdata_dir
-                ),
-            )?;
+            interactor.tar_extract(&wal_path, &pg_wal_dir)?;
+            interactor.chown(&pg_wal_dir, "postgres", "postgres")?;
         }
     } else {
         // 3. Extract all backups in the chain to separate folders
         for item in &chain {
             let extracted_dir = format!("/var/lib/postgresql/backups/{}_extracted", item.id);
-            cmdw(interactor, &format!("sudo rm -rf {}", extracted_dir))?;
-            cmdw(
-                interactor,
-                &format!("sudo -u postgres mkdir -p {}", extracted_dir),
-            )?;
-            cmdw(
-                interactor,
-                &format!(
-                    "sudo -u postgres tar -xf /var/lib/postgresql/backups/{}/base.tar -C {}",
-                    item.id, extracted_dir
-                ),
-            )?;
+            interactor.rm(&extracted_dir)?;
+            interactor.mkdir(&extracted_dir)?;
+            interactor.chown(&extracted_dir, "postgres", "postgres")?;
+            let base_tar_path = format!("/var/lib/postgresql/backups/{}/base.tar", item.id);
+            interactor.tar_extract(&base_tar_path, &extracted_dir)?;
+            interactor.chown(&extracted_dir, "postgres", "postgres")?;
 
             // Copy backup_manifest to extracted directory so pg_combinebackup can find it
-            cmdw(
-                interactor,
-                &format!(
-                    "sudo cp /var/lib/postgresql/backups/{}/backup_manifest {}/",
-                    item.id, extracted_dir
-                ),
-            )?;
-            cmdw(
-                interactor,
-                &format!(
-                    "sudo chown postgres:postgres {}/backup_manifest",
-                    extracted_dir
-                ),
-            )?;
-            cmdw(
-                interactor,
-                &format!("sudo chmod 644 {}/backup_manifest", extracted_dir),
-            )?;
+            let manifest_src = format!("/var/lib/postgresql/backups/{}/backup_manifest", item.id);
+            interactor.cp(&manifest_src, &extracted_dir)?;
+            let manifest_dest = format!("{}/backup_manifest", extracted_dir);
+            interactor.chown(&manifest_dest, "postgres", "postgres")?;
+            interactor.chmod(&manifest_dest, "644")?;
         }
 
         // 4. Combine backups
         let combined_dir = "/var/lib/postgresql/backups/combined";
-        cmdw(interactor, &format!("sudo rm -rf {}", combined_dir))?;
+        interactor.rm(combined_dir)?;
 
         let mut combine_cmd = format!("sudo -u postgres {} ", pg_combinebackup);
         for item in &chain {
@@ -398,52 +343,37 @@ pub async fn postgres_restore(
             ));
         }
         combine_cmd.push_str(&format!("-o {}", combined_dir));
-        cmdw(interactor, &combine_cmd)?;
+        interactor.cmd(&combine_cmd)?;
 
         // Extract target backup's pg_wal.tar to combined_dir/pg_wal if present
-        let test_wal = interactor.cmd(&format!(
-            "test -f /var/lib/postgresql/backups/{}/pg_wal.tar && echo 'yes' || echo 'no'",
-            backup.id
-        ))?;
-        if test_wal.stdout.trim() == "yes" {
-            cmdw(
-                interactor,
-                &format!("sudo -u postgres mkdir -p {}/pg_wal", combined_dir),
-            )?;
+        let wal_path = format!("/var/lib/postgresql/backups/{}/pg_wal.tar", backup.id);
+        if interactor.exists(&wal_path)? {
+            let combined_wal_dir = format!("{}/pg_wal", combined_dir);
+            interactor.mkdir(&combined_wal_dir)?;
+            interactor.chown(&combined_wal_dir, "postgres", "postgres")?;
 
-            cmdw(
-                interactor,
-                &format!(
-                    "sudo -u postgres tar -xf /var/lib/postgresql/backups/{}/pg_wal.tar -C {}/pg_wal/",
-                    backup.id, combined_dir
-                ),
-            )?;
+            interactor.tar_extract(&wal_path, &combined_wal_dir)?;
+            interactor.chown(&combined_wal_dir, "postgres", "postgres")?;
         }
 
         // 5. Verify the combined backup
         let verify_cmd = format!("sudo -u postgres {} {}", pg_verifybackup, combined_dir);
-        cmdw(interactor, &verify_cmd)?;
+        interactor.cmd(&verify_cmd)?;
 
         // 6. Clear and replace data directory with combined backup
-        cmdw(interactor, &format!("sudo rm -rf {}", pgdata_dir))?;
-        cmdw(
-            interactor,
-            &format!("sudo mv {} {}", combined_dir, pgdata_dir),
-        )?;
+        interactor.rm(&pgdata_dir)?;
+        interactor.mv(combined_dir, &pgdata_dir)?;
 
         // Clean up extracted directories
         for item in &chain {
             let extracted_dir = format!("/var/lib/postgresql/backups/{}_extracted", item.id);
-            let _ = interactor.cmd(&format!("sudo rm -rf {}", extracted_dir));
+            let _ = interactor.rm(&extracted_dir);
         }
     }
 
     // 6. Set ownership
-    cmdw(
-        interactor,
-        &format!("sudo chown -R postgres:postgres {}", pgdata_dir),
-    )?;
-    cmdw(interactor, &format!("sudo chmod 700 {}", pgdata_dir))?;
+    interactor.chown(&pgdata_dir, "postgres", "postgres")?;
+    interactor.chmod(&pgdata_dir, "700")?;
 
     // Remove old signals and dynamic JSON on primary node
     let _ = interactor.cmd(&format!(
@@ -485,25 +415,22 @@ pub async fn postgres_restore(
 
         // Write PITR settings to postgresql.auto.conf in pgdata_dir
         let pitr_conf_path = format!("{}/postgresql.auto.conf", pgdata_dir);
+        let mut current_conf = interactor.read_file(&pitr_conf_path).unwrap_or_default();
         let pitr_conf_content = format!(
             "restore_command = 'cp /var/lib/postgresql/wal_archive/%f %p'\nrecovery_target_time = '{}'\nrecovery_target_action = promote\nrecovery_target_inclusive = on\nrecovery_target_timeline = 'current'\n",
             target_time
         );
-        let b64 = base64_encode(&pitr_conf_content);
-
-        cmdw(
-            interactor,
-            &format!(
-                "echo {} | base64 -d | sudo -u postgres tee -a {} > /dev/null",
-                b64, pitr_conf_path
-            ),
-        )?;
+        if !current_conf.is_empty() && !current_conf.ends_with('\n') {
+            current_conf.push('\n');
+        }
+        current_conf.push_str(&pitr_conf_content);
+        interactor.create_file(&pitr_conf_path, &current_conf)?;
+        interactor.chown(&pitr_conf_path, "postgres", "postgres")?;
 
         // Create recovery.signal (PG12+ triggers archive recovery mode)
-        cmdw(
-            interactor,
-            &format!("sudo -u postgres touch {}/recovery.signal", pgdata_dir),
-        )?;
+        let recovery_signal_path = format!("{}/recovery.signal", pgdata_dir);
+        interactor.create_file(&recovery_signal_path, "")?;
+        interactor.chown(&recovery_signal_path, "postgres", "postgres")?;
 
         // Start PostgreSQL directly using pg_ctl to perform the archive recovery (PITR).
         // This prevents Patroni from overwriting our recovery configuration on startup.

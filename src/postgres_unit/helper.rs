@@ -71,27 +71,6 @@ pub fn get_backups_data_from_s3(s3_client: &dyn S3Client) -> anyhow::Result<Vec<
     }
 }
 
-/// cmdw wrapper function to run command and expect successful exit code.
-pub fn cmdw(
-    interactor: &dyn ServerInteractor,
-    command: &str,
-) -> anyhow::Result<crate::ssh::CmdOutput> {
-    let out = interactor.cmd(command)?;
-    if out.exit_code != 0 {
-        println!("Command: {}\n", command);
-        println!("STDERR:\n{}\n", out.stderr.trim());
-
-        anyhow::bail!(
-            "Command '{}' failed with exit code {}: {}",
-            command,
-            out.exit_code,
-            out.stderr.trim()
-        );
-    }
-
-    Ok(out)
-}
-
 /// get current timeline id
 pub fn get_pg_current_timeline_id(interactor: &dyn ServerInteractor) -> anyhow::Result<String> {
     let db_tli_out = interactor.cmd(

@@ -128,7 +128,7 @@ impl ServerInteractor for DebianInteractor {
     }
 
     fn read_file(&self, path: &str) -> anyhow::Result<String> {
-        self.run_stdout(&format!("cat '{}'", path))
+        self.run_stdout(&format!("sudo cat '{}'", path))
     }
 
     fn upload(&self, local_path: &str, remote_path: &str) -> anyhow::Result<()> {
@@ -467,6 +467,38 @@ impl ServerInteractor for DebianInteractor {
 
     fn firewall_allow_source(&self, source: &str) -> anyhow::Result<()> {
         self.run_stdout(&format!("sudo ufw allow from {}", source))?;
+        Ok(())
+    }
+
+    fn mv(&self, src: &str, dest: &str) -> anyhow::Result<()> {
+        self.run_stdout(&format!("sudo mv '{}' '{}'", src, dest))?;
+        Ok(())
+    }
+
+    fn cp(&self, src: &str, dest: &str) -> anyhow::Result<()> {
+        self.run_stdout(&format!("sudo cp -r '{}' '{}'", src, dest))?;
+        Ok(())
+    }
+
+    fn exists(&self, path: &str) -> anyhow::Result<bool> {
+        let out = self.cmd(&format!("sudo test -e '{}'", path))?;
+        Ok(out.exit_code == 0)
+    }
+
+    fn rm(&self, path: &str) -> anyhow::Result<()> {
+        let trimmed = path.trim();
+        if trimmed.is_empty() || trimmed.chars().all(|c| c == '/') || trimmed == "/*" {
+            anyhow::bail!(
+                "Failsafe: Attempted to delete root directory or empty path: '{}'",
+                path
+            );
+        }
+        self.run_stdout(&format!("sudo rm -rf '{}'", path))?;
+        Ok(())
+    }
+
+    fn tar_extract(&self, archive: &str, dest: &str) -> anyhow::Result<()> {
+        self.run_stdout(&format!("sudo tar -xf '{}' -C '{}'", archive, dest))?;
         Ok(())
     }
 }

@@ -19,6 +19,11 @@ pub trait ServerInteractor {
     fn mkdir(&self, path: &str) -> anyhow::Result<()>;
     fn ls(&self, path: &str) -> anyhow::Result<Vec<String>>;
     fn unzip(&self, zip_path: &str, dest: &str) -> anyhow::Result<()>;
+    fn mv(&self, src: &str, dest: &str) -> anyhow::Result<()>;
+    fn cp(&self, src: &str, dest: &str) -> anyhow::Result<()>;
+    fn exists(&self, path: &str) -> anyhow::Result<bool>;
+    fn rm(&self, path: &str) -> anyhow::Result<()>;
+    fn tar_extract(&self, archive: &str, dest: &str) -> anyhow::Result<()>;
 
     // DEPENDENCIES
     fn install_dependencies(&self, dependencies: Vec<String>) -> anyhow::Result<()>;

@@ -186,4 +186,33 @@ impl ServerInteractor for MockInteractor {
     fn firewall_allow_source(&self, _source: &str) -> anyhow::Result<()> {
         Ok(())
     }
+
+    fn mv(&self, src: &str, dest: &str) -> anyhow::Result<()> {
+        self.commands.borrow_mut().push(format!("sudo mv '{}' '{}'", src, dest));
+        Ok(())
+    }
+
+    fn cp(&self, src: &str, dest: &str) -> anyhow::Result<()> {
+        self.commands.borrow_mut().push(format!("sudo cp -r '{}' '{}'", src, dest));
+        Ok(())
+    }
+
+    fn exists(&self, path: &str) -> anyhow::Result<bool> {
+        self.commands.borrow_mut().push(format!("sudo test -e '{}'", path));
+        if path.contains("registry.toml") {
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    fn rm(&self, path: &str) -> anyhow::Result<()> {
+        self.commands.borrow_mut().push(format!("sudo rm -rf '{}'", path));
+        Ok(())
+    }
+
+    fn tar_extract(&self, archive: &str, dest: &str) -> anyhow::Result<()> {
+        self.commands.borrow_mut().push(format!("sudo tar -xf '{}' -C '{}'", archive, dest));
+        Ok(())
+    }
 }

@@ -139,4 +139,24 @@ impl ServerInteractor for MockServerInteractorLogsRecorder {
     fn firewall_allow_source(&self, _source: &str) -> anyhow::Result<()> {
         Ok(())
     }
+
+    fn mv(&self, _src: &str, _dest: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn cp(&self, _src: &str, _dest: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn exists(&self, _path: &str) -> anyhow::Result<bool> {
+        Ok(false)
+    }
+
+    fn rm(&self, _path: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn tar_extract(&self, _archive: &str, _dest: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
