@@ -36,7 +36,14 @@ jobs:
           tool: nextest
 
       - name: Test
-        run: cargo nextest run --locked
+        env:
+          CLOUDFLARE_TOKEN: "CF_TOKEN_HERE"
+          S3_ACCESS_KEY_ID: "miniominio"
+          S3_SECRET_ACCESS_KEY: "miniominio"
+          SUDO_PASS_VPS1: "cranepass"
+          SUDO_PASS_VPS2: "cranepass"
+          SUDO_PASS_VPS3: "cranepass"
+        run: cargo nextest run --locked --no-capture --test-threads 1
 
   build:
     name: ${{ matrix.target }}

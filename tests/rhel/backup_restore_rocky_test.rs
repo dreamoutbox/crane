@@ -13,6 +13,7 @@ use crate::helper::{reset_rocky_docker_compose, run_sql};
 #[tokio::test]
 async fn test_backup_restore_rocky() {
     // reset docker compose
+    println!("Resetting Rocky Docker compose...");
     reset_rocky_docker_compose().await;
 
     let config_path = std::path::Path::new("tests/postgres/crane.backup.toml");

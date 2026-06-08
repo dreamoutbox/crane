@@ -1,7 +1,8 @@
 // RUN:
 // RUST_BACKTRACE=1 cargo nextest run test_backup_restore_extend -- --no-capture
 
-use crate::helper::{reset_docker_compose, run_sql};
+use crate::common_helper::reset_docker_compose;
+use crate::helper::run_sql;
 use crane::commands::postgres_backup::backup_from_config_wrapper;
 use crane::config::{Config, read_config_toml_file};
 use crane::postgres_unit::entity::BackupMetadata;

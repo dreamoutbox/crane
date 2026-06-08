@@ -1,8 +1,13 @@
 // RUN:
 // RUST_BACKTRACE=1 cargo nextest run --test postgres -- test_promote --no-capture
 
+use crate::common_helper::reset_docker_compose;
+
 #[tokio::test]
 async fn test_promote() {
+    println!("Recreating Docker compose...");
+    reset_docker_compose().await;
+
     let config_path = std::path::Path::new("tests/postgres/crane.toml");
     let config =
         crane::config::read_config_toml_file(config_path).expect("Failed to load crane.toml");

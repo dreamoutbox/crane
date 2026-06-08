@@ -1,8 +1,6 @@
-use crane::server_interactor::server_interactor_trait::ServerInteractor;
-
-pub async fn reset_rocky_docker_compose() {
+pub async fn reset_docker_compose() {
     let output_down = std::process::Command::new("docker")
-        .args(["compose", "-f", "docker-compose.rocky.dev.yml", "down"])
+        .args(["compose", "-f", "docker-compose.dev.yml", "down"])
         .output()
         .expect("Failed to execute docker compose down");
     if !output_down.status.success() {
@@ -16,7 +14,7 @@ pub async fn reset_rocky_docker_compose() {
         .args([
             "compose",
             "-f",
-            "docker-compose.rocky.dev.yml",
+            "docker-compose.dev.yml",
             "up",
             "-d",
             "--build",
@@ -74,11 +72,4 @@ pub async fn reset_rocky_docker_compose() {
     }
 
     println!("Connection to all VPS ready");
-}
-
-pub fn run_sql(interactor: &dyn ServerInteractor, sql: &str) -> String {
-    let cmd = format!("sudo -u postgres psql -d mydb -t -A -c {:?}", sql);
-    let out = interactor.cmd(&cmd).expect("SQL execution failed");
-    assert_eq!(out.exit_code, 0, "SQL failed: {}", out.stderr);
-    out.stdout.trim().to_string()
 }

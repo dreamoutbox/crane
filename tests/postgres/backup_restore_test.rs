@@ -1,6 +1,7 @@
 // RUN:
 // RUST_BACKTRACE=1 cargo nextest run test_backup_restore -- --no-capture
 
+use crate::common_helper::reset_docker_compose;
 use crate::helper::run_sql;
 use crane::postgres_unit::restore::postgres_restore;
 use crane::server_interactor::get_server_interactor;
@@ -11,6 +12,9 @@ use crane::{
 
 #[tokio::test]
 async fn test_backup_restore() {
+    println!("Recreating Docker compose...");
+    reset_docker_compose().await;
+
     let config_path = std::path::Path::new("tests/postgres/crane.toml");
     let config = read_config_toml_file(config_path).expect("Failed to load crane.toml");
 

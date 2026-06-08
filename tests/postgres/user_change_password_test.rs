@@ -1,4 +1,5 @@
-use crate::helper::{pg_allow_host_machine, reset_docker_compose, try_connect};
+use crate::common_helper::reset_docker_compose;
+use crate::helper::{pg_allow_host_machine, try_connect};
 
 // RUN:
 // RUST_LIB_BACKTRACE=0 RUST_BACKTRACE=1 cargo nextest run test_user_change_password -- --no-capture

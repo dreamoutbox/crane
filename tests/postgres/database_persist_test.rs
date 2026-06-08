@@ -1,7 +1,8 @@
 // RUN:
 // RUST_BACKTRACE=1 cargo nextest run test_database_persist_after_deploy -- --no-capture
 
-use crate::helper::{reset_docker_compose, run_sql};
+use crate::common_helper::reset_docker_compose;
+use crate::helper::run_sql;
 use crane::{
     config::read_config_toml_file, postgres_unit::helper::pg_get_primary,
     server_interactor::get_server_interactor,

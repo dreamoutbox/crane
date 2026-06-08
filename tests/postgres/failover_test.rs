@@ -1,9 +1,8 @@
 // RUN:
 // RUST_BACKTRACE=1 cargo nextest run --test postgres -- test_failover --no-capture
 
+use crate::common_helper::reset_docker_compose;
 use crane::server_interactor::get_server_interactor;
-
-use crate::helper::reset_docker_compose;
 
 #[tokio::test]
 async fn test_failover() {

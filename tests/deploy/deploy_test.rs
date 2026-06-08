@@ -4,11 +4,16 @@ use std::process::Command;
 use crane::postgres_unit::helper::pg_get_primary;
 use crane::server_interactor::get_server_interactor;
 
+use crate::common_helper::reset_docker_compose;
+
 // RUN:
 // cargo nextest run test_deploy --nocapture
 
 #[tokio::test]
 async fn test_deploy() {
+    println!("Recreating Docker compose...");
+    reset_docker_compose().await;
+
     println!("STEP: 1. Build Go demo app");
     // 1. Build Go demo app
     let go_build = Command::new("go")

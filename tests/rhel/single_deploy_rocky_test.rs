@@ -9,6 +9,7 @@ use crate::helper::reset_rocky_docker_compose;
 #[tokio::test]
 async fn test_single_deploy_rocky() {
     // reset docker compose
+    println!("Resetting Rocky Docker compose...");
     reset_rocky_docker_compose().await;
 
     // 1. Build Go demo app

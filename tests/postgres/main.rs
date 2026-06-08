@@ -10,6 +10,9 @@ pub mod mock_s3;
 #[path = "../common/MockServerInteractorUserNotExist.rs"]
 pub mod mock_interactor_user_not_exist;
 
+#[path = "../common/helper.rs"]
+pub mod common_helper;
+
 pub mod helper;
 
 mod backup_restore_extend_test;
