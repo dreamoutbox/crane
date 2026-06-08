@@ -88,6 +88,9 @@ fn get_interactor_for_distro(
 ) -> anyhow::Result<Box<dyn ServerInteractor + Send + Sync>> {
     match distro {
         "debian" | "ubuntu" => Ok(Box::new(debian::DebianInteractor::new(ssh, sudo_pass))),
+        "rocky" | "rhel" | "centos" | "almalinux" => {
+            Ok(Box::new(rhel::RHELInteractor::new(ssh, sudo_pass)))
+        }
         other => anyhow::bail!("Unsupported server distribution: {}", other),
     }
 }

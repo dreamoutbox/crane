@@ -227,6 +227,10 @@ impl ServerInteractor for MockServerInteractorUserNotExist {
         Ok(())
     }
 
+    fn pg_bin_path(&self, pg_version: &str, binary: &str) -> String {
+        format!("/usr/lib/postgresql/{}/bin/{}", pg_version, binary)
+    }
+
     fn psql(
         &self,
         _command: Option<&str>,

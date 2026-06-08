@@ -97,6 +97,8 @@ pub trait ServerInteractor {
 
     fn kill_postgres_processes(&self) -> anyhow::Result<()>;
 
+    fn pg_bin_path(&self, pg_version: &str, binary: &str) -> String;
+
     fn psql(
         &self,
         command: Option<&str>,

@@ -46,14 +46,8 @@ pub fn postgres_backup(
     let time = parts[2].to_string();
 
     let local_path = format!("{}/{}", server_paths.pg_backup_dir, id);
-    let pg_basebackup = format!(
-        "{}/{}/bin/pg_basebackup",
-        server_paths.pg_bin_dir, pg_version
-    );
-    let pg_verifybackup = format!(
-        "{}/{}/bin/pg_verifybackup",
-        server_paths.pg_bin_dir, pg_version
-    );
+    let pg_basebackup = interactor.pg_bin_path(&pg_version, "pg_basebackup");
+    let pg_verifybackup = interactor.pg_bin_path(&pg_version, "pg_verifybackup");
 
     // 2. Ensure Backup Directories exist
     interactor.mkdir(&server_paths.pg_backup_dir)?;

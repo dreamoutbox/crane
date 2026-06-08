@@ -161,16 +161,10 @@ pub async fn postgres_restore(
     }
 
     let server_paths = interactor.server_paths();
-    // let pg_ctl = format!("{}/{}/bin/pg_ctl", server_paths.pg_bin_dir, pg_version);
+    // let pg_ctl = interactor.pg_bin_path(&pg_version, "pg_ctl");
 
-    let pg_combinebackup = format!(
-        "{}/{}/bin/pg_combinebackup",
-        server_paths.pg_bin_dir, pg_version
-    );
-    let pg_verifybackup = format!(
-        "{}/{}/bin/pg_verifybackup",
-        server_paths.pg_bin_dir, pg_version
-    );
+    let pg_combinebackup = interactor.pg_bin_path(&pg_version, "pg_combinebackup");
+    let pg_verifybackup = interactor.pg_bin_path(&pg_version, "pg_verifybackup");
     let pgdata_dir = format!("{}/{}/main", server_paths.pg_data_dir, pg_version);
 
     // Gather all PostgreSQL nodes
@@ -392,7 +386,7 @@ pub async fn postgres_restore(
         pgdata_dir, pgdata_dir, pgdata_dir
     ));
 
-    let pg_ctl = format!("{}/{}/bin/pg_ctl", server_paths.pg_bin_dir, pg_version);
+    let pg_ctl = interactor.pg_bin_path(&pg_version, "pg_ctl");
 
     if let Some(target_time) = pitr_time {
         // // Populate wal_archive with WAL segments from all backups in the chain

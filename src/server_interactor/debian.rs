@@ -600,7 +600,7 @@ impl ServerInteractor for DebianInteractor {
     }
 
     fn install_postgres(&self, version: &str) -> anyhow::Result<()> {
-        let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", version);
+        let pg_ctl = self.pg_bin_path(version, "pg_ctl");
         let pg_installed = self.exists(&pg_ctl).unwrap_or(false);
 
         if !pg_installed {
@@ -643,6 +643,10 @@ impl ServerInteractor for DebianInteractor {
     fn kill_postgres_processes(&self) -> anyhow::Result<()> {
         let _ = self.cmd("sudo pkill -9 -u postgres postgres");
         Ok(())
+    }
+
+    fn pg_bin_path(&self, pg_version: &str, binary: &str) -> String {
+        format!("/usr/lib/postgresql/{}/bin/{}", pg_version, binary)
     }
 
     fn psql(
@@ -689,17 +693,15 @@ impl ServerInteractor for DebianInteractor {
         let patroni_yml = build_patroni_config(node, pg_version, replica_pass, pg_nodes)?;
         std::fs::write(format!("patroni_{}.yaml", node.name), patroni_yml.clone())?;
 
-        // Compare with existing config; only write (and signal a change) if different
-        let existing_config = self
-            .read_file("/etc/patroni/config.yml")
-            .unwrap_or_default();
+        let patroni_path = self.server_paths().patroni_config_path;
+        let existing_config = self.read_file(&patroni_path).unwrap_or_default();
         let config_changed = existing_config.trim() != patroni_yml.trim();
 
         self.mkdir("/etc/patroni")?;
-        self.create_file("/etc/patroni/config.yml", &patroni_yml)?;
-        self.chown("/etc/patroni", "postgres", "postgres")?;
-        self.chmod("/etc/patroni/config.yml", "600")?;
-        println!("\tCreate patroni config at /etc/patroni/config.yml");
+        self.create_file(&patroni_path, &patroni_yml)?;
+        self.chown(&patroni_path, "postgres", "postgres")?;
+        self.chmod(&patroni_path, "600")?;
+        println!("\tCreate patroni config at {}", patroni_path);
 
         if !patroni_installed {
             self.service_daemon_reload()?;

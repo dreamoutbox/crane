@@ -24,6 +24,7 @@ RUN dnf install -y epel-release dnf-plugins-core && \
     zip \
     unzip \
     rsync \
+    openssl-libs \ 
     && dnf clean all
 
 # Setup PostgreSQL repository and install patroni, haproxy, python3-boto3, and postgresql-17
