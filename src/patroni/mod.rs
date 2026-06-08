@@ -1,3 +1,3 @@
-mod setup;
+mod config;
 
-pub use setup::build_patroni_config;
+pub use config::build_patroni_config;
