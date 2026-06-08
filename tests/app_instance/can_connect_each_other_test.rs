@@ -4,8 +4,13 @@
 use std::path::Path;
 use std::process::Command;
 
+use crate::common_helper::reset_docker_compose;
+
 #[tokio::test]
 async fn test_app_instances_can_connect_each_other() {
+    println!("Recreating Docker compose...");
+    reset_docker_compose().await;
+
     // 1. Build Go demo app
     let go_build = Command::new("go")
         .arg("build")
