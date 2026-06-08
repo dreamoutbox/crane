@@ -393,8 +393,7 @@ fn inner_deploy_single_app(
 
             // Create systemd template unit (admin)
             let env_template_path = format!("/app_config/{}/%i/.env", app.name);
-            crate::systemd_unit::setup::setup_systemd_template(
-                &*node_interactor,
+            node_interactor.setup_systemd_template(
                 &app.name,
                 &app.deploy_user,
                 &app.entrypoint,

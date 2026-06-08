@@ -890,6 +890,64 @@ ufw reload
         self.restart_service("haproxy")?;
         Ok(())
     }
+
+    fn setup_systemd_template(
+        &self,
+        app_name: &str,
+        deploy_user: &str,
+        entrypoint: &str,
+        env_path: &str,
+    ) -> anyhow::Result<()> {
+        let service_file_path = format!("/etc/systemd/system/{}@.service", app_name);
+        let clean_entrypoint = entrypoint.trim_start_matches("./");
+        let working_dir = format!("/app/{}", app_name);
+        let exec_start = format!("/app/{}/{}", app_name, clean_entrypoint);
+
+        println!(
+            "\t[{app_name}] Register Service:
+\t\tPath={service_file_path}
+\t\tUser={deploy_user}
+\t\tWorkingDirectory={working_dir}
+\t\tExecStart={exec_start}
+\t\tEnvFile={env_path}"
+        );
+
+        let systemd_data = format!(
+            r#"[Unit]
+Description=crane managed: %p instance on port %i
+After=network.target
+
+[Service]
+Type=simple
+User={deploy_user}
+WorkingDirectory={working_dir}
+ExecStart={exec_start}
+EnvironmentFile={env_path}
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+"#,
+            deploy_user = deploy_user,
+            working_dir = working_dir,
+            exec_start = exec_start,
+            env_path = env_path,
+        );
+
+        self.create_file(&service_file_path, &systemd_data)?;
+
+        self.chown(&service_file_path, "root", "root")?;
+        self.chmod(&service_file_path, "644")?;
+
+        let _ = self.service_daemon_reload()?;
+
+        Ok(())
+    }
 }
 
 fn debian_ensure_self_signed_cert(interactor: &dyn ServerInteractor) -> anyhow::Result<String> {

@@ -49,6 +49,13 @@ pub trait ServerInteractor {
         service_status: &str,
         timeout: u64,
     ) -> anyhow::Result<bool>;
+    fn setup_systemd_template(
+        &self,
+        app_name: &str,
+        deploy_user: &str,
+        entrypoint: &str,
+        env_path: &str,
+    ) -> anyhow::Result<()>;
 
     // USERS
     fn create_user(&self, user_register: UserRegister) -> anyhow::Result<()>;

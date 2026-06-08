@@ -295,4 +295,14 @@ impl ServerInteractor for MockServerInteractorLogsRecorder {
     fn reload_haproxy(&self) -> anyhow::Result<()> {
         todo!()
     }
+
+    fn setup_systemd_template(
+        &self,
+        _app_name: &str,
+        _deploy_user: &str,
+        _entrypoint: &str,
+        _env_path: &str,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
