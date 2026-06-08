@@ -13,3 +13,4 @@ patroni_node_*.yaml
 patroni_*.yaml
 demo/crane.vm.toml
 debug_output/*
+haproxy.cfg

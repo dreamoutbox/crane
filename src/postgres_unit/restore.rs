@@ -160,11 +160,18 @@ pub async fn postgres_restore(
         backup = chain.last().unwrap().clone();
     }
 
-    // let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", pg_version);
+    let server_paths = interactor.server_paths();
+    // let pg_ctl = format!("{}/{}/bin/pg_ctl", server_paths.pg_bin_dir, pg_version);
 
-    let pg_combinebackup = format!("/usr/lib/postgresql/{}/bin/pg_combinebackup", pg_version);
-    let pg_verifybackup = format!("/usr/lib/postgresql/{}/bin/pg_verifybackup", pg_version);
-    let pgdata_dir = format!("/var/lib/postgresql/{}/main", pg_version);
+    let pg_combinebackup = format!(
+        "{}/{}/bin/pg_combinebackup",
+        server_paths.pg_bin_dir, pg_version
+    );
+    let pg_verifybackup = format!(
+        "{}/{}/bin/pg_verifybackup",
+        server_paths.pg_bin_dir, pg_version
+    );
+    let pgdata_dir = format!("{}/{}/main", server_paths.pg_data_dir, pg_version);
 
     // Gather all PostgreSQL nodes
     let pg_nodes = config_get_nodes(&config, "postgres");
@@ -207,17 +214,19 @@ pub async fn postgres_restore(
     let mut handles = vec![];
     for node in &pg_nodes {
         let node = node.clone();
-        let pgdata_dir = pgdata_dir.clone();
+        let pg_version = pg_version.clone();
 
         let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
             // println!("\tClearing postgres data directory on node {}", node.name);
 
             match get_server_interactor(&node.name) {
                 Ok(interactor) => {
-                    let _ = interactor.rm(&pgdata_dir);
-                    interactor.mkdir(&pgdata_dir)?;
-                    interactor.chown(&pgdata_dir, "postgres", "postgres")?;
-                    interactor.chmod(&pgdata_dir, "700")?;
+                    let node_paths = interactor.server_paths();
+                    let node_pgdata_dir = format!("{}/{}/main", node_paths.pg_data_dir, pg_version);
+                    let _ = interactor.rm(&node_pgdata_dir);
+                    interactor.mkdir(&node_pgdata_dir)?;
+                    interactor.chown(&node_pgdata_dir, "postgres", "postgres")?;
+                    interactor.chmod(&node_pgdata_dir, "700")?;
                     println!("\tCleared postgres data on node {}", node.name);
                 }
                 Err(e) => {
@@ -234,12 +243,12 @@ pub async fn postgres_restore(
     }
 
     // 2. Download all backups in the chain from S3 to VPS local backups dir
-    interactor.mkdir("/var/lib/postgresql/backups")?;
-    interactor.chown("/var/lib/postgresql/backups", "postgres", "postgres")?;
-    interactor.chmod("/var/lib/postgresql/backups", "755")?;
+    interactor.mkdir(&server_paths.pg_backup_dir)?;
+    interactor.chown(&server_paths.pg_backup_dir, "postgres", "postgres")?;
+    interactor.chmod(&server_paths.pg_backup_dir, "755")?;
 
     for item in &chain {
-        let remote_dir = format!("/var/lib/postgresql/backups/{}", item.id);
+        let remote_dir = format!("{}/{}", server_paths.pg_backup_dir, item.id);
         interactor.mkdir(&remote_dir)?;
         interactor.chown(&remote_dir, "postgres", "postgres")?;
         interactor.chmod(&remote_dir, "755")?;
@@ -298,12 +307,12 @@ pub async fn postgres_restore(
         interactor.chmod(&pgdata_dir, "700")?;
 
         // 4. Extract base.tar
-        let base_tar_path = format!("/var/lib/postgresql/backups/{}/base.tar", backup.id);
+        let base_tar_path = format!("{}/{}/base.tar", server_paths.pg_backup_dir, backup.id);
         interactor.tar_extract(&base_tar_path, &pgdata_dir)?;
         interactor.chown(&pgdata_dir, "postgres", "postgres")?;
 
         // 5. Extract pg_wal.tar if present
-        let wal_path = format!("/var/lib/postgresql/backups/{}/pg_wal.tar", backup.id);
+        let wal_path = format!("{}/{}/pg_wal.tar", server_paths.pg_backup_dir, backup.id);
         if interactor.exists(&wal_path)? {
             let pg_wal_dir = format!("{}/pg_wal", pgdata_dir);
             interactor.mkdir(&pg_wal_dir)?;
@@ -315,16 +324,17 @@ pub async fn postgres_restore(
     } else {
         // 3. Extract all backups in the chain to separate folders
         for item in &chain {
-            let extracted_dir = format!("/var/lib/postgresql/backups/{}_extracted", item.id);
+            let extracted_dir = format!("{}/{}_extracted", server_paths.pg_backup_dir, item.id);
             interactor.rm(&extracted_dir)?;
             interactor.mkdir(&extracted_dir)?;
             interactor.chown(&extracted_dir, "postgres", "postgres")?;
-            let base_tar_path = format!("/var/lib/postgresql/backups/{}/base.tar", item.id);
+            let base_tar_path = format!("{}/{}/base.tar", server_paths.pg_backup_dir, item.id);
             interactor.tar_extract(&base_tar_path, &extracted_dir)?;
             interactor.chown(&extracted_dir, "postgres", "postgres")?;
 
             // Copy backup_manifest to extracted directory so pg_combinebackup can find it
-            let manifest_src = format!("/var/lib/postgresql/backups/{}/backup_manifest", item.id);
+            let manifest_src =
+                format!("{}/{}/backup_manifest", server_paths.pg_backup_dir, item.id);
             interactor.cp(&manifest_src, &extracted_dir)?;
             let manifest_dest = format!("{}/backup_manifest", extracted_dir);
             interactor.chown(&manifest_dest, "postgres", "postgres")?;
@@ -332,21 +342,22 @@ pub async fn postgres_restore(
         }
 
         // 4. Combine backups
-        let combined_dir = "/var/lib/postgresql/backups/combined";
+        let combined_dir_str = format!("{}/combined", server_paths.pg_backup_dir);
+        let combined_dir = &combined_dir_str;
         interactor.rm(combined_dir)?;
 
         let mut combine_cmd = format!("sudo -u postgres {} ", pg_combinebackup);
         for item in &chain {
             combine_cmd.push_str(&format!(
-                "/var/lib/postgresql/backups/{}_extracted ",
-                item.id
+                "{}/{}_extracted ",
+                server_paths.pg_backup_dir, item.id
             ));
         }
         combine_cmd.push_str(&format!("-o {}", combined_dir));
         interactor.cmd(&combine_cmd)?;
 
         // Extract target backup's pg_wal.tar to combined_dir/pg_wal if present
-        let wal_path = format!("/var/lib/postgresql/backups/{}/pg_wal.tar", backup.id);
+        let wal_path = format!("{}/{}/pg_wal.tar", server_paths.pg_backup_dir, backup.id);
         if interactor.exists(&wal_path)? {
             let combined_wal_dir = format!("{}/pg_wal", combined_dir);
             interactor.mkdir(&combined_wal_dir)?;
@@ -366,7 +377,7 @@ pub async fn postgres_restore(
 
         // Clean up extracted directories
         for item in &chain {
-            let extracted_dir = format!("/var/lib/postgresql/backups/{}_extracted", item.id);
+            let extracted_dir = format!("{}/{}_extracted", server_paths.pg_backup_dir, item.id);
             let _ = interactor.rm(&extracted_dir);
         }
     }
@@ -381,7 +392,7 @@ pub async fn postgres_restore(
         pgdata_dir, pgdata_dir, pgdata_dir
     ));
 
-    let pg_ctl = format!("/usr/lib/postgresql/{}/bin/pg_ctl", pg_version);
+    let pg_ctl = format!("{}/{}/bin/pg_ctl", server_paths.pg_bin_dir, pg_version);
 
     if let Some(target_time) = pitr_time {
         // // Populate wal_archive with WAL segments from all backups in the chain
@@ -417,8 +428,8 @@ pub async fn postgres_restore(
         let pitr_conf_path = format!("{}/postgresql.auto.conf", pgdata_dir);
         let mut current_conf = interactor.read_file(&pitr_conf_path).unwrap_or_default();
         let pitr_conf_content = format!(
-            "restore_command = 'cp /var/lib/postgresql/wal_archive/%f %p'\nrecovery_target_time = '{}'\nrecovery_target_action = promote\nrecovery_target_inclusive = on\nrecovery_target_timeline = 'current'\n",
-            target_time
+            "restore_command = 'cp {}/wal_archive/%f %p'\nrecovery_target_time = '{}'\nrecovery_target_action = promote\nrecovery_target_inclusive = on\nrecovery_target_timeline = 'current'\n",
+            server_paths.pg_data_dir, target_time
         );
         if !current_conf.is_empty() && !current_conf.ends_with('\n') {
             current_conf.push('\n');

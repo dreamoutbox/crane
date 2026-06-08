@@ -11,6 +11,7 @@ pub trait ServerInteractor {
     fn cmd(&self, command: &str) -> anyhow::Result<CmdOutput>;
     fn spawn_cmd(&self, command: &str) -> anyhow::Result<std::process::Child>;
     fn get_os_info(&self) -> anyhow::Result<String>;
+    fn server_paths(&self) -> crate::server_interactor::server_path::ServerPaths;
 
     // FILES
     fn create_file(&self, path: &str, content: &str) -> anyhow::Result<()>;

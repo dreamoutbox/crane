@@ -1,5 +1,6 @@
 use crate::{
     config::{Config, NodeConfig},
+    haproxy_unit::haproxy::build_haproxy_config,
     patroni::build_patroni_config,
     server_interactor::server_interactor_trait::ServerInteractor,
     ssh::{CmdOutput, SSHSession},
@@ -117,6 +118,27 @@ impl ServerInteractor for DebianInteractor {
 
     fn get_os_info(&self) -> anyhow::Result<String> {
         self.run_stdout("uname -a")
+    }
+
+    fn server_paths(&self) -> crate::server_interactor::server_path::ServerPaths {
+        crate::server_interactor::server_path::ServerPaths {
+            // APP
+            app_dir: "/opt/crane".to_string(),
+            app_config_dir: "/etc/crane".to_string(),
+            // PG
+            pg_dir: "/usr/lib/postgresql".to_string(),
+            pg_data_dir: "/var/lib/postgresql".to_string(),
+            pg_bin_dir: "/usr/lib/postgresql".to_string(),
+            pg_pass_path: "/etc/postgresql/replica.pass".to_string(),
+            pg_backup_dir: "/var/lib/postgresql/backups".to_string(),
+            pg_wal_archive: "/var/lib/postgresql/wal_archive".to_string(),
+            // PATRONI
+            patroni_config_path: "/etc/patroni/patroni.yml".to_string(),
+            // HAPROXY
+            haproxy_var_lib_dir: "/var/lib/haproxy".to_string(),
+            haproxy_config_path: "/etc/haproxy/haproxy.cfg".to_string(),
+            haproxy_log_dir: "/var/log/haproxy".to_string(),
+        }
     }
 
     fn create_file(&self, path: &str, content: &str) -> anyhow::Result<()> {

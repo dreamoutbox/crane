@@ -1,22 +1,36 @@
 use crate::{
+    config::get_pg_replica_pass,
     postgres_unit::{
         entity::{BackupMetadata, BackupRegistry},
-        helper::{get_backups_data_from_s3, get_pg_current_timeline_id},
+        helper::{
+            get_backups_data_from_s3, get_pg_current_timeline_id, get_pg_version, pg_get_primary,
+        },
     },
-    s3::S3Client,
-    server_interactor::server_interactor_trait::ServerInteractor,
+    s3::{S3Client, get_s3_config, s3_client::RealS3Client},
+    server_interactor::get_server_interactor,
 };
 
 pub fn postgres_backup(
-    interactor: &dyn ServerInteractor,
-    s3_client: &dyn S3Client,
-    pg_version: &str,
+    config: &crate::config::Config,
     backup_type: &str,
-    replica_pass: &str,
-    bucket_name: &str,
-    last_backup: Option<&BackupMetadata>,
     label: Option<&str>,
 ) -> anyhow::Result<BackupMetadata> {
+    let primary_node = pg_get_primary(&config)?
+        .ok_or_else(|| anyhow::anyhow!("No active PostgreSQL leader found in the cluster."))?;
+
+    let pg_version = get_pg_version(&config);
+    let replica_pass = get_pg_replica_pass(&config);
+
+    let s3_config = get_s3_config(&config)?;
+    let s3_client = RealS3Client::new(&s3_config)?;
+
+    let interactor = get_server_interactor(&primary_node.name)?;
+
+    let backups = get_backups_data_from_s3(&s3_client)?;
+    let last_backup = backups.last();
+
+    let server_paths = interactor.server_paths();
+
     // 1. Get Date and Time from DB Node
     let date_output = interactor.cmd("date +'%Y%m%d%H%M%S%3N %Y-%m-%d %H:%M:%S.%3N'")?;
     let parts: Vec<&str> = date_output.stdout.trim().split_whitespace().collect();
@@ -31,14 +45,20 @@ pub fn postgres_backup(
     let date = parts[1].to_string();
     let time = parts[2].to_string();
 
-    let local_path = format!("/var/lib/postgresql/backups/{}", id);
-    let pg_basebackup = format!("/usr/lib/postgresql/{}/bin/pg_basebackup", pg_version);
-    let pg_verifybackup = format!("/usr/lib/postgresql/{}/bin/pg_verifybackup", pg_version);
+    let local_path = format!("{}/{}", server_paths.pg_backup_dir, id);
+    let pg_basebackup = format!(
+        "{}/{}/bin/pg_basebackup",
+        server_paths.pg_bin_dir, pg_version
+    );
+    let pg_verifybackup = format!(
+        "{}/{}/bin/pg_verifybackup",
+        server_paths.pg_bin_dir, pg_version
+    );
 
     // 2. Ensure Backup Directories exist
-    interactor.mkdir("/var/lib/postgresql/backups")?;
-    interactor.chown("/var/lib/postgresql/backups", "postgres", "postgres")?;
-    interactor.chmod("/var/lib/postgresql/backups", "755")?;
+    interactor.mkdir(&server_paths.pg_backup_dir)?;
+    interactor.chown(&server_paths.pg_backup_dir, "postgres", "postgres")?;
+    interactor.chmod(&server_paths.pg_backup_dir, "755")?;
     interactor.mkdir(&local_path)?;
     interactor.chown(&local_path, "postgres", "postgres")?;
 
@@ -62,13 +82,15 @@ pub fn postgres_backup(
     if is_incr {
         if let Some(parent) = last_backup {
             base_id = Some(parent.id.clone());
-            let parent_manifest =
-                format!("/var/lib/postgresql/backups/{}/backup_manifest", parent.id);
+            let parent_manifest = format!(
+                "{}/{}/backup_manifest",
+                server_paths.pg_backup_dir, parent.id
+            );
 
             // Check if parent manifest is present locally
             if !interactor.exists(&parent_manifest)? {
                 // Recreate parent directory and restore manifest from S3
-                let parent_dir = format!("/var/lib/postgresql/backups/{}", parent.id);
+                let parent_dir = format!("{}/{}", server_paths.pg_backup_dir, parent.id);
                 interactor.mkdir(&parent_dir)?;
                 interactor.chown(&parent_dir, "postgres", "postgres")?;
                 interactor.chmod(&parent_dir, "755")?;
@@ -89,7 +111,7 @@ pub fn postgres_backup(
             ))?;
             let parent_timeline_id = parent_timeline_id.stdout.trim();
 
-            let current_timeline_id = get_pg_current_timeline_id(interactor)?;
+            let current_timeline_id = get_pg_current_timeline_id(&*interactor)?;
 
             if !parent_timeline_id.is_empty()
                 && !current_timeline_id.is_empty()
@@ -178,7 +200,7 @@ pub fn postgres_backup(
     }
 
     // 6. Verify Backup (requires extracting tar to a temp directory first)
-    let verify_dir = format!("/var/lib/postgresql/backups/{}_verify", id);
+    let verify_dir = format!("{}/{}_verify", server_paths.pg_backup_dir, id);
     interactor.mkdir(&verify_dir)?;
     interactor.chown(&verify_dir, "postgres", "postgres")?;
     interactor.tar_extract(&format!("{}/base.tar", local_path), &verify_dir)?;
@@ -238,7 +260,7 @@ pub fn postgres_backup(
     }
 
     // 8. Create Backup Metadata
-    let s3_path = format!("{}/backups/{}", bucket_name, id);
+    let s3_path = format!("{}/backups/{}", s3_config.bucket, id);
     let meta = BackupMetadata {
         id: id.clone(),
         date: date.clone(),
@@ -267,25 +289,22 @@ pub fn postgres_backup(
 
     // 10. Update backup registry on S3 and local
     let registry_key = "backups/registry.toml";
-    let backups = get_backups_data_from_s3(s3_client)?;
+    let backups = get_backups_data_from_s3(&s3_client)?;
     let mut registry = BackupRegistry { backups };
 
     registry.backups.push(meta.clone());
     let registry_toml = toml::to_string(&registry)?;
     s3_client.put_object(registry_key, registry_toml.as_bytes())?;
 
-    interactor.create_file("/var/lib/postgresql/backups/registry.toml", &registry_toml)?;
-    interactor.chown(
-        "/var/lib/postgresql/backups/registry.toml",
-        "postgres",
-        "postgres",
-    )?;
-    interactor.chmod("/var/lib/postgresql/backups/registry.toml", "644")?;
+    let registry_local_path = format!("{}/registry.toml", server_paths.pg_backup_dir);
+    interactor.create_file(&registry_local_path, &registry_toml)?;
+    interactor.chown(&registry_local_path, "postgres", "postgres")?;
+    interactor.chmod(&registry_local_path, "644")?;
 
     // Force a WAL switch at the end of the backup to ensure that the WAL segment
     // active during the backup is archived and available for PITR.
-    interactor.mkdir("/var/lib/postgresql/wal_archive")?;
-    interactor.chown("/var/lib/postgresql/wal_archive", "postgres", "postgres")?;
+    interactor.mkdir(&server_paths.pg_wal_archive)?;
+    interactor.chown(&server_paths.pg_wal_archive, "postgres", "postgres")?;
 
     let switch_out = interactor.psql(
         Some("SELECT pg_walfile_name(pg_switch_wal() - 1);"),
@@ -310,11 +329,11 @@ pub fn postgres_backup(
         println!("archive_command = {}", ac_out.stdout.trim());
     }
 
-    let pgdata_dir = format!("/var/lib/postgresql/{}/main", pg_version);
+    let pgdata_dir = format!("{}/{}/main", server_paths.pg_data_dir, pg_version);
 
     // Try immediate copy from pg_wal before the segment gets recycled
     let wal_source = format!("{}/pg_wal/{}", pgdata_dir, wal_filename);
-    let wal_dest = format!("/var/lib/postgresql/wal_archive/{}", wal_filename);
+    let wal_dest = format!("{}/{}", server_paths.pg_wal_archive, wal_filename);
     let immediate_cp = format!("sudo -u postgres cp {} {}", wal_source, wal_dest);
     match interactor.cmd(&immediate_cp) {
         Ok(out) if out.exit_code == 0 => {
@@ -337,7 +356,7 @@ pub fn postgres_backup(
     }
 
     println!(
-        "\nBACKUP {} {} completed\n",
+        "\nBACKUP ID: {} DATETIME: {} completed\n",
         id,
         meta.taken_at.as_deref().unwrap_or("unknown").to_string()
     );

@@ -68,6 +68,22 @@ impl ServerInteractor for MockInteractor {
     fn get_os_info(&self) -> anyhow::Result<String> {
         Ok("Linux".to_string())
     }
+    fn server_paths(&self) -> crane::server_interactor::server_path::ServerPaths {
+        crane::server_interactor::server_path::ServerPaths {
+            app_dir: "/opt/crane".to_string(),
+            app_config_dir: "/etc/crane".to_string(),
+            pg_dir: "/usr/lib/postgresql".to_string(),
+            pg_data_dir: "/var/lib/postgresql".to_string(),
+            pg_bin_dir: "/usr/lib/postgresql".to_string(),
+            pg_pass_path: "/etc/postgresql/replica.pass".to_string(),
+            pg_backup_dir: "/var/lib/postgresql/backups".to_string(),
+            pg_wal_archive: "/var/lib/postgresql/wal_archive".to_string(),
+            patroni_config_path: "/etc/patroni/patroni.yml".to_string(),
+            haproxy_var_lib_dir: "/var/lib/haproxy".to_string(),
+            haproxy_config_path: "/etc/haproxy/haproxy.cfg".to_string(),
+            haproxy_log_dir: "/var/log/haproxy".to_string(),
+        }
+    }
     fn create_file(&self, path: &str, content: &str) -> anyhow::Result<()> {
         self.files
             .borrow_mut()

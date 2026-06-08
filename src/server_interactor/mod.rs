@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 
 pub mod debian;
+pub mod rhel;
 pub mod server_interactor_trait;
 pub mod server_path;
 
