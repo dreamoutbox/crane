@@ -522,13 +522,19 @@ impl ServerInteractor for DebianInteractor {
         Ok(code)
     }
 
-    fn update_etc_hosts(&self, hostname: &str, ip: &str) -> anyhow::Result<()> {
-        let cmd = format!(
-            r#"sudo sh -c 'grep -v " {hostname}" /etc/hosts > /tmp/hosts.tmp && echo "{ip} {hostname}" >> /tmp/hosts.tmp && cp /tmp/hosts.tmp /etc/hosts && rm /tmp/hosts.tmp'"#,
-            hostname = hostname,
-            ip = ip
-        );
-        self.run_stdout(&cmd)?;
+    fn update_etc_hosts(&self, entries: &[(String, String)]) -> anyhow::Result<()> {
+        for (hostname, ip) in entries {
+            // Filter out existing hostname entries,
+            // append new IP mapping via a temp file,
+            // then overwrite /etc/hosts.
+            let cmd = format!(
+                r#"sudo sh -c 'grep -v " {hostname}" /etc/hosts > /tmp/hosts.tmp && echo "{ip} {hostname}" >> /tmp/hosts.tmp && cp /tmp/hosts.tmp /etc/hosts && rm /tmp/hosts.tmp'"#,
+                hostname = hostname,
+                ip = ip
+            );
+            self.run_stdout(&cmd)?;
+        }
+
         Ok(())
     }
 

@@ -176,7 +176,8 @@ impl ServerInteractor for MockServerInteractorUserNotExist {
         Ok(200)
     }
 
-    fn update_etc_hosts(&self, _hostname: &str, _ip: &str) -> anyhow::Result<()> {
+    fn update_etc_hosts(&self, entries: &[(String, String)]) -> anyhow::Result<()> {
+        let _ = self.cmd(&format!("update_etc_hosts {:?}", entries))?;
         Ok(())
     }
 
@@ -232,13 +233,13 @@ impl ServerInteractor for MockServerInteractorUserNotExist {
 
     fn setup_etcd(
         &self,
-        node: &crane::config::NodeConfig,
-        pg_nodes: &[crane::config::NodeConfig],
+        _node: &crane::config::NodeConfig,
+        _pg_nodes: &[crane::config::NodeConfig],
     ) -> anyhow::Result<()> {
         todo!()
     }
 
-    fn start_etcd(&self, node: &crane::config::NodeConfig) -> anyhow::Result<()> {
+    fn start_etcd(&self, _node: &crane::config::NodeConfig) -> anyhow::Result<()> {
         todo!()
     }
 }

@@ -76,7 +76,7 @@ pub trait ServerInteractor {
     fn user_exists(&self, username: &str) -> anyhow::Result<bool>;
     fn which(&self, binary: &str) -> anyhow::Result<String>;
     fn check_http_status(&self, url: &str) -> anyhow::Result<u16>;
-    fn update_etc_hosts(&self, hostname: &str, ip: &str) -> anyhow::Result<()>;
+    fn update_etc_hosts(&self, entries: &[(String, String)]) -> anyhow::Result<()>;
     fn generate_self_signed_cert(
         &self,
         key_path: &str,

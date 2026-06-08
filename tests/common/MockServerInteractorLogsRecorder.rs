@@ -183,8 +183,8 @@ impl ServerInteractor for MockServerInteractorLogsRecorder {
         }
     }
 
-    fn update_etc_hosts(&self, hostname: &str, ip: &str) -> anyhow::Result<()> {
-        let _ = self.cmd(&format!("update_etc_hosts {} {}", hostname, ip))?;
+    fn update_etc_hosts(&self, entries: &[(String, String)]) -> anyhow::Result<()> {
+        let _ = self.cmd(&format!("update_etc_hosts {:?}", entries))?;
         Ok(())
     }
 
@@ -258,13 +258,13 @@ impl ServerInteractor for MockServerInteractorLogsRecorder {
 
     fn setup_etcd(
         &self,
-        node: &crane::config::NodeConfig,
-        pg_nodes: &[crane::config::NodeConfig],
+        _node: &crane::config::NodeConfig,
+        _pg_nodes: &[crane::config::NodeConfig],
     ) -> anyhow::Result<()> {
         todo!()
     }
 
-    fn start_etcd(&self, node: &crane::config::NodeConfig) -> anyhow::Result<()> {
+    fn start_etcd(&self, _node: &crane::config::NodeConfig) -> anyhow::Result<()> {
         todo!()
     }
 }

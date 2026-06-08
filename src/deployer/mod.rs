@@ -1,3 +1,4 @@
 pub mod helper;
-pub mod python_zip_script;
 pub mod users;
+
+pub const PYTHON_ZIP_APP_SCRIPT: &str = include_str!("zip_app.py");

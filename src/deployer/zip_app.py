@@ -1,5 +1,5 @@
-pub const PYTHON_ZIP_SCRIPT: &str = r#"
 import os, sys, zipfile
+
 zip_path = sys.argv[1]
 deploy_dir = sys.argv[2]
 ignores = sys.argv[3:]
@@ -22,4 +22,3 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
 
             if not is_ignored:
                 zipf.write(file_path, rel_path)
-"#;

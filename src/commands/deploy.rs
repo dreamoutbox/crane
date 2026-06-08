@@ -1,5 +1,5 @@
 use crate::config::get_postgres_dbs_and_users_config;
-use crate::deployer::helper::{deploy_update_etc_hosts, deploy_zip_app};
+use crate::deployer::helper::deploy_zip_app;
 use crate::deployer::users::deploy_setup_app_users;
 use crate::helper::config::config_get_nodes;
 use crate::postgres_unit::setup::postgres_setup_wrapper;
@@ -474,7 +474,7 @@ fn inner_deploy_single_app(
         etc_hosts.dedup_by(|a, b| a.0 == b.0);
 
         log!("\tUpdating /etc/hosts on node {}...", node.name);
-        deploy_update_etc_hosts(&*node_interactor, &etc_hosts)?;
+        node_interactor.update_etc_hosts(&etc_hosts)?;
     }
 
     // Clean up local temporary zip file
