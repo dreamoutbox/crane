@@ -35,6 +35,44 @@ jobs:
         with:
           tool: nextest
 
+      - name: Setup SSH keys
+        if: runner.os != 'Windows'
+        run: |
+          KEYS_DIR="/home/runner/work/crane/crane/keys"
+          mkdir -p "$KEYS_DIR"
+          ssh-keygen -t ed25519 -C "crane-sim" -f "$KEYS_DIR/id_ed25519" -N ""
+          cp "$KEYS_DIR/id_ed25519.pub" "$KEYS_DIR/authorized_keys"
+          mkdir -p ~/.ssh
+          cat >> ~/.ssh/config <<EOF
+
+          # crane-vps
+
+          Host *
+            StrictHostKeyChecking no
+            LogLevel ERROR
+
+          Host vps1
+            HostName localhost
+            Port 2221
+            User crane
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+
+          Host vps2
+            HostName localhost
+            Port 2222
+            User crane
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+
+          Host vps3
+            HostName localhost
+            Port 2223
+            User crane
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+          EOF
+
       - name: Test
         env:
           CLOUDFLARE_TOKEN: "CF_TOKEN_HERE"
