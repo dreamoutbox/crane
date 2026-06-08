@@ -634,6 +634,7 @@ impl ServerInteractor for RHELInteractor {
             self.mkdir("/var/lib")?;
             self.run_stdout("sudo ln -sf /var/lib/pgsql /var/lib/postgresql")?;
         }
+        self.run_stdout("sudo chmod 755 /var/lib/pgsql")?;
 
         // Check if DB needs to be initialized (initdb)
         let pg_data_main = format!("/var/lib/postgresql/{}/main", version);
@@ -722,6 +723,7 @@ impl ServerInteractor for RHELInteractor {
         pg_nodes: &Vec<crate::config::NodeConfig>,
     ) -> anyhow::Result<bool> {
         let patroni_installed = self.which("patroni").is_ok();
+
         let etcd_support_installed = self
             .cmd("rpm -q patroni-etcd")
             .map(|o| o.exit_code == 0)

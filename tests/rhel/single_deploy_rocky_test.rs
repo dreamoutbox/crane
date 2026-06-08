@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use crate::reset_rocky_docker_compose;
+use crate::helper::reset_rocky_docker_compose;
 
 // RUN:
 // cargo nextest run test_single_deploy_rocky --nocapture
