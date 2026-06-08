@@ -14,19 +14,19 @@ pub fn build_patroni_config(
     }
     let patroni_yaml = format!(
         r#"scope: postgres-cluster
-    namespace: /service
-    name: {node_name}
-    
-    etcd3:
-      hosts:
-    {etcd_hosts}
-    
-    restapi:
-      listen: 0.0.0.0:8008
-      connect_address: {internal_ip}:8008
-    
-    bootstrap:
-      dcs:
+namespace: /service
+name: {node_name}
+
+etcd3:
+  hosts:
+{etcd_hosts}
+
+restapi:
+  listen: 0.0.0.0:8008
+  connect_address: {internal_ip}:8008
+
+bootstrap:
+  dcs:
     ttl: 20
     loop_wait: 10
     retry_timeout: 10
@@ -51,36 +51,36 @@ pub fn build_patroni_config(
         archive_mode: "on"
         archive_command: "cp %p /var/lib/postgresql/wal_archive/%f"
         {summarize_wal}
-      initdb:
+  initdb:
     - encoding: UTF8
     - data-checksums
     
-      pg_hba:
+  pg_hba:
     - local   all             postgres                                trust
     - local   all             all                                     trust
     - host    all             all             127.0.0.1/32            trust
     - host    all             all             ::1/128                 trust
     - host    replication     replicator      0.0.0.0/0               scram-sha-256
     - host    all             all             0.0.0.0/0               scram-sha-256
-    
-    postgresql:
-      listen: '*:5432'
-      connect_address: {internal_ip}:5432
-      data_dir: /var/lib/postgresql/{pg_version}/main
-      bin_dir: /usr/lib/postgresql/{pg_version}/bin
-      pgpass: /var/lib/postgresql/.pgpass
-      authentication:
+
+postgresql:
+  listen: '*:5432'
+  connect_address: {internal_ip}:5432
+  data_dir: /var/lib/postgresql/{pg_version}/main
+  bin_dir: /usr/lib/postgresql/{pg_version}/bin
+  pgpass: /var/lib/postgresql/.pgpass
+  authentication:
     replication:
       username: replicator
       password: {replica_pass}
     superuser:
       username: postgres
       password: {replica_pass}
-      basebackup:
+  basebackup:
     - checkpoint: fast
     - no-verify-checksums
     - wal-method: stream
-    "#,
+"#,
         node_name = node.name,
         etcd_hosts = etcd_hosts_yaml,
         internal_ip = node.internal_ip,

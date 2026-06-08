@@ -21,15 +21,18 @@ pub fn pg_get_primary(config: &config::Config) -> anyhow::Result<Option<config::
     for node in pg_nodes {
         if let Ok(interactor) = get_server_interactor(&node.name) {
             // First check via Patroni REST API
-            let is_patroni_primary = if let Ok(code) = interactor.check_http_status("http://127.0.0.1:8008/primary") {
-                code == 200
-            } else {
-                false
-            };
+            let is_patroni_primary =
+                if let Ok(code) = interactor.check_http_status("http://127.0.0.1:8008/primary") {
+                    code == 200
+                } else {
+                    false
+                };
 
             if is_patroni_primary {
                 // Verify it's actually writable (out of recovery)
-                if let Ok(output) = interactor.psql(Some("select pg_is_in_recovery();"), None, None, true) {
+                if let Ok(output) =
+                    interactor.psql(Some("select pg_is_in_recovery();"), None, None, true)
+                {
                     // dbg!(&output);
 
                     if output.stdout.trim() == "f" {
@@ -38,7 +41,9 @@ pub fn pg_get_primary(config: &config::Config) -> anyhow::Result<Option<config::
                 }
             } else {
                 // Fallback for mock interactor and compatibility
-                if let Ok(output) = interactor.psql(Some("select pg_is_in_recovery();"), None, None, true) {
+                if let Ok(output) =
+                    interactor.psql(Some("select pg_is_in_recovery();"), None, None, true)
+                {
                     if output.stdout.trim() == "f" {
                         return Ok(Some(node));
                     }
@@ -84,10 +89,13 @@ pub fn pg_cluster_wait_all_nodes_ready(
         let replica_start_time = std::time::Instant::now();
         let replica_timeout = std::time::Duration::from_secs(90);
 
-        let list_cmd = "sudo -u postgres patronictl -c /etc/patroni/config.yml list";
+        let list_cmd = format!(
+            "sudo -u postgres patronictl -c {} list",
+            interactor.server_paths().patroni_config_path
+        );
 
         while replica_start_time.elapsed() < replica_timeout {
-            if let Ok(out) = interactor.cmd(list_cmd) {
+            if let Ok(out) = interactor.cmd(&list_cmd) {
                 let output = out.stdout;
                 let mut all_running = true;
 

@@ -156,7 +156,7 @@ fn inner_setup_postgres_node(
     let _disable_pg_res = interactor.disable_service("postgresql");
 
     let patroni_configured = interactor
-        .exists("/etc/patroni/config.yml")
+        .exists(&interactor.server_paths().patroni_config_path)
         .unwrap_or(false);
 
     if !patroni_configured {

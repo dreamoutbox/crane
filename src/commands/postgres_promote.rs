@@ -32,8 +32,10 @@ pub fn run_postgres_promote_cmd(
         let target_interactor = get_server_interactor(&target_conf_node.name)?;
 
         let switch_cmd = format!(
-            "sudo patronictl -c /etc/patroni/config.yml switchover --leader {} --candidate {} --scheduled now --force",
-            leader.name, target_conf_node.name
+            "sudo patronictl -c {} switchover --leader {} --candidate {} --scheduled now --force",
+            target_interactor.server_paths().patroni_config_path,
+            leader.name,
+            target_conf_node.name
         );
         let switch_output = target_interactor.cmd(&switch_cmd)?;
 
@@ -62,7 +64,8 @@ pub fn run_postgres_promote_cmd(
         let target_interactor = get_server_interactor(&target_conf_node.name)?;
 
         let failover_cmd = format!(
-            "sudo patronictl -c /etc/patroni/config.yml failover --candidate {} --force",
+            "sudo patronictl -c {} failover --candidate {} --force",
+            target_interactor.server_paths().patroni_config_path,
             target_conf_node.name
         );
         let failover_output = target_interactor.cmd(&failover_cmd)?;

@@ -721,12 +721,16 @@ impl ServerInteractor for RHELInteractor {
         pg_nodes: &Vec<crate::config::NodeConfig>,
     ) -> anyhow::Result<bool> {
         let patroni_installed = self.which("patroni").is_ok();
+        let etcd_support_installed = self
+            .cmd("rpm -q patroni-etcd")
+            .map(|o| o.exit_code == 0)
+            .unwrap_or(false);
 
-        if !patroni_installed {
-            println!("\tInstalling Patroni...");
-            self.run_stdout("sudo dnf install -y patroni")?;
+        if !patroni_installed || !etcd_support_installed {
+            println!("\tInstalling Patroni and patroni-etcd...");
+            self.run_stdout("sudo dnf install -y patroni patroni-etcd")?;
         } else {
-            println!("\tPatroni is already installed.");
+            println!("\tPatroni and patroni-etcd are already installed.");
         }
 
         let patroni_yml = build_patroni_config(node, pg_version, replica_pass, pg_nodes)?;
