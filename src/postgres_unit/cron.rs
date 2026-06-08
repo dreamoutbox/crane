@@ -20,9 +20,10 @@ pub fn configure_postgres_cron_backup(
         // Ensure directories exist
         interactor.mkdir("/etc/crane")?;
         interactor.mkdir("/opt/crane")?;
-        interactor.mkdir("/var/lib/postgresql/backups")?;
-        interactor.chown("/var/lib/postgresql/backups", "postgres", "postgres")?;
-        interactor.chmod("/var/lib/postgresql/backups", "755")?;
+        let pg_backup_dir = interactor.server_paths().pg_backup_dir;
+        interactor.mkdir(&pg_backup_dir)?;
+        interactor.chown(&pg_backup_dir, "postgres", "postgres")?;
+        interactor.chmod(&pg_backup_dir, "755")?;
 
         // Write postgres-backup-config.toml
         let s3_toml_str = format!(

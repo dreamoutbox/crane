@@ -389,35 +389,6 @@ pub async fn postgres_restore(
     let pg_ctl = interactor.pg_bin_path(&pg_version, "pg_ctl");
 
     if let Some(target_time) = pitr_time {
-        // // Populate wal_archive with WAL segments from all backups in the chain
-        // // so that restore_command can find them during PITR recovery.
-        // cmdw(interactor, "sudo mkdir -p /var/lib/postgresql/wal_archive")?;
-        // cmdw(
-        //     interactor,
-        //     "sudo chown postgres:postgres /var/lib/postgresql/wal_archive",
-        // )?;
-        //
-        // for item in &original_chain {
-        //     let wal_tar = format!("/var/lib/postgresql/backups/{}/pg_wal.tar", item.id);
-        //     let test_wal =
-        //         interactor.cmd(&format!("test -f {} && echo 'yes' || echo 'no'", wal_tar))?;
-        //     if test_wal.stdout.trim() == "yes" {
-        //         cmdw(
-        //             interactor,
-        //             &format!(
-        //                 "sudo -u postgres tar -xf {} -C /var/lib/postgresql/wal_archive/",
-        //                 wal_tar
-        //             ),
-        //         )?;
-        //     }
-        // }
-        //
-        // // Also copy any WAL segments already in pgdata/pg_wal/ to wal_archive
-        // let _ = interactor.cmd(&format!(
-        //     "sudo -u postgres bash -c 'cp {}/pg_wal/0000* /var/lib/postgresql/wal_archive/ 2>/dev/null || true'",
-        //     pgdata_dir
-        // ));
-
         // Write PITR settings to postgresql.auto.conf in pgdata_dir
         let pitr_conf_path = format!("{}/postgresql.auto.conf", pgdata_dir);
         let mut current_conf = interactor.read_file(&pitr_conf_path).unwrap_or_default();

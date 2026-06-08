@@ -140,33 +140,40 @@ pub fn backup_pg_dir(
         anyhow::bail!("Failed to generate UNIX timestamp for backup path");
     }
 
+    let paths = interactor.server_paths();
+    // pg_data_dir is e.g. /var/lib/postgresql (Debian) or /var/lib/pgsql (RHEL)
+    // full data dir is {pg_data_dir}/{version}/{subdir} where subdir is "main" or "data"
+    let pg_data_base = format!("{}/{}", paths.pg_data_dir, pg_version);
+
+    // Mirror the real data dir under /backup/{timestamp}/
     let backup_parent = format!(
-        "/backup/{}/var/lib/postgresql/{}",
-        unix_timestamp, *pg_version
+        "/backup/{}{}/{}",
+        unix_timestamp, paths.pg_data_dir, pg_version
     );
 
-    let old_main_dir = format!("/var/lib/postgresql/{}/main", *pg_version);
-    let backup_main_dir = format!("{}/main", backup_parent);
-    let dir_exists = interactor.exists(&old_main_dir).unwrap_or(false);
-    if dir_exists {
-        println!(
-            "\tBacking up old postgres data directory {} to {}",
-            old_main_dir, backup_main_dir
-        );
-        interactor.mkdir(&backup_parent)?;
-        interactor.mv(&old_main_dir, &backup_main_dir)?;
-    }
+    // Each interactor uses its own subdir name (Debian: "main", RHEL: "data")
+    for subdir in &["main", "data"] {
+        let old_dir = format!("{}/{}", pg_data_base, subdir);
+        let backup_dir = format!("{}/{}", backup_parent, subdir);
+        if interactor.exists(&old_dir).unwrap_or(false) {
+            println!(
+                "\tBacking up old postgres data directory {} to {}",
+                old_dir, backup_dir
+            );
+            interactor.mkdir(&backup_parent)?;
+            interactor.mv(&old_dir, &backup_dir)?;
+        }
 
-    let failed_main_dir = format!("/var/lib/postgresql/{}/main.failed", *pg_version);
-    let backup_failed_dir = format!("{}/main.failed", backup_parent);
-    let failed_exists = interactor.exists(&failed_main_dir).unwrap_or(false);
-    if failed_exists {
-        println!(
-            "\tBacking up failed data directory {} to {}...",
-            failed_main_dir, backup_failed_dir
-        );
-        interactor.mkdir(&backup_parent)?;
-        interactor.mv(&failed_main_dir, &backup_failed_dir)?;
+        let failed_dir = format!("{}/{}.failed", pg_data_base, subdir);
+        let backup_failed_dir = format!("{}/{}.failed", backup_parent, subdir);
+        if interactor.exists(&failed_dir).unwrap_or(false) {
+            println!(
+                "\tBacking up failed data directory {} to {}...",
+                failed_dir, backup_failed_dir
+            );
+            interactor.mkdir(&backup_parent)?;
+            interactor.mv(&failed_dir, &backup_failed_dir)?;
+        }
     }
 
     Ok(())

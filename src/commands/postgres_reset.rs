@@ -53,9 +53,15 @@ pub fn run_postgres_reset_cmd(config: &config::Config, force: bool) -> anyhow::R
     for node in &pg_nodes {
         println!("Connecting to node {}...", node.name);
         let interactor = get_server_interactor(&node.name)?;
-        let data_dir = format!("/var/lib/postgresql/{}/main", pg_version);
-        println!("\tRemoving directory {}...", data_dir);
-        interactor.rm(&data_dir)?;
+        let server_paths = interactor.server_paths();
+
+        for subdir in &["main", "data"] {
+            let data_dir = format!("{}/{}/{}", server_paths.pg_data_dir, pg_version, subdir);
+            if interactor.exists(&data_dir).unwrap_or(false) {
+                println!("\tRemoving directory {}...", data_dir);
+                interactor.rm(&data_dir)?;
+            }
+        }
     }
 
     // 4. Start Patroni on all nodes
