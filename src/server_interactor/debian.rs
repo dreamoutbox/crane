@@ -855,7 +855,7 @@ ufw reload
         self.mkdir("/tmp/crane")?;
         self.create_file("/tmp/crane/setup_firewall.sh", &script_content)?;
         self.chmod("/tmp/crane/setup_firewall.sh", "+x")?;
-        self.run_stdout("sudo /tmp/crane/setup_firewall.sh")?;
+        self.run_stdout("sudo bash /tmp/crane/setup_firewall.sh")?;
 
         Ok(())
     }

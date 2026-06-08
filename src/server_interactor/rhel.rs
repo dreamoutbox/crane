@@ -438,6 +438,7 @@ impl ServerInteractor for RHELInteractor {
             if !is_installed {
                 self.run_stdout("sudo dnf install -y firewalld")?;
             }
+            let _ = self.run_stdout("sudo sed -i 's/^IPv6_rpfilter=.*/IPv6_rpfilter=no/g' /etc/firewalld/firewalld.conf");
             self.run_stdout("sudo systemctl enable firewalld")?;
             self.run_stdout("sudo systemctl start firewalld")?;
         } else if is_installed {
@@ -878,6 +879,9 @@ if ! command -v firewall-cmd >/dev/null 2>&1; then
     dnf install -y firewalld
 fi
 
+# Disable IPv6 rpfilter to support Docker/WSL2 environments
+sed -i 's/^IPv6_rpfilter=.*/IPv6_rpfilter=no/g' /etc/firewalld/firewalld.conf
+
 # Enable & Start firewalld
 systemctl enable firewalld
 systemctl start firewalld
@@ -904,7 +908,7 @@ firewall-cmd --reload
         self.mkdir("/tmp/crane")?;
         self.create_file("/tmp/crane/setup_firewall.sh", &script_content)?;
         self.chmod("/tmp/crane/setup_firewall.sh", "+x")?;
-        self.run_stdout("sudo /tmp/crane/setup_firewall.sh")?;
+        self.run_stdout("sudo bash /tmp/crane/setup_firewall.sh")?;
 
         Ok(())
     }

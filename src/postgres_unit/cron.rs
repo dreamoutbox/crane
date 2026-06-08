@@ -69,6 +69,8 @@ replica_pass = "{}"
             "#,
             full_cron, incr_cron
         );
+
+        interactor.mkdir("/etc/cron.d/")?;
         interactor.create_file("/etc/cron.d/postgres-backup", &cron_content)?;
         interactor.chown("/etc/cron.d/postgres-backup", "root", "root")?;
         interactor.chmod("/etc/cron.d/postgres-backup", "644")?;

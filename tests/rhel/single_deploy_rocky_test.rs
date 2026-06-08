@@ -1,11 +1,16 @@
 use std::path::Path;
 use std::process::Command;
 
+use crate::reset_rocky_docker_compose;
+
 // RUN:
 // cargo nextest run test_single_deploy_rocky --nocapture
 
 #[tokio::test]
 async fn test_single_deploy_rocky() {
+    // reset docker compose
+    reset_rocky_docker_compose().await;
+
     // 1. Build Go demo app
     let go_build = Command::new("go")
         .arg("build")
