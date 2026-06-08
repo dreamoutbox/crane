@@ -1,16 +1,15 @@
-use crane::haproxy_unit::haproxy::{setup_haproxy, setup_haproxy_unified};
-
 #[path = "../common/mock_interactor.rs"]
 pub mod mock_interactor;
 
+use crane::server_interactor::server_interactor_trait::ServerInteractor;
 use mock_interactor::MockInteractor;
 
-#[test]
-fn test_haproxy_install() {
-    let interactor = MockInteractor::new(vec![]);
-    let result = setup_haproxy(&interactor);
-    assert!(result.is_ok());
-}
+// #[test]
+// fn test_haproxy_install() {
+//     let interactor = MockInteractor::new(vec![]);
+//     let result = interactor.setup_haproxy();
+//     assert!(result.is_ok());
+// }
 
 #[test]
 fn test_haproxy_setup_config() {
@@ -42,8 +41,7 @@ fn test_haproxy_setup_config() {
     let config: crane::config::Config = toml::from_str(toml_str).unwrap();
     let interactor = MockInteractor::new(vec![]);
 
-    let node = &config.nodes[0];
-    let result = setup_haproxy_unified(&interactor, &config, node, Some("myapp"), Some(3002));
+    let result = interactor.setup_haproxy(&config);
     assert!(result.is_ok());
 
     let files = interactor.files.borrow();

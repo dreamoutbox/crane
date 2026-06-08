@@ -4,7 +4,6 @@ use crate::{
         get_postgres_dbs_and_users_config,
     },
     etcd_unit::etcd_wait_for_cluster,
-    haproxy_unit::haproxy::setup_haproxy_on_each_nodes_wrapper,
     helper::config::config_get_nodes,
     postgres_unit::{
         helper::{backup_pg_dir, get_pg_version, pg_cluster_wait_all_nodes_ready, pg_get_primary},
@@ -13,10 +12,7 @@ use crate::{
     server_interactor::{get_server_interactor, server_interactor_trait::ServerInteractor},
 };
 
-pub async fn postgres_setup_wrapper(
-    config: &config::Config,
-    app_nodes: &Vec<config::NodeConfig>,
-) -> Result<(), anyhow::Error> {
+pub async fn postgres_setup_wrapper(config: &config::Config) -> Result<(), anyhow::Error> {
     let pg_version = get_pg_version(&config);
     let replica_pass = get_pg_replica_pass(&config);
 
@@ -120,15 +116,11 @@ pub async fn postgres_setup_wrapper(
     println!("\n\tPolling PostgreSQL cluster health...");
     let start = std::time::Instant::now();
     pg_cluster_wait_all_nodes_ready(&*leader_interactor, &pg_nodes);
-
     let elapsed = start.elapsed();
     println!(
         "\tPostgreSQL cluster health check completed (took {}s)",
         elapsed.as_secs()
     );
-
-    // 5. Setup HAProxy on all app nodes
-    setup_haproxy_on_each_nodes_wrapper(config, app_nodes).await?;
 
     Ok(())
 }

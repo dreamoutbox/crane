@@ -337,4 +337,12 @@ impl ServerInteractor for MockInteractor {
     fn start_etcd(&self, _node: &crane::config::NodeConfig) -> anyhow::Result<()> {
         todo!()
     }
+
+    fn setup_haproxy(&self, _config: &crane::config::Config) -> anyhow::Result<()> {
+        todo!()
+    }
+
+    fn reload_haproxy(&self) -> anyhow::Result<()> {
+        todo!()
+    }
 }

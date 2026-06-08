@@ -110,6 +110,10 @@ pub trait ServerInteractor {
     //etcd
     fn setup_etcd(&self, node: &NodeConfig, pg_nodes: &[NodeConfig]) -> anyhow::Result<()>;
     fn start_etcd(&self, node: &NodeConfig) -> anyhow::Result<()>;
+
+    // haproxy
+    fn setup_haproxy(&self, config: &Config) -> anyhow::Result<()>;
+    fn reload_haproxy(&self) -> anyhow::Result<()>;
 }
 
 pub struct ServiceRegister {

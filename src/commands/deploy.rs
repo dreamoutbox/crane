@@ -49,6 +49,7 @@ pub async fn run_deploy_command(
     for node in &pg_nodes {
         let node = node.clone();
         let all_deps = all_deps.clone();
+        let config = config.clone();
 
         let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
             println!(
@@ -62,7 +63,7 @@ pub async fn run_deploy_command(
             interactor.install_dependencies(all_deps.clone())?;
 
             // install haproxy
-            crate::haproxy_unit::haproxy::setup_haproxy(&*interactor)?;
+            interactor.setup_haproxy(&config)?;
 
             Ok(())
         });
@@ -81,7 +82,7 @@ pub async fn run_deploy_command(
         .map(|pg| pg.enabled)
         .unwrap_or(false);
     if pg_enabled {
-        postgres_setup_wrapper(&config, &pg_nodes).await?;
+        postgres_setup_wrapper(&config).await?;
     }
 
     let mut deploy_handles = vec![];
@@ -437,15 +438,6 @@ fn inner_deploy_single_app(
 
             log!("\t[{}] instance on port {} is healthy!", app.name, port);
         }
-
-        // 5. Write unified HAProxy config
-        crate::haproxy_unit::haproxy::setup_haproxy_unified(
-            &*node_interactor,
-            config,
-            node,
-            Some(&app.name),
-            Some(port_end),
-        )?;
 
         // 5b. Update /etc/hosts on the VPS so apps can resolve each other by service name
         let global_domain = config
