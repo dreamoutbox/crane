@@ -1,0 +1,123 @@
+# Docker compose for simulate vps setup
+
+name: crane-vps
+
+services:
+  vps1:
+    image: dreamoutbox/crane-dev-vps-rocky:latest
+    container_name: vps1
+    hostname: vps1
+    privileged: true # required for systemd
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      - ./keys/authorized_keys:/home/crane/.ssh/authorized_keys:ro
+    ports:
+      - "2221:22"
+      - "8081:80"
+      - "8441:443"
+      - "3001:3000"
+      - "80:80"
+      - "443:443"
+      - "5432:5432"
+      - "5001:5432"
+    networks:
+      crane-net:
+        ipv4_address: 10.0.0.11
+    tmpfs:
+      - /run
+      - /run/lock
+      - /tmp
+    stop_signal: SIGRTMIN+3 # clean systemd shutdown
+    mem_limit: 3G
+    cpu_count: 4
+    restart: always
+    environment:
+      - TZ=Asia/Bangkok
+
+  vps2:
+    image: dreamoutbox/crane-dev-vps-rocky:latest
+    container_name: vps2
+    hostname: vps2
+    privileged: true
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      - ./keys/authorized_keys:/home/crane/.ssh/authorized_keys:ro
+    ports:
+      - "2222:22"
+      - "8082:80"
+      - "8442:443"
+      - "3002:3000"
+      - "5002:5432"
+    networks:
+      crane-net:
+        ipv4_address: 10.0.0.12
+    tmpfs:
+      - /run
+      - /run/lock
+      - /tmp
+    stop_signal: SIGRTMIN+3
+    mem_limit: 3G
+    cpu_count: 4
+    restart: always
+    environment:
+      - TZ=Asia/Bangkok
+
+  vps3:
+    image: dreamoutbox/crane-dev-vps-rocky:latest
+    container_name: vps3
+    hostname: vps3
+    privileged: true
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      - ./keys/authorized_keys:/home/crane/.ssh/authorized_keys:ro
+    ports:
+      - "2223:22"
+      - "8083:80"
+      - "8443:443"
+      - "3003:3000"
+      - "5003:5432"
+    networks:
+      crane-net:
+        ipv4_address: 10.0.0.13
+    tmpfs:
+      - /run
+      - /run/lock
+      - /tmp
+    stop_signal: SIGRTMIN+3
+    mem_limit: 3G
+    cpu_count: 4
+    restart: always
+    environment:
+      - TZ=Asia/Bangkok
+
+  # simulate external s3 service
+  s3:
+    image: minio/minio
+    container_name: s3
+    hostname: s3
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      TZ: Asia/Bangkok
+      MINIO_ROOT_USER: miniominio
+      MINIO_ROOT_PASSWORD: miniominio
+    volumes:
+      - minio_data:/data
+    networks:
+      crane-net:
+        ipv4_address: 10.0.0.200
+    mem_limit: 1G
+    cpu_count: 1
+    restart: always
+
+networks:
+  crane-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.0.0/24
+
+volumes:
+  minio_data:
