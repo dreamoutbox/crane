@@ -134,7 +134,7 @@ impl ServerInteractor for MockServerInteractorUserNotExist {
     }
     fn firewall_allow_source(&self, _source: &str) -> anyhow::Result<()> {
         Ok(())
-     }
+    }
 
     fn mv(&self, _src: &str, _dest: &str) -> anyhow::Result<()> {
         Ok(())
@@ -150,7 +150,7 @@ impl ServerInteractor for MockServerInteractorUserNotExist {
 
     fn rm(&self, _path: &str) -> anyhow::Result<()> {
         Ok(())
-     }
+    }
 
     fn tar_extract(&self, _archive: &str, _dest: &str) -> anyhow::Result<()> {
         Ok(())
@@ -164,10 +164,14 @@ impl ServerInteractor for MockServerInteractorUserNotExist {
         }
     }
 
-    fn check_binary(&self, _binary: &str) -> anyhow::Result<bool> {
-        Ok(true)
+    fn which(&self, binary: &str) -> anyhow::Result<String> {
+        let out = self.cmd(&format!("which {}", binary))?;
+        if out.exit_code == 0 && !out.stdout.trim().is_empty() {
+            Ok(out.stdout.trim().to_string())
+        } else {
+            anyhow::bail!("{} not found", binary)
+        }
     }
-
     fn check_http_status(&self, _url: &str) -> anyhow::Result<u16> {
         Ok(200)
     }
@@ -176,7 +180,12 @@ impl ServerInteractor for MockServerInteractorUserNotExist {
         Ok(())
     }
 
-    fn generate_self_signed_cert(&self, _key_path: &str, _crt_path: &str, _cert_path: &str) -> anyhow::Result<()> {
+    fn generate_self_signed_cert(
+        &self,
+        _key_path: &str,
+        _crt_path: &str,
+        _cert_path: &str,
+    ) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -209,5 +218,27 @@ impl ServerInteractor for MockServerInteractorUserNotExist {
             stderr: "".to_string(),
             exit_code: 0,
         })
+    }
+
+    fn setup_patroni(
+        &self,
+        _node: &crane::config::NodeConfig,
+        _pg_version: &String,
+        _replica_pass: &String,
+        _pg_nodes: &Vec<crane::config::NodeConfig>,
+    ) -> anyhow::Result<bool> {
+        todo!()
+    }
+
+    fn setup_etcd(
+        &self,
+        node: &crane::config::NodeConfig,
+        pg_nodes: &[crane::config::NodeConfig],
+    ) -> anyhow::Result<()> {
+        todo!()
+    }
+
+    fn start_etcd(&self, node: &crane::config::NodeConfig) -> anyhow::Result<()> {
+        todo!()
     }
 }

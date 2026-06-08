@@ -83,11 +83,11 @@ pub fn postgres_backup(
             }
 
             // Check parent's timeline vs current database's timeline
-            let parent_tli_out = interactor.cmd(&format!(
+            let parent_timeline_id = interactor.cmd(&format!(
                 "sudo -u postgres python3 -c \"import json; m=json.load(open('{}')); print(next(iter(m.get('WAL-Ranges', [])), {{}}).get('Timeline', 0))\"",
                 parent_manifest
             ))?;
-            let parent_timeline_id = parent_tli_out.stdout.trim();
+            let parent_timeline_id = parent_timeline_id.stdout.trim();
 
             let current_timeline_id = get_pg_current_timeline_id(interactor)?;
 

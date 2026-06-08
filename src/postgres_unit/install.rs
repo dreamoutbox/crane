@@ -1,8 +1,8 @@
-use crate::server_interactor::server_interactor_trait::ServerInteractor;
+// use crate::server_interactor::server_interactor_trait::ServerInteractor;
 
-pub fn install_postgres(interactor: &dyn ServerInteractor, version: &str) -> anyhow::Result<()> {
-    interactor.install_postgres(version)
-}
+// pub fn install_postgres(interactor: &dyn ServerInteractor, version: &str) -> anyhow::Result<()> {
+
+// }
 
 // Init pgdata if not exists
 // let main_dir = format!("/var/lib/postgresql/{}/main", version);

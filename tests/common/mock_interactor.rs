@@ -188,17 +188,23 @@ impl ServerInteractor for MockInteractor {
     }
 
     fn mv(&self, src: &str, dest: &str) -> anyhow::Result<()> {
-        self.commands.borrow_mut().push(format!("sudo mv '{}' '{}'", src, dest));
+        self.commands
+            .borrow_mut()
+            .push(format!("sudo mv '{}' '{}'", src, dest));
         Ok(())
     }
 
     fn cp(&self, src: &str, dest: &str) -> anyhow::Result<()> {
-        self.commands.borrow_mut().push(format!("sudo cp -r '{}' '{}'", src, dest));
+        self.commands
+            .borrow_mut()
+            .push(format!("sudo cp -r '{}' '{}'", src, dest));
         Ok(())
     }
 
     fn exists(&self, path: &str) -> anyhow::Result<bool> {
-        self.commands.borrow_mut().push(format!("sudo test -e '{}'", path));
+        self.commands
+            .borrow_mut()
+            .push(format!("sudo test -e '{}'", path));
         if path.contains("registry.toml") {
             Ok(true)
         } else {
@@ -207,12 +213,16 @@ impl ServerInteractor for MockInteractor {
     }
 
     fn rm(&self, path: &str) -> anyhow::Result<()> {
-        self.commands.borrow_mut().push(format!("sudo rm -rf '{}'", path));
+        self.commands
+            .borrow_mut()
+            .push(format!("sudo rm -rf '{}'", path));
         Ok(())
     }
 
     fn tar_extract(&self, archive: &str, dest: &str) -> anyhow::Result<()> {
-        self.commands.borrow_mut().push(format!("sudo tar -xf '{}' -C '{}'", archive, dest));
+        self.commands
+            .borrow_mut()
+            .push(format!("sudo tar -xf '{}' -C '{}'", archive, dest));
         Ok(())
     }
 
@@ -221,9 +231,13 @@ impl ServerInteractor for MockInteractor {
         Ok(true)
     }
 
-    fn check_binary(&self, binary: &str) -> anyhow::Result<bool> {
-        let _ = self.cmd(&format!("which {}", binary))?;
-        Ok(true)
+    fn which(&self, binary: &str) -> anyhow::Result<String> {
+        let out = self.cmd(&format!("which {}", binary))?;
+        if out.exit_code == 0 && !out.stdout.trim().is_empty() {
+            Ok(out.stdout.trim().to_string())
+        } else {
+            anyhow::bail!("{} not found", binary)
+        }
     }
 
     fn check_http_status(&self, url: &str) -> anyhow::Result<u16> {
@@ -240,8 +254,16 @@ impl ServerInteractor for MockInteractor {
         Ok(())
     }
 
-    fn generate_self_signed_cert(&self, key_path: &str, crt_path: &str, cert_path: &str) -> anyhow::Result<()> {
-        let _ = self.cmd(&format!("generate_self_signed_cert {} {} {}", key_path, crt_path, cert_path))?;
+    fn generate_self_signed_cert(
+        &self,
+        key_path: &str,
+        crt_path: &str,
+        cert_path: &str,
+    ) -> anyhow::Result<()> {
+        let _ = self.cmd(&format!(
+            "generate_self_signed_cert {} {} {}",
+            key_path, crt_path, cert_path
+        ))?;
         Ok(())
     }
 
@@ -251,7 +273,10 @@ impl ServerInteractor for MockInteractor {
         service_status: &str,
         timeout: u64,
     ) -> anyhow::Result<bool> {
-        let _ = self.cmd(&format!("wait_for_service_status {} {} {}", service_name, service_status, timeout))?;
+        let _ = self.cmd(&format!(
+            "wait_for_service_status {} {} {}",
+            service_name, service_status, timeout
+        ))?;
         Ok(true)
     }
 
@@ -285,5 +310,27 @@ impl ServerInteractor for MockInteractor {
             cmd.push_str(&format!(" -f '{}'", f));
         }
         self.cmd(&cmd)
+    }
+
+    fn setup_patroni(
+        &self,
+        _node: &crane::config::NodeConfig,
+        _pg_version: &String,
+        _replica_pass: &String,
+        _pg_nodes: &Vec<crane::config::NodeConfig>,
+    ) -> anyhow::Result<bool> {
+        todo!()
+    }
+
+    fn setup_etcd(
+        &self,
+        node: &crane::config::NodeConfig,
+        pg_nodes: &[crane::config::NodeConfig],
+    ) -> anyhow::Result<()> {
+        todo!()
+    }
+
+    fn start_etcd(&self, node: &crane::config::NodeConfig) -> anyhow::Result<()> {
+        todo!()
     }
 }

@@ -1,4 +1,6 @@
 use crate::{
+    config::NodeConfig,
+    patroni::build_patroni_config,
     server_interactor::server_interactor_trait::ServerInteractor,
     ssh::{CmdOutput, SSHSession},
 };
@@ -505,9 +507,12 @@ impl ServerInteractor for DebianInteractor {
         Ok(user_check.exit_code == 0)
     }
 
-    fn check_binary(&self, binary: &str) -> anyhow::Result<bool> {
+    fn which(&self, binary: &str) -> anyhow::Result<String> {
         let check = self.cmd(&format!("which {}", binary))?;
-        Ok(check.exit_code == 0 && !check.stdout.trim().is_empty())
+        if check.exit_code != 0 {
+            anyhow::bail!("{} not found", binary);
+        }
+        Ok(check.stdout.trim().to_string())
     }
 
     fn check_http_status(&self, url: &str) -> anyhow::Result<u16> {
@@ -635,5 +640,146 @@ impl ServerInteractor for DebianInteractor {
             psql_cmd.push_str(&format!(" -f '{}'", f));
         }
         self.cmd(&psql_cmd)
+    }
+
+    fn setup_patroni(
+        &self,
+        node: &crate::config::NodeConfig,
+        pg_version: &String,
+        replica_pass: &String,
+        pg_nodes: &Vec<crate::config::NodeConfig>,
+    ) -> anyhow::Result<bool> {
+        let patroni_installed = self.which("patroni").is_ok();
+
+        if !patroni_installed {
+            println!("\tInstalling Patroni...");
+            self.install_dependencies(vec!["patroni".to_string()])?;
+        } else {
+            println!("\tPatroni is already installed.");
+        }
+
+        let patroni_yml = build_patroni_config(node, pg_version, replica_pass, pg_nodes)?;
+        std::fs::write(format!("patroni_{}.yaml", node.name), patroni_yml.clone())?;
+
+        // Compare with existing config; only write (and signal a change) if different
+        let existing_config = self
+            .read_file("/etc/patroni/config.yml")
+            .unwrap_or_default();
+        let config_changed = existing_config.trim() != patroni_yml.trim();
+
+        self.mkdir("/etc/patroni")?;
+        self.create_file("/etc/patroni/config.yml", &patroni_yml)?;
+        self.chown("/etc/patroni", "postgres", "postgres")?;
+        self.chmod("/etc/patroni/config.yml", "600")?;
+        println!("\tCreate patroni config at /etc/patroni/config.yml");
+
+        if !patroni_installed {
+            self.service_daemon_reload()?;
+            self.enable_service("patroni")?;
+        }
+
+        Ok(config_changed)
+    }
+
+    fn setup_etcd(&self, node: &NodeConfig, pg_nodes: &[NodeConfig]) -> anyhow::Result<()> {
+        println!("\tSetup etcd cluster on node {}...", node.name);
+
+        let etcd_installed = self.which("etcd").is_ok();
+        if !etcd_installed {
+            println!("\tInstalling etcd-server and etcd-client...");
+            self.install_dependencies(vec!["etcd-server".to_string(), "etcd-client".to_string()])?;
+        } else {
+            println!("\tetcd is already installed.");
+        }
+
+        let etcd_configured = self.exists("/etc/default/etcd").unwrap_or(false);
+        if !etcd_configured {
+            // Stop etcd cleanly and remove data directory; wait to ensure it is fully stopped
+            let _ = self.stop_service("etcd");
+            let _ = self.wait_for_service_status("etcd", "inactive", 30);
+            let _ = self.rm("/var/lib/etcd/");
+
+            // Recreate with correct ownership so the etcd service user can write to it
+            self.mkdir("/var/lib/etcd")?;
+            self.chown("/var/lib/etcd", "etcd", "etcd")?;
+            self.chmod("/var/lib/etcd", "700")?;
+        }
+
+        let initial_cluster = pg_nodes
+            .iter()
+            .map(|n| format!("{}=http://{}:2380", n.name, n.internal_ip))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        // Use "existing" if etcd member data already exists to avoid re-triggering
+        // Patroni DCS re-bootstrap (and pg_basebackup) on every redeploy.
+        let has_etcd_data = self
+            .exists("/var/lib/etcd/default.etcd/member")
+            .unwrap_or(false);
+        let cluster_state = if has_etcd_data { "existing" } else { "new" };
+
+        let etcd_default = format!(
+            r#"
+# Member settings
+ETCD_NAME="{etcd_name}"
+ETCD_DATA_DIR="/var/lib/etcd/default.etcd"
+ETCD_LISTEN_PEER_URLS="http://0.0.0.0:2380"
+ETCD_LISTEN_CLIENT_URLS="http://0.0.0.0:2379"
+
+# Clustering settings
+ETCD_INITIAL_ADVERTISE_PEER_URLS="http://{internal_ip}:2380"
+ETCD_INITIAL_CLUSTER="{initial_cluster}"
+ETCD_INITIAL_CLUSTER_STATE="{cluster_state}"
+ETCD_INITIAL_CLUSTER_TOKEN="etcd-postgres-token"
+ETCD_ADVERTISE_CLIENT_URLS="http://{internal_ip}:2379"
+"#,
+            etcd_name = node.name,
+            internal_ip = node.internal_ip,
+            initial_cluster = initial_cluster,
+            cluster_state = cluster_state,
+        );
+
+        // println!("\nETCD CONFIG\n{}\n", &etcd_default);
+
+        let etcd_default_path = "/etc/default/etcd";
+        self.create_file(etcd_default_path, &etcd_default)?;
+        self.chown(etcd_default_path, "root", "root")?;
+        self.chmod(etcd_default_path, "644")?;
+
+        if !etcd_installed {
+            self.service_daemon_reload()?;
+            self.enable_service("etcd")?;
+        }
+
+        Ok(())
+    }
+
+    /// Start etcd non-blocking. Call after all nodes are configured so the cluster forms together.
+    fn start_etcd(&self, node: &NodeConfig) -> anyhow::Result<()> {
+        // Check the node's internal IP (not localhost) so we only skip restart when etcd is
+        // actually bound to the correct interface.
+        // Checking localhost would pass even if etcd is running
+        // with an old config that only binds 127.0.0.1.
+        let check_cmd = format!(
+            "env ETCDCTL_API=3 etcdctl --endpoints=http://{}:2379 endpoint health",
+            node.internal_ip
+        );
+        let is_healthy = self
+            .cmd(&check_cmd)
+            .map(|o| o.exit_code == 0)
+            .unwrap_or(false);
+
+        if is_healthy {
+            println!(
+                "\tetcd already healthy on node {}, skipping restart",
+                node.name
+            );
+            return Ok(());
+        }
+
+        println!("\tStarting etcd service on node {} ...", node.name);
+        self.restart_service("etcd --no-block")?;
+
+        Ok(())
     }
 }

@@ -4,8 +4,10 @@ use crate::{
 };
 
 pub fn install_haproxy(interactor: &dyn ServerInteractor) -> anyhow::Result<()> {
+    let haproxy_installed = interactor.which("haproxy").is_ok();
+
     // Check if HAProxy binary is already installed
-    if !interactor.check_binary("haproxy")? {
+    if !haproxy_installed {
         println!("\tInstalling HAProxy on remote server...");
         interactor.install_dependencies(vec!["haproxy".to_string()])?;
     }

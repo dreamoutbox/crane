@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::config;
 use crate::ssh::CmdOutput;
 
 pub trait ServerInteractor {
@@ -73,7 +74,7 @@ pub trait ServerInteractor {
 
     // UTILITIES & HELPER METHODS
     fn user_exists(&self, username: &str) -> anyhow::Result<bool>;
-    fn check_binary(&self, binary: &str) -> anyhow::Result<bool>;
+    fn which(&self, binary: &str) -> anyhow::Result<String>;
     fn check_http_status(&self, url: &str) -> anyhow::Result<u16>;
     fn update_etc_hosts(&self, hostname: &str, ip: &str) -> anyhow::Result<()>;
     fn generate_self_signed_cert(
@@ -93,7 +94,23 @@ pub trait ServerInteractor {
         tuples_only: bool,
     ) -> anyhow::Result<CmdOutput>;
 
+    // postgres & patroni
     fn install_postgres(&self, version: &str) -> anyhow::Result<()>;
+    fn setup_patroni(
+        &self,
+        node: &config::NodeConfig,
+        pg_version: &String,
+        replica_pass: &String,
+        pg_nodes: &Vec<config::NodeConfig>,
+    ) -> anyhow::Result<bool>;
+
+    //etcd
+    fn setup_etcd(
+        &self,
+        node: &config::NodeConfig,
+        pg_nodes: &[config::NodeConfig],
+    ) -> anyhow::Result<()>;
+    fn start_etcd(&self, node: &config::NodeConfig) -> anyhow::Result<()>;
 }
 
 pub struct ServiceRegister {

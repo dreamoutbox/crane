@@ -1,3 +1,3 @@
 mod setup;
 
-pub use setup::install_patroni;
+pub use setup::build_patroni_config;

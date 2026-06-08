@@ -3,13 +3,11 @@ use crate::{
         self, get_pg_replica_pass, get_postgres_backup_schedule_config,
         get_postgres_dbs_and_users_config,
     },
-    etcd_unit::{setup_etcd, start_etcd, wait_for_etcd_cluster},
+    etcd_unit::wait_for_etcd_cluster,
     haproxy_unit::haproxy::setup_haproxy_on_each_nodes_wrapper,
     helper::config::config_get_nodes,
-    patroni::install_patroni,
     postgres_unit::{
         helper::{backup_pg_dir, get_pg_version, pg_cluster_wait_all_nodes_ready, pg_get_primary},
-        install::install_postgres,
         setup_postgres_primary::setup_postgres_primary,
     },
     server_interactor::{get_server_interactor, server_interactor_trait::ServerInteractor},
@@ -88,7 +86,7 @@ pub async fn postgres_setup_wrapper(
             break;
         }
 
-        std::thread::sleep(std::time::Duration::from_millis(500));
+        std::thread::sleep(std::time::Duration::from_millis(1000));
     }
 
     let primary = primary_node
@@ -152,10 +150,10 @@ fn inner_setup_postgres_node(
     let interactor = get_server_interactor(&node.name)?;
 
     // Ensure postgres installed first
-    install_postgres(&*interactor, &pg_version)?;
+    interactor.install_postgres(&pg_version)?;
 
     // Install & configure etcd (configure only, do NOT start yet)
-    setup_etcd(&*interactor, &node, &pg_nodes)?;
+    interactor.setup_etcd(&node, &pg_nodes)?;
 
     // Stop & disable standard postgresql systemd service
     println!(
@@ -165,7 +163,9 @@ fn inner_setup_postgres_node(
     let _stop_res = interactor.stop_service("postgresql");
     let _disable_pg_res = interactor.disable_service("postgresql");
 
-    let patroni_configured = interactor.exists("/etc/patroni/config.yml").unwrap_or(false);
+    let patroni_configured = interactor
+        .exists("/etc/patroni/config.yml")
+        .unwrap_or(false);
 
     if !patroni_configured {
         let _stop_patroni_res = interactor.stop_service("patroni");
@@ -181,13 +181,13 @@ fn inner_setup_postgres_node(
     interactor.chmod("/var/lib/postgresql/wal_archive", "700")?;
 
     let patroni_config_changed =
-        install_patroni(&pg_version, &replica_pass, &pg_nodes, &node, &*interactor)?;
+        interactor.setup_patroni(&node, &pg_version, &replica_pass, &pg_nodes)?;
 
     // Wait for all nodes to finish configuration/installation
     barrier_installed.wait();
 
     // --- Phase 2: Start etcd ---
-    start_etcd(&node, &*interactor)?;
+    interactor.start_etcd(&node)?;
 
     // Wait for all nodes to start etcd
     barrier_etcd_started.wait();
