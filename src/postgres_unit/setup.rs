@@ -3,7 +3,7 @@ use crate::{
         self, get_pg_replica_pass, get_postgres_backup_schedule_config,
         get_postgres_dbs_and_users_config,
     },
-    etcd_unit::wait_for_etcd_cluster,
+    etcd_unit::etcd_wait_for_cluster,
     haproxy_unit::haproxy::setup_haproxy_on_each_nodes_wrapper,
     helper::config::config_get_nodes,
     postgres_unit::{
@@ -195,7 +195,7 @@ fn inner_setup_postgres_node(
     // --- Wait for quorum (only first node runs it) ---
     if is_first_node {
         println!("\tWaiting for etcd ready on all nodes...");
-        wait_for_etcd_cluster(&*interactor, &pg_nodes, 60)?;
+        etcd_wait_for_cluster(&*interactor, &pg_nodes, 60)?;
         println!("\tEtcd cluster ready.");
     }
 

@@ -135,6 +135,10 @@ impl ServerInteractor for MockServerInteractorUserNotExist {
     fn firewall_allow_source(&self, _source: &str) -> anyhow::Result<()> {
         Ok(())
     }
+    fn setup_firewall(&self, _config: &crane::config::Config) -> anyhow::Result<()> {
+        let _ = self.cmd("setup_firewall")?;
+        Ok(())
+    }
 
     fn mv(&self, _src: &str, _dest: &str) -> anyhow::Result<()> {
         Ok(())

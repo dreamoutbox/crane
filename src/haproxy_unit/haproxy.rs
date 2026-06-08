@@ -3,7 +3,7 @@ use crate::{
     server_interactor::{get_server_interactor, server_interactor_trait::ServerInteractor},
 };
 
-pub fn install_haproxy(interactor: &dyn ServerInteractor) -> anyhow::Result<()> {
+pub fn setup_haproxy(interactor: &dyn ServerInteractor) -> anyhow::Result<()> {
     let haproxy_installed = interactor.which("haproxy").is_ok();
 
     // Check if HAProxy binary is already installed

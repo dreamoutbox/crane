@@ -1,4 +1,4 @@
-use crane::haproxy_unit::haproxy::{install_haproxy, setup_haproxy_unified};
+use crane::haproxy_unit::haproxy::{setup_haproxy, setup_haproxy_unified};
 
 #[path = "../common/mock_interactor.rs"]
 pub mod mock_interactor;
@@ -8,7 +8,7 @@ use mock_interactor::MockInteractor;
 #[test]
 fn test_haproxy_install() {
     let interactor = MockInteractor::new(vec![]);
-    let result = install_haproxy(&interactor);
+    let result = setup_haproxy(&interactor);
     assert!(result.is_ok());
 }
 

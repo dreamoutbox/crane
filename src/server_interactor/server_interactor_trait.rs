@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
-use crate::config;
-use crate::ssh::CmdOutput;
+use crate::{
+    config::{Config, NodeConfig},
+    ssh::CmdOutput,
+};
 
 pub trait ServerInteractor {
     // BASIC
@@ -71,6 +73,7 @@ pub trait ServerInteractor {
         source: Option<&str>,
     ) -> anyhow::Result<()>;
     fn firewall_allow_source(&self, source: &str) -> anyhow::Result<()>;
+    fn setup_firewall(&self, config: &Config) -> anyhow::Result<()>;
 
     // UTILITIES & HELPER METHODS
     fn user_exists(&self, username: &str) -> anyhow::Result<bool>;
@@ -98,19 +101,15 @@ pub trait ServerInteractor {
     fn install_postgres(&self, version: &str) -> anyhow::Result<()>;
     fn setup_patroni(
         &self,
-        node: &config::NodeConfig,
+        node: &NodeConfig,
         pg_version: &String,
         replica_pass: &String,
-        pg_nodes: &Vec<config::NodeConfig>,
+        pg_nodes: &Vec<NodeConfig>,
     ) -> anyhow::Result<bool>;
 
     //etcd
-    fn setup_etcd(
-        &self,
-        node: &config::NodeConfig,
-        pg_nodes: &[config::NodeConfig],
-    ) -> anyhow::Result<()>;
-    fn start_etcd(&self, node: &config::NodeConfig) -> anyhow::Result<()>;
+    fn setup_etcd(&self, node: &NodeConfig, pg_nodes: &[NodeConfig]) -> anyhow::Result<()>;
+    fn start_etcd(&self, node: &NodeConfig) -> anyhow::Result<()>;
 }
 
 pub struct ServiceRegister {

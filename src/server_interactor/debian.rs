@@ -1,5 +1,5 @@
 use crate::{
-    config::NodeConfig,
+    config::{Config, NodeConfig},
     patroni::build_patroni_config,
     server_interactor::server_interactor_trait::ServerInteractor,
     ssh::{CmdOutput, SSHSession},
@@ -785,6 +785,53 @@ ETCD_ADVERTISE_CLIENT_URLS="http://{internal_ip}:2379"
 
         println!("\tStarting etcd service on node {} ...", node.name);
         self.restart_service("etcd --no-block")?;
+
+        Ok(())
+    }
+
+    fn setup_firewall(&self, config: &Config) -> anyhow::Result<()> {
+        let mut allow_sources = String::new();
+        for node in &config.nodes {
+            allow_sources.push_str(&format!("ufw allow from {}\n", node.internal_ip));
+        }
+
+        let script_content = format!(
+            r#"#!/bin/bash
+set -e
+
+# Ensure ufw is installed
+if ! command -v ufw >/dev/null 2>&1; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update && apt-get install -y ufw
+fi
+
+# 1. Reset firewall rules to defaults
+ufw --force reset
+
+# 2. Allow SSH before enabling to avoid lockouts
+ufw allow 22/tcp
+
+# 3. Enable firewall
+ufw default deny incoming
+ufw default allow outgoing
+ufw --force enable
+
+# 4. Allow public HTTP/HTTPS traffic
+ufw allow 80/tcp
+ufw allow 443/tcp
+
+# 5. Allow all incoming traffic from internal IPs of all nodes in the cluster
+{}
+# 6. Reload firewall to apply rules
+ufw reload
+"#,
+            allow_sources
+        );
+
+        self.mkdir("/tmp/crane")?;
+        self.create_file("/tmp/crane/setup_firewall.sh", &script_content)?;
+        self.chmod("/tmp/crane/setup_firewall.sh", "+x")?;
+        self.run_stdout("sudo /tmp/crane/setup_firewall.sh")?;
 
         Ok(())
     }

@@ -62,7 +62,7 @@ pub async fn run_deploy_command(
             interactor.install_dependencies(all_deps.clone())?;
 
             // install haproxy
-            crate::haproxy_unit::haproxy::install_haproxy(&*interactor)?;
+            crate::haproxy_unit::haproxy::setup_haproxy(&*interactor)?;
 
             Ok(())
         });
@@ -147,7 +147,7 @@ pub async fn run_deploy_command(
     for node in &config.nodes {
         println!("\tSetting up firewall on {}...", node.name);
         let interactor = get_server_interactor(&node.name)?;
-        crate::firewall::setup::setup_firewall(&*interactor, config)?;
+        interactor.setup_firewall(config)?;
     }
 
     let deploy_elapse = now.elapsed();

@@ -2,7 +2,7 @@ use crate::{config, server_interactor::server_interactor_trait::ServerInteractor
 
 /// Wait for etcd quorum to form by polling all cluster endpoints (internal IPs).
 /// This ensures all peers are reachable before Patroni starts, not just localhost.
-pub fn wait_for_etcd_cluster(
+pub fn etcd_wait_for_cluster(
     interactor: &dyn ServerInteractor,
     pg_nodes: &[config::NodeConfig],
     timeout_secs: u64,
