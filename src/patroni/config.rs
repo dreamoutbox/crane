@@ -3,6 +3,10 @@ pub fn build_patroni_config(
     pg_version: &String,
     replica_pass: &String,
     pg_nodes: &Vec<crate::config::NodeConfig>,
+    pg_data_dir: &str,
+    pg_bin_dir: &str,
+    pgpass_path: &str,
+    pg_wal_archive: &str,
 ) -> Result<String, anyhow::Error> {
     let mut etcd_hosts_yaml = String::new();
     for n in pg_nodes {
@@ -49,7 +53,7 @@ bootstrap:
         log_min_duration_statement: -1
         log_line_prefix: '%t [%p]: user=%u db=%d app=%a client=%h '
         archive_mode: "on"
-        archive_command: "cp %p /var/lib/postgresql/wal_archive/%f"
+        archive_command: "cp %p {pg_wal_archive}/%f"
         {summarize_wal}
   initdb:
     - encoding: UTF8
@@ -66,9 +70,9 @@ bootstrap:
 postgresql:
   listen: '*:5432'
   connect_address: {internal_ip}:5432
-  data_dir: /var/lib/postgresql/{pg_version}/main
-  bin_dir: /usr/lib/postgresql/{pg_version}/bin
-  pgpass: /var/lib/postgresql/.pgpass
+  data_dir: {pg_data_dir}
+  bin_dir: {pg_bin_dir}
+  pgpass: {pgpass_path}
   authentication:
     replication:
       username: replicator
@@ -85,7 +89,10 @@ postgresql:
         etcd_hosts = etcd_hosts_yaml,
         internal_ip = node.internal_ip,
         summarize_wal = summarize_wal_line,
-        pg_version = *pg_version,
+        pg_data_dir = pg_data_dir,
+        pg_bin_dir = pg_bin_dir,
+        pgpass_path = pgpass_path,
+        pg_wal_archive = pg_wal_archive,
         replica_pass = *replica_pass
     );
 

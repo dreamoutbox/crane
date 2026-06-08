@@ -129,7 +129,7 @@ impl ServerInteractor for DebianInteractor {
             pg_dir: "/usr/lib/postgresql".to_string(),
             pg_data_dir: "/var/lib/postgresql".to_string(),
             pg_bin_dir: "/usr/lib/postgresql".to_string(),
-            pg_pass_path: "/etc/postgresql/replica.pass".to_string(),
+            pg_pass_path: "/var/lib/postgresql/.pgpass".to_string(),
             pg_backup_dir: "/var/lib/postgresql/backups".to_string(),
             pg_wal_archive: "/var/lib/postgresql/wal_archive".to_string(),
             // PATRONI
@@ -690,7 +690,19 @@ impl ServerInteractor for DebianInteractor {
             println!("\tPatroni is already installed.");
         }
 
-        let patroni_yml = build_patroni_config(node, pg_version, replica_pass, pg_nodes)?;
+        let paths = self.server_paths();
+        let pg_data_dir = format!("{}/{}/main", paths.pg_data_dir, pg_version);
+        let pg_bin_dir = format!("{}/{}/bin", paths.pg_bin_dir, pg_version);
+        let patroni_yml = build_patroni_config(
+            node,
+            pg_version,
+            replica_pass,
+            pg_nodes,
+            &pg_data_dir,
+            &pg_bin_dir,
+            &paths.pg_pass_path,
+            &paths.pg_wal_archive,
+        )?;
         std::fs::write(format!("patroni_{}.yaml", node.name), patroni_yml.clone())?;
 
         let patroni_path = self.server_paths().patroni_config_path;

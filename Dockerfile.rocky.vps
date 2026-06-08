@@ -103,11 +103,6 @@ RUN systemctl enable sshd
 # Create crane-managed directories
 RUN mkdir -p /opt /etc/crane
 
-# Create symlinks for Debian PostgreSQL path compatibility
-RUN mkdir -p /usr/lib/postgresql /var/lib && \
-    ln -sf /usr/pgsql-17 /usr/lib/postgresql/17 && \
-    ln -sf /var/lib/pgsql /var/lib/postgresql
-
 VOLUME ["/sys/fs/cgroup"]
 
 EXPOSE 22

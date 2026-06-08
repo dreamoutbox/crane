@@ -5,6 +5,17 @@ from datetime import datetime
 import boto3
 from botocore.client import Config
 
+def detect_distro():
+    """Detect if running on RHEL/Rocky/CentOS or Debian/Ubuntu."""
+    try:
+        with open('/etc/os-release') as f:
+            content = f.read().lower()
+        if any(x in content for x in ('rhel', 'rocky', 'centos', 'fedora', 'almalinux')):
+            return 'rhel'
+    except Exception:
+        pass
+    return 'debian'
+
 def parse_toml(content):
     backups = []
     current = {}
@@ -117,6 +128,14 @@ def main():
     config = load_config('/etc/crane/postgres-backup-config.toml')
     assert_primary()
 
+    distro = detect_distro()
+    if distro == 'rhel':
+        pg_home = '/var/lib/pgsql'
+        pg_bin_tpl = '/usr/pgsql-{version}/bin'
+    else:
+        pg_home = '/var/lib/postgresql'
+        pg_bin_tpl = '/usr/lib/postgresql/{version}/bin'
+
     s3_opts = {
         'region_name': config.get('region', 'us-east-1'),
         'aws_access_key_id': config['access_key'],
@@ -134,13 +153,15 @@ def main():
     date_str = now.strftime('%Y-%m-%d')
     time_str = now.strftime('%H:%M:%S')
 
-    local_path = f"/var/lib/postgresql/backups/{timestamp_ms}"
     pg_version = config['pg_version']
     replica_pass = config['replica_pass']
+    pg_bin_dir = pg_bin_tpl.format(version=pg_version)
+    backups_dir = f"{pg_home}/backups"
+    local_path = f"{backups_dir}/{timestamp_ms}"
 
-    os.makedirs("/var/lib/postgresql/backups", exist_ok=True)
-    os.system("chown postgres:postgres /var/lib/postgresql/backups")
-    os.system("chmod 755 /var/lib/postgresql/backups")
+    os.makedirs(backups_dir, exist_ok=True)
+    os.system(f"chown postgres:postgres {backups_dir}")
+    os.system(f"chmod 755 {backups_dir}")
     os.system(f"sudo -u postgres mkdir -p {local_path}")
 
     os.system("sudo -u postgres psql -c \"GRANT pg_read_server_files TO replicator;\"")
@@ -160,10 +181,10 @@ def main():
     if is_incr:
         if last_backup:
             base_id = last_backup['id']
-            parent_manifest = f"/var/lib/postgresql/backups/{base_id}/backup_manifest"
+            parent_manifest = f"{backups_dir}/{base_id}/backup_manifest"
             if not os.path.exists(parent_manifest):
-                os.system(f"sudo -u postgres mkdir -p /var/lib/postgresql/backups/{base_id}")
-                os.system(f"sudo chmod 755 /var/lib/postgresql/backups/{base_id}")
+                os.system(f"sudo -u postgres mkdir -p {backups_dir}/{base_id}")
+                os.system(f"sudo chmod 755 {backups_dir}/{base_id}")
                 s3_key = f"backups/{base_id}/backup_manifest"
                 try:
                     manifest_resp = s3.get_object(Bucket=bucket, Key=s3_key)
@@ -179,10 +200,10 @@ def main():
             print("Error: Cannot perform incremental backup: no previous backup found.")
             sys.exit(1)
 
-    pg_basebackup_path = f"/usr/lib/postgresql/{pg_version}/bin/pg_basebackup"
+    pg_basebackup_path = f"{pg_bin_dir}/pg_basebackup"
     pgbasebackup_cmd = f"sudo -u postgres PGPASSWORD='{replica_pass}' {pg_basebackup_path} -h localhost -U replicator -D {local_path} -F t -X s -c fast --manifest-checksums=sha256"
     if is_incr and base_id:
-        pgbasebackup_cmd += f" --incremental=/var/lib/postgresql/backups/{base_id}/backup_manifest"
+        pgbasebackup_cmd += f" --incremental={backups_dir}/{base_id}/backup_manifest"
 
     if is_incr and int(pg_version) >= 17:
         # Force a WAL switch to ensure the active WAL segment is closed and summarized by the walsummarizer.
@@ -197,8 +218,8 @@ def main():
         print("Error: pg_basebackup failed")
         sys.exit(1)
 
-    pg_verifybackup_path = f"/usr/lib/postgresql/{pg_version}/bin/pg_verifybackup"
-    verify_dir = f"/var/lib/postgresql/backups/{timestamp_ms}_verify"
+    pg_verifybackup_path = f"{pg_bin_dir}/pg_verifybackup"
+    verify_dir = f"{backups_dir}/{timestamp_ms}_verify"
     os.system(f"sudo -u postgres mkdir -p {verify_dir}")
     
     ret_tar = os.system(f"sudo -u postgres tar -xf {local_path}/base.tar -C {verify_dir}")
@@ -275,7 +296,7 @@ def main():
             Body=registry_toml.encode('utf-8')
         )
 
-        local_reg_path = "/var/lib/postgresql/backups/registry.toml"
+        local_reg_path = f"{backups_dir}/registry.toml"
         with open(local_reg_path, 'w') as f_reg:
             f_reg.write(registry_toml)
         os.system(f"chown postgres:postgres {local_reg_path}")

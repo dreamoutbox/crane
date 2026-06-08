@@ -130,11 +130,11 @@ impl ServerInteractor for RHELInteractor {
             app_config_dir: "/etc/crane".to_string(),
             // PG
             pg_dir: "/usr/pgsql".to_string(),
-            pg_data_dir: "/var/lib/postgresql".to_string(),
+            pg_data_dir: "/var/lib/pgsql".to_string(),
             pg_bin_dir: "/usr/pgsql".to_string(),
-            pg_pass_path: "/etc/postgresql/replica.pass".to_string(),
-            pg_backup_dir: "/var/lib/postgresql/backups".to_string(),
-            pg_wal_archive: "/var/lib/postgresql/wal_archive".to_string(),
+            pg_pass_path: "/var/lib/pgsql/.pgpass".to_string(),
+            pg_backup_dir: "/var/lib/pgsql/backups".to_string(),
+            pg_wal_archive: "/var/lib/pgsql/wal_archive".to_string(),
             // PATRONI
             patroni_config_path: "/etc/patroni/patroni.yml".to_string(),
             // HAPROXY
@@ -629,15 +629,11 @@ impl ServerInteractor for RHELInteractor {
             ))?;
         }
 
-        // Create compatibility symlinks for /var/lib/postgresql so the rest of crane works
-        if !self.exists("/var/lib/postgresql").unwrap_or(false) {
-            self.mkdir("/var/lib")?;
-            self.run_stdout("sudo ln -sf /var/lib/pgsql /var/lib/postgresql")?;
-        }
+        // Ensure postgres home directory is accessible
         self.run_stdout("sudo chmod 755 /var/lib/pgsql")?;
 
         // Check if DB needs to be initialized (initdb)
-        let pg_data_main = format!("/var/lib/postgresql/{}/main", version);
+        let pg_data_main = format!("/var/lib/pgsql/{}/data", version);
         let pg_version_file = format!("{}/PG_VERSION", pg_data_main);
         if !self.exists(&pg_version_file).unwrap_or(false) {
             println!("\tInitializing PostgreSQL database cluster...");
@@ -648,33 +644,17 @@ impl ServerInteractor for RHELInteractor {
                 self.pg_bin_path(version, "initdb"),
                 pg_data_main
             ))?;
-
-            // Create compatibility symlinks for config directory so startup with config_file works
-            let compat_conf_dir = format!("/etc/postgresql/{}/main", version);
-            self.mkdir(&compat_conf_dir)?;
-            self.run_stdout(&format!(
-                "sudo ln -sf {}/postgresql.conf {}/postgresql.conf",
-                pg_data_main, compat_conf_dir
-            ))?;
-            self.run_stdout(&format!(
-                "sudo ln -sf {}/pg_hba.conf {}/pg_hba.conf",
-                pg_data_main, compat_conf_dir
-            ))?;
-            self.run_stdout(&format!(
-                "sudo ln -sf {}/pg_ident.conf {}/pg_ident.conf",
-                pg_data_main, compat_conf_dir
-            ))?;
         }
 
         // Enable PostgreSQL service for boot
         let pg_service = format!("postgresql-{}", version);
         self.enable_service(&pg_service)?;
 
-        // Start PostgreSQL cluster
+        // Start PostgreSQL cluster (config lives inside data dir on RHEL)
         println!("\tStarting PostgreSQL cluster...");
         let start_cmd = format!(
-            "sudo -u postgres {} -D /var/lib/postgresql/{}/main -o \"-c config_file=/etc/postgresql/{}/main/postgresql.conf -c restore_command=false\" start > /dev/null 2>&1 < /dev/null",
-            pg_ctl, version, version
+            "sudo -u postgres {} -D {} -o \"-c restore_command=false\" start > /dev/null 2>&1 < /dev/null",
+            pg_ctl, pg_data_main
         );
         let _ = self.cmd(&start_cmd);
 
@@ -736,10 +716,21 @@ impl ServerInteractor for RHELInteractor {
             println!("\tPatroni and patroni-etcd are already installed.");
         }
 
-        let patroni_yml = build_patroni_config(node, pg_version, replica_pass, pg_nodes)?;
+        let paths = self.server_paths();
+        let pg_data_dir = format!("{}/{}/data", paths.pg_data_dir, pg_version);
+        let patroni_yml = build_patroni_config(
+            node,
+            pg_version,
+            replica_pass,
+            pg_nodes,
+            &pg_data_dir,
+            &format!("{}-{}/bin", paths.pg_dir, pg_version),
+            &paths.pg_pass_path,
+            &paths.pg_wal_archive,
+        )?;
         std::fs::write(format!("patroni_{}.yaml", node.name), patroni_yml.clone())?;
 
-        let patroni_path = self.server_paths().patroni_config_path;
+        let patroni_path = paths.patroni_config_path;
         let existing_config = self.read_file(&patroni_path).unwrap_or_default();
         let config_changed = existing_config.trim() != patroni_yml.trim();
 
@@ -771,13 +762,14 @@ impl ServerInteractor for RHELInteractor {
             let create_user_cmd = "if ! id -u etcd >/dev/null 2>&1; then sudo groupadd -r etcd || true; sudo useradd -r -g etcd -d /var/lib/etcd -s /sbin/nologin etcd || true; fi";
             self.run_stdout(&format!("sudo sh -c '{}'", create_user_cmd))?;
 
-            let unit_data = "[Unit]\nDescription=etcd - highly-available key value store\nDocumentation=https://github.com/etcd-io/etcd\nAfter=network.target\n\n[Service]\nType=notify\nEnvironmentFile=-/etc/default/etcd\nExecStart=/usr/bin/etcd\nRestart=always\nRestartSec=5\nLimitNOFILE=65536\n\n[Install]\nWantedBy=multi-user.target\n";
+            // Use native RHEL etcd config path: /etc/etcd/etcd.conf
+            let unit_data = "[Unit]\nDescription=etcd - highly-available key value store\nDocumentation=https://github.com/etcd-io/etcd\nAfter=network.target\n\n[Service]\nType=notify\nEnvironmentFile=-/etc/etcd/etcd.conf\nExecStart=/usr/bin/etcd\nRestart=always\nRestartSec=5\nLimitNOFILE=65536\n\n[Install]\nWantedBy=multi-user.target\n";
             self.create_file("/etc/systemd/system/etcd.service", unit_data)?;
         } else {
             println!("\tetcd is already installed.");
         }
 
-        let etcd_configured = self.exists("/etc/default/etcd").unwrap_or(false);
+        let etcd_configured = self.exists("/etc/etcd/etcd.conf").unwrap_or(false);
         if !etcd_configured {
             let _ = self.stop_service("etcd");
             let _ = self.wait_for_service_status("etcd", "inactive", 30);
@@ -820,16 +812,10 @@ ETCD_ADVERTISE_CLIENT_URLS="http://{internal_ip}:2379"
             cluster_state = cluster_state,
         );
 
-        let etcd_default_path = "/etc/etcd/etcd.conf";
         self.mkdir("/etc/etcd")?;
-        self.create_file(etcd_default_path, &etcd_default)?;
-        self.chown(etcd_default_path, "root", "root")?;
-        self.chmod(etcd_default_path, "644")?;
-
-        if !self.exists("/etc/default/etcd").unwrap_or(false) {
-            self.mkdir("/etc/default")?;
-            self.run_stdout("sudo ln -sf /etc/etcd/etcd.conf /etc/default/etcd")?;
-        }
+        self.create_file("/etc/etcd/etcd.conf", &etcd_default)?;
+        self.chown("/etc/etcd/etcd.conf", "root", "root")?;
+        self.chmod("/etc/etcd/etcd.conf", "644")?;
 
         if !etcd_installed {
             self.service_daemon_reload()?;

@@ -168,9 +168,10 @@ fn inner_setup_postgres_node(
     }
 
     // Configure WAL archive directory
-    interactor.mkdir("/var/lib/postgresql/wal_archive")?;
-    interactor.chown("/var/lib/postgresql/wal_archive", "postgres", "postgres")?;
-    interactor.chmod("/var/lib/postgresql/wal_archive", "700")?;
+    let wal_archive_dir = interactor.server_paths().pg_wal_archive;
+    interactor.mkdir(&wal_archive_dir)?;
+    interactor.chown(&wal_archive_dir, "postgres", "postgres")?;
+    interactor.chmod(&wal_archive_dir, "700")?;
 
     let patroni_config_changed =
         interactor.setup_patroni(&node, &pg_version, &replica_pass, &pg_nodes)?;
