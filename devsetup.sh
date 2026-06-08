@@ -20,3 +20,6 @@ fi
 tar -xzf cargo-nextest-0.9.136-x86_64-unknown-linux-gnu.tar.gz -C ~/.cargo/bin
 
 rm cargo-nextest-0.9.136-x86_64-unknown-linux-gnu.tar.gz
+
+# Install cargo-release
+cargo install cargo-release

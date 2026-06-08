@@ -1,0 +1,14 @@
+# Don't publish to crates.io (private/binary project)
+publish = false
+
+# Push tag → triggers your GHA release workflow
+push = true
+tag = true
+
+# Optional: pre-release hook (run tests before bumping)
+pre-release-hook = ["cargo"]
+# , "test"
+
+# Commit message format
+pre-release-commit-message = "RELEASE {{version}}"
+tag-message = "Release {{version}}"
