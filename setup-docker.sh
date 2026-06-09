@@ -6,6 +6,10 @@ docker build -f 'Dockerfile.vps' -t 'dreamoutbox/crane-dev-vps:latest' .
 
 docker compose -f docker-compose.dev.yml up -d --build
 
+for node in vps1 vps2 vps3; do
+  docker exec "$node" sh -c "cp /tmp/authorized_keys /home/crane/.ssh/authorized_keys && chown crane:crane /home/crane/.ssh/authorized_keys && chmod 600 /home/crane/.ssh/authorized_keys"
+done
+
 echo "Checking SSH connectivity to vps1-3..."
 for port in 2221 2222 2223; do
   attempt=1

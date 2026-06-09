@@ -715,8 +715,8 @@ impl ServerInteractor for DebianInteractor {
         self.chmod(&patroni_path, "600")?;
         println!("\tCreate patroni config at {}", patroni_path);
 
-        let patroni_config_yml_exists = self.exists(&patroni_path)?;
-        dbg!(&patroni_path, patroni_config_yml_exists);
+        // let patroni_config_yml_exists = self.exists(&patroni_path)?;
+        // dbg!(&patroni_path, patroni_config_yml_exists);
 
         if !patroni_installed {
             self.service_daemon_reload()?;

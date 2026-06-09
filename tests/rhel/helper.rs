@@ -30,6 +30,26 @@ pub async fn reset_rocky_docker_compose() {
         );
     }
 
+    for node in ["vps1", "vps2", "vps3"] {
+        let output_cp = std::process::Command::new("docker")
+            .args([
+                "exec",
+                node,
+                "sh",
+                "-c",
+                "cp /tmp/authorized_keys /home/crane/.ssh/authorized_keys && chown crane:crane /home/crane/.ssh/authorized_keys && chmod 600 /home/crane/.ssh/authorized_keys",
+            ])
+            .output()
+            .expect("Failed to execute docker exec to setup ssh key");
+        if !output_cp.status.success() {
+            panic!(
+                "Failed to setup SSH key in container {}: {}",
+                node,
+                String::from_utf8_lossy(&output_cp.stderr)
+            );
+        }
+    }
+
     println!("Checking SSH connectivity to vps1-3...");
     for port in [2221, 2222, 2223] {
         let mut attempt = 1;
