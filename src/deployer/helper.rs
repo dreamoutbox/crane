@@ -25,7 +25,11 @@ pub fn deploy_zip_app(
     let python_script_path =
         std::env::temp_dir().join(format!("crane-zip-helper-{}-{}.py", app.name, *datetime));
     std::fs::write(&python_script_path, PYTHON_ZIP_APP_SCRIPT)?;
-    let mut zip_cmd = std::process::Command::new("python3");
+
+    let python_bin = if cfg!(windows) { "python" } else { "python3" };
+
+    let mut zip_cmd = std::process::Command::new(python_bin);
+
     zip_cmd
         .arg(&python_script_path)
         .arg(&zip_path)
@@ -37,7 +41,7 @@ pub fn deploy_zip_app(
 
     let status = match zip_cmd.status() {
         Ok(status) => status,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound && python_bin == "python3" => {
             let mut fallback_cmd = std::process::Command::new("python");
             fallback_cmd
                 .arg(&python_script_path)
@@ -50,6 +54,7 @@ pub fn deploy_zip_app(
         }
         Err(e) => return Err(e.into()),
     };
+
     let _ = std::fs::remove_file(&python_script_path);
 
     if !status.success() {

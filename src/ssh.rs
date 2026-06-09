@@ -33,7 +33,13 @@ impl SSHSession {
     }
 
     fn build_ssh_command(&self, cmd: &str) -> std::process::Command {
-        let ssh_bin = std::env::var("SSH_PATH").unwrap_or_else(|_| "ssh".to_string());
+        let ssh_bin = std::env::var("SSH_PATH").unwrap_or_else(|_| {
+            if cfg!(windows) {
+                "C:\\WINDOWS\\System32\\OpenSSH\\ssh.exe".to_string()
+            } else {
+                "ssh".to_string()
+            }
+        });
 
         let mut command = std::process::Command::new(ssh_bin);
         command.arg("-o").arg("StrictHostKeyChecking=no");
@@ -41,7 +47,7 @@ impl SSHSession {
 
         // if CRANE_NO_SSH_CONTROL_MASTER is set, disable ssh control master
         // Windows doesn't support ssh control master
-        if std::env::var("CRANE_NO_SSH_CONTROL_MASTER").is_err() {
+        if !cfg!(windows) && std::env::var("CRANE_NO_SSH_CONTROL_MASTER").is_err() {
             let control_path = format!("/tmp/crane-{}-{}", self.host, self.port.unwrap_or(22));
             command.arg("-o").arg("ControlMaster=auto");
             command
@@ -73,28 +79,28 @@ impl SSHSession {
         let scp_bin = if let Ok(scp_path) = std::env::var("SCP_PATH") {
             scp_path
         } else if let Ok(ssh_path) = std::env::var("SSH_PATH") {
-            let path = std::path::Path::new(&ssh_path);
-            if let Some(parent) = path.parent() {
-                if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
-                    let scp_name = if file_name.to_lowercase().ends_with(".exe") {
-                        "scp.exe"
-                    } else {
-                        "scp"
-                    };
+            let get_sibling_scp = || -> Option<String> {
+                let path = std::path::Path::new(&ssh_path);
+                let parent = path.parent()?;
+                let file_name = path.file_name()?.to_str()?;
 
-                    let scp_path = parent.join(scp_name);
-
-                    if scp_path.exists() {
-                        scp_path.to_string_lossy().to_string()
-                    } else {
-                        "scp".to_string()
-                    }
+                let scp_name = if file_name.to_lowercase().ends_with(".exe") {
+                    "scp.exe"
                 } else {
-                    "scp".to_string()
+                    "scp"
+                };
+
+                let scp_path = parent.join(scp_name);
+                if scp_path.exists() {
+                    Some(scp_path.to_string_lossy().into_owned())
+                } else {
+                    None
                 }
-            } else {
-                "scp".to_string()
-            }
+            };
+
+            get_sibling_scp().unwrap_or_else(|| "scp".to_string())
+        } else if cfg!(windows) {
+            "C:\\WINDOWS\\System32\\OpenSSH\\scp.exe".to_string()
         } else {
             "scp".to_string()
         };
@@ -133,7 +139,7 @@ impl SSHSession {
         command.arg("-o").arg("StrictHostKeyChecking=no");
         command.arg("-o").arg("UserKnownHostsFile=/dev/null");
 
-        if std::env::var("CRANE_NO_SSH_CONTROL_MASTER").is_err() {
+        if !cfg!(windows) && std::env::var("CRANE_NO_SSH_CONTROL_MASTER").is_err() {
             let control_path = format!("/tmp/crane-{}-{}", self.host, self.port.unwrap_or(22));
             command.arg("-o").arg("ControlMaster=auto");
             command
@@ -172,7 +178,7 @@ impl SSHSession {
         command.arg("-o").arg("StrictHostKeyChecking=no");
         command.arg("-o").arg("UserKnownHostsFile=/dev/null");
 
-        if std::env::var("CRANE_NO_SSH_CONTROL_MASTER").is_err() {
+        if !cfg!(windows) && std::env::var("CRANE_NO_SSH_CONTROL_MASTER").is_err() {
             let control_path = format!("/tmp/crane-{}-{}", self.host, self.port.unwrap_or(22));
             command.arg("-o").arg("ControlMaster=auto");
             command
