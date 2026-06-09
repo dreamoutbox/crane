@@ -32,17 +32,23 @@ impl SSHSession {
         }
     }
 
-    pub fn run_cmd(&self, cmd: &str) -> anyhow::Result<CmdOutput> {
-        let mut command = std::process::Command::new("ssh");
+    fn build_ssh_command(&self, cmd: &str) -> std::process::Command {
+        let ssh_bin = std::env::var("SSH_PATH").unwrap_or_else(|_| "ssh".to_string());
+
+        let mut command = std::process::Command::new(ssh_bin);
         command.arg("-o").arg("StrictHostKeyChecking=no");
         command.arg("-o").arg("UserKnownHostsFile=/dev/null");
 
-        let control_path = format!("/tmp/crane-{}-{}", self.host, self.port.unwrap_or(22));
-        command.arg("-o").arg("ControlMaster=auto");
-        command
-            .arg("-o")
-            .arg(format!("ControlPath={}", control_path));
-        command.arg("-o").arg("ControlPersist=60");
+        // if CRANE_NO_SSH_CONTROL_MASTER is set, disable ssh control master
+        // Windows doesn't support ssh control master
+        if std::env::var("CRANE_NO_SSH_CONTROL_MASTER").is_err() {
+            let control_path = format!("/tmp/crane-{}-{}", self.host, self.port.unwrap_or(22));
+            command.arg("-o").arg("ControlMaster=auto");
+            command
+                .arg("-o")
+                .arg(format!("ControlPath={}", control_path));
+            command.arg("-o").arg("ControlPersist=60");
+        }
 
         if let Some(port) = self.port {
             command.arg("-p").arg(port.to_string());
@@ -60,10 +66,17 @@ impl SSHSession {
         command.arg(destination);
         command.arg(cmd);
 
+        command
+    }
+
+    pub fn run_cmd(&self, cmd: &str) -> anyhow::Result<CmdOutput> {
+        let mut command = self.build_ssh_command(cmd);
+
         let output = command.output()?;
         let exit_code = output.status.code().unwrap_or(-1);
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+
         Ok(CmdOutput {
             stdout,
             stderr,
@@ -72,32 +85,7 @@ impl SSHSession {
     }
 
     pub fn spawn_cmd(&self, cmd: &str) -> anyhow::Result<std::process::Child> {
-        let mut command = std::process::Command::new("ssh");
-        command.arg("-o").arg("StrictHostKeyChecking=no");
-        command.arg("-o").arg("UserKnownHostsFile=/dev/null");
-
-        let control_path = format!("/tmp/crane-{}-{}", self.host, self.port.unwrap_or(22));
-        command.arg("-o").arg("ControlMaster=auto");
-        command
-            .arg("-o")
-            .arg(format!("ControlPath={}", control_path));
-        command.arg("-o").arg("ControlPersist=60");
-
-        if let Some(port) = self.port {
-            command.arg("-p").arg(port.to_string());
-        }
-
-        if !self.private_key_path.is_empty() {
-            command.arg("-i").arg(&self.private_key_path);
-        }
-
-        let destination = if !self.username.is_empty() {
-            format!("{}@{}", self.username, self.host)
-        } else {
-            self.host.clone()
-        };
-        command.arg(destination);
-        command.arg(cmd);
+        let mut command = self.build_ssh_command(cmd);
 
         command.stdout(std::process::Stdio::piped());
         command.stderr(std::process::Stdio::inherit());
@@ -112,12 +100,14 @@ impl SSHSession {
         command.arg("-o").arg("StrictHostKeyChecking=no");
         command.arg("-o").arg("UserKnownHostsFile=/dev/null");
 
-        let control_path = format!("/tmp/crane-{}-{}", self.host, self.port.unwrap_or(22));
-        command.arg("-o").arg("ControlMaster=auto");
-        command
-            .arg("-o")
-            .arg(format!("ControlPath={}", control_path));
-        command.arg("-o").arg("ControlPersist=60");
+        if std::env::var("CRANE_NO_SSH_CONTROL_MASTER").is_err() {
+            let control_path = format!("/tmp/crane-{}-{}", self.host, self.port.unwrap_or(22));
+            command.arg("-o").arg("ControlMaster=auto");
+            command
+                .arg("-o")
+                .arg(format!("ControlPath={}", control_path));
+            command.arg("-o").arg("ControlPersist=60");
+        }
 
         if let Some(port) = self.port {
             command.arg("-P").arg(port.to_string());
@@ -149,12 +139,14 @@ impl SSHSession {
         command.arg("-o").arg("StrictHostKeyChecking=no");
         command.arg("-o").arg("UserKnownHostsFile=/dev/null");
 
-        let control_path = format!("/tmp/crane-{}-{}", self.host, self.port.unwrap_or(22));
-        command.arg("-o").arg("ControlMaster=auto");
-        command
-            .arg("-o")
-            .arg(format!("ControlPath={}", control_path));
-        command.arg("-o").arg("ControlPersist=60");
+        if std::env::var("CRANE_NO_SSH_CONTROL_MASTER").is_err() {
+            let control_path = format!("/tmp/crane-{}-{}", self.host, self.port.unwrap_or(22));
+            command.arg("-o").arg("ControlMaster=auto");
+            command
+                .arg("-o")
+                .arg(format!("ControlPath={}", control_path));
+            command.arg("-o").arg("ControlPersist=60");
+        }
 
         if let Some(port) = self.port {
             command.arg("-P").arg(port.to_string());
