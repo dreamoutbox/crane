@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Windows cross-compile target
-# rustup target add x86_64-pc-windows-msvc
+rustup target add x86_64-pc-windows-msvc
 
 # Install cargo-nextest (faster test runner)
 if command -v cargo-nextest >/dev/null 2>&1 || [ -x "$HOME/.cargo/bin/cargo-nextest" ]; then
