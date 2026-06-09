@@ -25,48 +25,48 @@
 
    ```toml
    # crane.toml
-
+   
    [[nodes]]
    name = "vps1"
-   host = "localhost"
    public_ip = "10.0.0.11"
    internal_ip = "10.0.0.11"
-   port = 2221
    roles = ["app", "haproxy", "postgres", "redis"]
    user = "crane"
+   ssh_ip = "127.0.0.1"
+   ssh_port = 2221
    private_key = "keys/id_ed25519"
    sudo_pass = "${SUDO_PASS_VPS1}"
-
+   
    [[nodes]]
    name = "vps2"
-   host = "localhost"
    public_ip = "10.0.0.12"
    internal_ip = "10.0.0.12"
-   port = 2222
    roles = ["app", "haproxy", "postgres", "redis"]
    user = "crane"
+   ssh_ip = "127.0.0.1"
+   ssh_port = 2222
    private_key = "keys/id_ed25519"
    sudo_pass = "${SUDO_PASS_VPS2}"
-
+   
    [[nodes]]
    name = "vps3"
-   host = "localhost"
    public_ip = "10.0.0.13"
    internal_ip = "10.0.0.13"
-   port = 2223
    roles = ["app", "haproxy", "postgres", "redis"]
    user = "crane"
+   ssh_ip = "127.0.0.1"
+   ssh_port = 2223
    private_key = "keys/id_ed25519"
    sudo_pass = "${SUDO_PASS_VPS3}"
-
-
+   
+   
    [[users]]
    name = "deployman"
    groups = ["www"]
    ssh_authorized_keys = ["keys/id_ed25519.pub"]
    private_key = "keys/id_ed25519"
-
-
+   
+   
    [app.myapp]
    name = "myapp"
    # Setup Info
@@ -85,19 +85,18 @@
    # Domain
    domain = "myapp.localhost"
    # Replicas
-   instances = 2
+   instances = 1
    min_replicas = 1
    max_replicas = 3
    # ENV for myapp
    [app.myapp.env]
-   APP_ENV = "simulation"
    LOG_LEVEL = "debug"
    APP_NAME = "myapp"
    # Databases for myapp
-   [[app.myapp.database]]
+   [[app.myapp2.database]]
    databases = "mydb"
    user = "u1"
-
+   
    [app.myapp2]
    name = "myapp2"
    # Setup Info
@@ -115,36 +114,42 @@
    # Domain
    domain = "myapp2.localhost"
    # Replicas
-   instances = 1
+   instances = 2
    min_replicas = 1
    max_replicas = 3
    # ENV for myapp2
    [app.myapp2.env]
-   APP_ENV = "simulation"
    LOG_LEVEL = "debug"
    APP_NAME = "myapp2"
    # Databases for my app2
    [[app.myapp2.database]]
    databases = "mydb"
    user = "u1"
-
-
+   
+   
    [db.postgres]
    enabled = true
    version = "17"
    replica_pass = "replica"
-
+   
    [db.postgres.backup]
    full_backup_every = "1h"
    incremental_backup_every = "15m"
-
+   
    [db.postgres.mydb]
    name = "mydb"
-
+   
    [[db.postgres.users]]
+   # state = "present" / "absent"
    state = "present"
    user = "u1"
    password = "u1"
+   databases = ["mydb"]
+   
+   [[db.postgres.users]]
+   state = "present"
+   user = "u2"
+   password = "u2"
    databases = ["mydb"]
 
 
@@ -154,8 +159,8 @@
    endpoint = "http://s3:9000"
    access_key_id = "${S3_ACCESS_KEY_ID}"
    secret_access_key = "${S3_SECRET_ACCESS_KEY}"
-
-
+   
+   
    [domain]
    provider = "cloudflare"
    domain_name = "localhost"
@@ -163,7 +168,7 @@
    ```
 
 3. **Deploy**:
-   Make sure environment variables referenced in `crane.toml` (such as `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, and `CLOUDFLARE_TOKEN`) are set in your current shell or defined in your `.env` file before deploying:
+   Make sure environment variables referenced in `crane.toml` (such as `SUDO_PASS_VPS1`, `SUDO_PASS_VPS2`, `SUDO_PASS_VPS3`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, and `CLOUDFLARE_TOKEN`) are set in your current shell or defined in your `.env` file before deploying:
    ```bash
    crane deploy
    ```
