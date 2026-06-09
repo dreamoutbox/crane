@@ -133,7 +133,7 @@ impl ServerInteractor for DebianInteractor {
             pg_backup_dir: "/var/lib/postgresql/backups".to_string(),
             pg_wal_archive: "/var/lib/postgresql/wal_archive".to_string(),
             // PATRONI
-            patroni_config_path: "/etc/patroni/patroni.yml".to_string(),
+            patroni_config_path: "/etc/patroni/config.yml".to_string(),
             // HAPROXY
             haproxy_var_lib_dir: "/var/lib/haproxy".to_string(),
             haproxy_config_path: "/etc/haproxy/haproxy.cfg".to_string(),
@@ -714,6 +714,9 @@ impl ServerInteractor for DebianInteractor {
         self.chown(&patroni_path, "postgres", "postgres")?;
         self.chmod(&patroni_path, "600")?;
         println!("\tCreate patroni config at {}", patroni_path);
+
+        let patroni_config_yml_exists = self.exists(&patroni_path)?;
+        dbg!(&patroni_path, patroni_config_yml_exists);
 
         if !patroni_installed {
             self.service_daemon_reload()?;

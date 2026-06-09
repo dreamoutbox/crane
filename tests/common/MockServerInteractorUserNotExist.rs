@@ -37,7 +37,7 @@ impl ServerInteractor for MockServerInteractorUserNotExist {
             pg_pass_path: "/etc/postgresql/replica.pass".to_string(),
             pg_backup_dir: "/var/lib/postgresql/backups".to_string(),
             pg_wal_archive: "/var/lib/postgresql/wal_archive".to_string(),
-            patroni_config_path: "/etc/patroni/patroni.yml".to_string(),
+            patroni_config_path: "/etc/patroni/config.yml".to_string(),
             haproxy_var_lib_dir: "/var/lib/haproxy".to_string(),
             haproxy_config_path: "/etc/haproxy/haproxy.cfg".to_string(),
             haproxy_log_dir: "/var/log/haproxy".to_string(),

@@ -136,7 +136,7 @@ impl ServerInteractor for RHELInteractor {
             pg_backup_dir: "/var/lib/pgsql/backups".to_string(),
             pg_wal_archive: "/var/lib/pgsql/wal_archive".to_string(),
             // PATRONI
-            patroni_config_path: "/etc/patroni/patroni.yml".to_string(),
+            patroni_config_path: "/etc/patroni/config.yml".to_string(),
             // HAPROXY
             haproxy_var_lib_dir: "/var/lib/haproxy".to_string(),
             haproxy_config_path: "/etc/haproxy/haproxy.cfg".to_string(),
