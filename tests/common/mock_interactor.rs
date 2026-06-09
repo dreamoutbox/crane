@@ -29,6 +29,7 @@ impl ServerInteractor for MockInteractor {
     fn whoami(&self) -> anyhow::Result<String> {
         Ok("postgres".to_string())
     }
+
     fn cmd(&self, command: &str) -> anyhow::Result<CmdOutput> {
         self.commands.borrow_mut().push(command.to_string());
         let stdout = if command.contains("date") {
@@ -38,6 +39,7 @@ impl ServerInteractor for MockInteractor {
                 .iter()
                 .filter(|c| c.contains("date"))
                 .count();
+
             self.simulated_dates
                 .get(count - 1)
                 .cloned()
@@ -65,9 +67,11 @@ impl ServerInteractor for MockInteractor {
             exit_code: 0,
         })
     }
+
     fn get_os_info(&self) -> anyhow::Result<String> {
         Ok("Linux".to_string())
     }
+
     fn server_paths(&self) -> crane::server_interactor::server_path::ServerPaths {
         crane::server_interactor::server_path::ServerPaths {
             app_dir: "/opt/crane".to_string(),

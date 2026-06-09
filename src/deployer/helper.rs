@@ -31,11 +31,25 @@ pub fn deploy_zip_app(
         .arg(&zip_path)
         .arg(&dir_to_deploy);
 
-    for ignore in ignores {
+    for ignore in &ignores {
         zip_cmd.arg(ignore);
     }
 
-    let status = zip_cmd.status()?;
+    let status = match zip_cmd.status() {
+        Ok(status) => status,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            let mut fallback_cmd = std::process::Command::new("python");
+            fallback_cmd
+                .arg(&python_script_path)
+                .arg(&zip_path)
+                .arg(&dir_to_deploy);
+            for ignore in ignores {
+                fallback_cmd.arg(ignore);
+            }
+            fallback_cmd.status()?
+        }
+        Err(e) => return Err(e.into()),
+    };
     let _ = std::fs::remove_file(&python_script_path);
 
     if !status.success() {

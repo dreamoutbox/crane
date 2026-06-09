@@ -69,6 +69,39 @@ impl SSHSession {
         command
     }
 
+    fn build_scp_command(&self) -> std::process::Command {
+        let scp_bin = if let Ok(scp_path) = std::env::var("SCP_PATH") {
+            scp_path
+        } else if let Ok(ssh_path) = std::env::var("SSH_PATH") {
+            let path = std::path::Path::new(&ssh_path);
+            if let Some(parent) = path.parent() {
+                if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
+                    let scp_name = if file_name.to_lowercase().ends_with(".exe") {
+                        "scp.exe"
+                    } else {
+                        "scp"
+                    };
+
+                    let scp_path = parent.join(scp_name);
+
+                    if scp_path.exists() {
+                        scp_path.to_string_lossy().to_string()
+                    } else {
+                        "scp".to_string()
+                    }
+                } else {
+                    "scp".to_string()
+                }
+            } else {
+                "scp".to_string()
+            }
+        } else {
+            "scp".to_string()
+        };
+
+        std::process::Command::new(scp_bin)
+    }
+
     pub fn run_cmd(&self, cmd: &str) -> anyhow::Result<CmdOutput> {
         let mut command = self.build_ssh_command(cmd);
 
@@ -95,7 +128,7 @@ impl SSHSession {
     }
 
     pub fn upload(&self, local_path: &str, remote_path: &str) -> anyhow::Result<()> {
-        let mut command = std::process::Command::new("scp");
+        let mut command = self.build_scp_command();
 
         command.arg("-o").arg("StrictHostKeyChecking=no");
         command.arg("-o").arg("UserKnownHostsFile=/dev/null");
@@ -135,7 +168,7 @@ impl SSHSession {
     }
 
     pub fn download(&self, remote_path: &str, local_path: &str) -> anyhow::Result<()> {
-        let mut command = std::process::Command::new("scp");
+        let mut command = self.build_scp_command();
         command.arg("-o").arg("StrictHostKeyChecking=no");
         command.arg("-o").arg("UserKnownHostsFile=/dev/null");
 

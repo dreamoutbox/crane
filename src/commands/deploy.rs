@@ -20,15 +20,7 @@ pub async fn run_deploy_command(
     let config_dir = config_path.parent().unwrap_or(Path::new("."));
 
     // Get datetime for release
-    let datetime_output = std::process::Command::new("date")
-        .arg("+%Y%m%d_%H%M%S")
-        .output()?;
-    let datetime = String::from_utf8_lossy(&datetime_output.stdout)
-        .trim()
-        .to_string();
-    if datetime.is_empty() {
-        anyhow::bail!("Failed to generate datetime prefix using 'date' command");
-    }
+    let datetime = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
 
     // Collect all dependencies across all apps (deduped), then install once per node
     let mut all_deps: Vec<String> = vec!["unzip".to_string()];
