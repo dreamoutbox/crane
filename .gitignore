@@ -14,3 +14,5 @@ patroni_*.yaml
 demo/crane.vm.toml
 debug_output/*
 haproxy.cfg
+demo/myapp.exe
+crane-*.zip
