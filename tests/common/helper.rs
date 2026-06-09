@@ -31,7 +31,7 @@ pub async fn reset_docker_compose() {
                     node,
                     "sh",
                     "-c",
-                    "cp /tmp/authorized_keys /home/crane/.ssh/authorized_keys && chown crane:crane /home/crane/.ssh/authorized_keys && chmod 600 /home/crane/.ssh/authorized_keys",
+                    "cp /opt/authorized_keys /home/crane/.ssh/authorized_keys && chown crane:crane /home/crane/.ssh/authorized_keys && chmod 600 /home/crane/.ssh/authorized_keys",
                 ])
                 .output()
                 .expect("Failed to execute docker exec to setup ssh key");

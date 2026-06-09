@@ -9,7 +9,7 @@ docker compose -f docker-compose.rocky.dev.yml down
 docker compose -f docker-compose.rocky.dev.yml up -d --build
 
 for node in vps1 vps2 vps3; do
-  docker exec "$node" sh -c "cp /tmp/authorized_keys /home/crane/.ssh/authorized_keys && chown crane:crane /home/crane/.ssh/authorized_keys && chmod 600 /home/crane/.ssh/authorized_keys"
+  docker exec "$node" sh -c "cp /opt/authorized_keys /home/crane/.ssh/authorized_keys && chown crane:crane /home/crane/.ssh/authorized_keys && chmod 600 /home/crane/.ssh/authorized_keys"
 done
 
 echo "Checking SSH connectivity to vps1-3..."
