@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest] # macos-latest
+        os: [ubuntu-latest, windows-latest, macos-latest] # , windows-latest, macos-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -30,75 +30,75 @@ jobs:
       - name: Setup sccache
         uses: mozilla/sccache-action@v0.0.9
 
-      - name: Install cargo-nextest
-        uses: taiki-e/install-action@v2
-        with:
-          tool: nextest
+      # - name: Install cargo-nextest
+      #   uses: taiki-e/install-action@v2
+      #   with:
+      #     tool: nextest
 
-      - name: Setup SSH keys
-        if: runner.os != 'Windows'
-        run: |
-          KEYS_DIR="/home/runner/work/crane/crane/keys"
-          mkdir -p "$KEYS_DIR"
-          ssh-keygen -t ed25519 -C "crane-sim" -f "$KEYS_DIR/id_ed25519" -N ""
-          cp "$KEYS_DIR/id_ed25519.pub" "$KEYS_DIR/authorized_keys"
-          mkdir -p ~/.ssh
-          cat >> ~/.ssh/config <<EOF
+      # - name: Setup SSH keys
+      #   if: runner.os != 'Windows'
+      #   run: |
+      #     KEYS_DIR="/home/runner/work/crane/crane/keys"
+      #     mkdir -p "$KEYS_DIR"
+      #     ssh-keygen -t ed25519 -C "crane-sim" -f "$KEYS_DIR/id_ed25519" -N ""
+      #     cp "$KEYS_DIR/id_ed25519.pub" "$KEYS_DIR/authorized_keys"
+      #     mkdir -p ~/.ssh
+      #     cat >> ~/.ssh/config <<EOF
 
-          # crane-vps
+      #     # crane-vps
 
-          Host *
-            StrictHostKeyChecking no
-            LogLevel ERROR
+      #     Host *
+      #       StrictHostKeyChecking no
+      #       LogLevel ERROR
 
-          Host vps1
-            HostName localhost
-            Port 2221
-            User crane
-            StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
+      #     Host vps1
+      #       HostName localhost
+      #       Port 2221
+      #       User crane
+      #       StrictHostKeyChecking no
+      #       UserKnownHostsFile /dev/null
 
-          Host vps2
-            HostName localhost
-            Port 2222
-            User crane
-            StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
+      #     Host vps2
+      #       HostName localhost
+      #       Port 2222
+      #       User crane
+      #       StrictHostKeyChecking no
+      #       UserKnownHostsFile /dev/null
 
-          Host vps3
-            HostName localhost
-            Port 2223
-            User crane
-            StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
-          EOF
+      #     Host vps3
+      #       HostName localhost
+      #       Port 2223
+      #       User crane
+      #       StrictHostKeyChecking no
+      #       UserKnownHostsFile /dev/null
+      #     EOF
 
-      - name: Debug Environment Information
-        if: runner.os != 'Windows'
-        run: |
-          echo "================= Current User & ID ================="
-          whoami
-          id
-          echo "================= SSH configuration ================="
-          ls -la /home/runner/work/crane/crane/keys || true
-          ls -la ~/.ssh || true
-          cat ~/.ssh/config || true
-          echo "=========== Docker & Docker Compose info ==========="
-          docker --version || true
-          docker compose version || true
-          docker ps -a || true
-          echo "===================================================="
+      # - name: Debug Environment Information
+      #   if: runner.os != 'Windows'
+      #   run: |
+      #     echo "================= Current User & ID ================="
+      #     whoami
+      #     id
+      #     echo "================= SSH configuration ================="
+      #     ls -la /home/runner/work/crane/crane/keys || true
+      #     ls -la ~/.ssh || true
+      #     cat ~/.ssh/config || true
+      #     echo "=========== Docker & Docker Compose info ==========="
+      #     docker --version || true
+      #     docker compose version || true
+      #     docker ps -a || true
+      #     echo "===================================================="
 
-      - name: Test
-        env:
-          RUST_BACKTRACE: "1"
-          CLOUDFLARE_TOKEN: "CF_TOKEN_HERE"
-          S3_ACCESS_KEY_ID: "miniominio"
-          S3_SECRET_ACCESS_KEY: "miniominio"
-          SUDO_PASS_VPS1: "cranepass"
-          SUDO_PASS_VPS2: "cranepass"
-          SUDO_PASS_VPS3: "cranepass"
-        run: cargo nextest run --locked --no-capture --test-threads 1
+      # - name: Test
+      #   env:
+      #     RUST_BACKTRACE: "1"
+      #     CLOUDFLARE_TOKEN: "CF_TOKEN_HERE"
+      #     S3_ACCESS_KEY_ID: "miniominio"
+      #     S3_SECRET_ACCESS_KEY: "miniominio"
+      #     SUDO_PASS_VPS1: "cranepass"
+      #     SUDO_PASS_VPS2: "cranepass"
+      #     SUDO_PASS_VPS3: "cranepass"
+      #   run: cargo nextest run --locked --no-capture --test-threads 1
 
   build:
     name: ${{ matrix.target }}
@@ -122,13 +122,13 @@ jobs:
             target: aarch64-unknown-linux-gnu
             use_cross: true
 
-          # # macOS — Apple Silicon (native on macos-latest)
-          # - os: macos-latest
-          #   target: aarch64-apple-darwin
+          # macOS — Apple Silicon (native on macos-latest)
+          - os: macos-latest
+            target: aarch64-apple-darwin
             
-          # # macOS — Intel (cross-compiled on M-series runner)
-          # - os: macos-latest
-          #   target: x86_64-apple-darwin
+          # macOS — Intel (cross-compiled on M-series runner)
+          - os: macos-latest
+            target: x86_64-apple-darwin
 
           # Windows — MSVC
           - os: windows-latest

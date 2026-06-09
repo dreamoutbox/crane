@@ -1,8 +1,8 @@
 // RUN:
 // RUST_LIB_BACKTRACE=0 RUST_BACKTRACE=1 cargo nextest run test_user_state -- --no-capture
 
-use crate::common_helper::reset_docker_compose;
-use crate::helper::{pg_allow_host_machine, try_connect};
+use crate::common_helper::{pg_allow_host_machine, reset_docker_compose};
+use crate::helper::try_connect;
 
 #[tokio::test]
 async fn test_user_state() {

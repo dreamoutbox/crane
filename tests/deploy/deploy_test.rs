@@ -4,7 +4,7 @@ use std::process::Command;
 use crane::postgres_unit::helper::pg_get_primary;
 use crane::server_interactor::get_server_interactor;
 
-use crate::common_helper::reset_docker_compose;
+use crate::common_helper::{pg_allow_host_machine, reset_docker_compose};
 
 // RUN:
 // cargo nextest run test_deploy --nocapture
@@ -162,14 +162,14 @@ async fn test_deploy() {
     // we need to temporarily add a pg_hba.conf entry
     // to the deployed primary postgres database and reload.
 
-    let primary_node = pg_get_primary(&config)
+    let primary_node_config = pg_get_primary(&config)
         .expect("Failed to get leader node")
         .expect("No active PostgreSQL leader found");
 
-    let primary_interactor =
-        get_server_interactor(&primary_node.name).expect("Failed to connect to primary node");
+    let primary_interactor = get_server_interactor(&primary_node_config.name)
+        .expect("Failed to connect to primary node");
 
-    let primary_port = match primary_node.name.as_str() {
+    let primary_port = match primary_node_config.name.as_str() {
         "vps1" => "5001",
         "vps2" => "5002",
         "vps3" => "5003",
@@ -179,7 +179,10 @@ async fn test_deploy() {
     println!(
         "STEP: ASSERT this machine can psql with user=\"u1\" password=\"u1\" database=\"mydb\""
     );
-    // ASSERT this machine can psql with user="u1" password="u1" database="mydb"
+
+    // Allow host machine connection to Docker container
+    pg_allow_host_machine(&config);
+
     let psql_u1 = Command::new("psql")
         .env("PGPASSWORD", "u1")
         .args([
