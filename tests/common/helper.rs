@@ -11,16 +11,10 @@ pub async fn reset_docker_compose() {
     }
 
     let output_up = std::process::Command::new("docker")
-        .args([
-            "compose",
-            "-f",
-            "docker-compose.dev.yml",
-            "up",
-            "-d",
-            "--build",
-        ])
+        .args(["compose", "-f", "docker-compose.dev.yml", "up", "-d"])
         .output()
-        .expect("Failed to execute docker compose up -d --build");
+        .expect("Failed to execute docker compose up -d");
+
     if !output_up.status.success() {
         panic!(
             "docker compose up failed: {}",
@@ -33,7 +27,7 @@ pub async fn reset_docker_compose() {
         let mut attempt = 1;
 
         loop {
-            let status = std::process::Command::new("ssh")
+            let output = std::process::Command::new("ssh")
                 .args([
                     "-i",
                     "keys/id_ed25519",
@@ -48,15 +42,32 @@ pub async fn reset_docker_compose() {
                     "crane@localhost",
                     "true",
                 ])
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status();
+                .output();
 
-            match status {
-                Ok(status) if status.success() => {
+            match output {
+                Ok(output) if output.status.success() => {
                     break;
                 }
-                _ => {
+                Ok(output) => {
+                    eprintln!(
+                        "SSH connection attempt {} to port {} failed:\n--- stdout ---\n{}\n--- stderr ---\n{}",
+                        attempt,
+                        port,
+                        String::from_utf8_lossy(&output.stdout),
+                        String::from_utf8_lossy(&output.stderr)
+                    );
+                    if attempt >= 15 {
+                        panic!(
+                            "Failed to connect to vps on port {} after 15 attempts",
+                            port
+                        );
+                    }
+
+                    attempt += 1;
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                }
+                Err(e) => {
+                    eprintln!("Failed to run ssh command: {:?}", e);
                     if attempt >= 15 {
                         panic!(
                             "Failed to connect to vps on port {} after 15 attempts",

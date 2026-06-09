@@ -73,6 +73,22 @@ jobs:
             UserKnownHostsFile /dev/null
           EOF
 
+      - name: Debug Environment Information
+        if: runner.os != 'Windows'
+        run: |
+          echo "================= Current User & ID ================="
+          whoami
+          id
+          echo "================= SSH configuration ================="
+          ls -la /home/runner/work/crane/crane/keys || true
+          ls -la ~/.ssh || true
+          cat ~/.ssh/config || true
+          echo "=========== Docker & Docker Compose info ==========="
+          docker --version || true
+          docker compose version || true
+          docker ps -a || true
+          echo "===================================================="
+
       - name: Test
         env:
           CLOUDFLARE_TOKEN: "CF_TOKEN_HERE"
