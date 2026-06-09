@@ -23,22 +23,34 @@ pub async fn reset_docker_compose() {
     }
 
     for node in ["vps1", "vps2", "vps3"] {
-        let output_cp = std::process::Command::new("docker")
-            .args([
-                "exec",
-                node,
-                "sh",
-                "-c",
-                "cp /tmp/authorized_keys /home/crane/.ssh/authorized_keys && chown crane:crane /home/crane/.ssh/authorized_keys && chmod 600 /home/crane/.ssh/authorized_keys",
-            ])
-            .output()
-            .expect("Failed to execute docker exec to setup ssh key");
-        if !output_cp.status.success() {
-            panic!(
-                "Failed to setup SSH key in container {}: {}",
-                node,
-                String::from_utf8_lossy(&output_cp.stderr)
-            );
+        let mut attempt = 1;
+        loop {
+            let output_cp = std::process::Command::new("docker")
+                .args([
+                    "exec",
+                    node,
+                    "sh",
+                    "-c",
+                    "cp /tmp/authorized_keys /home/crane/.ssh/authorized_keys && chown crane:crane /home/crane/.ssh/authorized_keys && chmod 600 /home/crane/.ssh/authorized_keys",
+                ])
+                .output()
+                .expect("Failed to execute docker exec to setup ssh key");
+
+            if output_cp.status.success() {
+                break;
+            }
+
+            if attempt >= 5 {
+                panic!(
+                    "Failed to setup SSH key in container {} after 5 attempts.\nSTDOUT:\n{}\nSTDERR:\n{}",
+                    node,
+                    String::from_utf8_lossy(&output_cp.stdout),
+                    String::from_utf8_lossy(&output_cp.stderr)
+                );
+            }
+
+            attempt += 1;
+            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
         }
     }
 

@@ -91,6 +91,7 @@ jobs:
 
       - name: Test
         env:
+          RUST_BACKTRACE: "1"
           CLOUDFLARE_TOKEN: "CF_TOKEN_HERE"
           S3_ACCESS_KEY_ID: "miniominio"
           S3_SECRET_ACCESS_KEY: "miniominio"
