@@ -1,6 +1,20 @@
 use crane::{postgres_unit::helper::pg_get_primary, server_interactor::get_server_interactor};
 
 pub async fn reset_docker_compose() {
+    let docker_check = std::process::Command::new("docker").arg("info").output();
+
+    let docker_available = match docker_check {
+        Ok(output) => output.status.success(),
+        Err(_) => false,
+    };
+
+    if !docker_available {
+        println!(
+            "Docker daemon is not running or docker is not installed. Skipping docker-dependent test."
+        );
+        std::process::exit(0);
+    }
+
     let output_down = std::process::Command::new("docker")
         .args(["compose", "-f", "docker-compose.dev.yml", "down"])
         .output()

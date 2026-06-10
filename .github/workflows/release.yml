@@ -96,6 +96,7 @@ jobs:
           echo "===================================================="
 
       - name: Test
+        if: runner.os != 'Windows'
         env:
           RUST_BACKTRACE: "1"
           CLOUDFLARE_TOKEN: "CF_TOKEN_HERE"

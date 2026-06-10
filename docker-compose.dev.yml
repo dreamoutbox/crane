@@ -4,6 +4,7 @@ name: crane-vps
 
 services:
   vps1:
+    platform: linux/amd64
     image: docker.io/dreamoutbox/crane-dev-vps:latest
     container_name: vps1
     hostname: vps1
@@ -36,6 +37,7 @@ services:
       - TZ=Asia/Bangkok
 
   vps2:
+    platform: linux/amd64
     image: docker.io/dreamoutbox/crane-dev-vps:latest
     container_name: vps2
     hostname: vps2
@@ -65,6 +67,7 @@ services:
       - TZ=Asia/Bangkok
 
   vps3:
+    platform: linux/amd64
     image: docker.io/dreamoutbox/crane-dev-vps:latest
     container_name: vps3
     hostname: vps3
@@ -95,6 +98,7 @@ services:
 
   # simulate external s3 service
   s3:
+    platform: linux/amd64
     image: minio/minio
     container_name: s3
     hostname: s3

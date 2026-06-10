@@ -2,7 +2,7 @@
 
 set -e
 
-docker build -f 'Dockerfile.rocky.vps' -t 'dreamoutbox/crane-dev-vps-rocky:latest' .
+docker build --platform linux/amd64 -f 'Dockerfile.rocky.vps' -t 'dreamoutbox/crane-dev-vps-rocky:latest' .
 
 docker compose -f docker-compose.dev.yml down
 docker compose -f docker-compose.rocky.dev.yml down
