@@ -4,7 +4,7 @@ name: crane-vps-rocky
 
 services:
   vps1:
-    image: dreamoutbox/crane-dev-vps-rocky:latest
+    image: docker.io/dreamoutbox/crane-dev-vps-rocky:latest
     container_name: vps1
     hostname: vps1
     privileged: true # required for systemd
@@ -35,7 +35,7 @@ services:
       - TZ=Asia/Bangkok
 
   vps2:
-    image: dreamoutbox/crane-dev-vps-rocky:latest
+    image: docker.io/dreamoutbox/crane-dev-vps-rocky:latest
     container_name: vps2
     hostname: vps2
     privileged: true
@@ -63,7 +63,7 @@ services:
       - TZ=Asia/Bangkok
 
   vps3:
-    image: dreamoutbox/crane-dev-vps-rocky:latest
+    image: docker.io/dreamoutbox/crane-dev-vps-rocky:latest
     container_name: vps3
     hostname: vps3
     privileged: true

@@ -73,6 +73,12 @@ jobs:
             UserKnownHostsFile /dev/null
           EOF
 
+      - name: Start Docker Compose and Setup MinIO
+        if: runner.os == 'Linux'
+        run: |
+          docker compose -f docker-compose.dev.yml up -d
+          ./setup-minio.sh
+
       - name: Debug Environment Information
         if: runner.os != 'Windows'
         run: |

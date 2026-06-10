@@ -6,6 +6,8 @@ docker build -f 'Dockerfile.vps' -t 'dreamoutbox/crane-dev-vps:latest' .
 
 docker compose -f docker-compose.dev.yml up -d --build
 
+./setup-minio.sh
+
 for node in vps1 vps2 vps3; do
   docker exec "$node" sh -c "cp /opt/authorized_keys /home/crane/.ssh/authorized_keys && chown crane:crane /home/crane/.ssh/authorized_keys && chmod 600 /home/crane/.ssh/authorized_keys"
 done
