@@ -10,8 +10,8 @@
 - **High-Availability PostgreSQL**: Automated cluster topology with Patroni, etcd as DCS, and HAProxy for smart write/read routing.
 - **Built-in Reverse Proxy & SSL**: Automatically configures load-balancing and SSL certificates.
 - **Automated S3 Backups**: Integrated scheduling for database backups (full/incremental) to S3/MinIO.
+- **Firewall Setup**: Configures firewall for internal cluster ports while exposing public HTTP (80), HTTPS (443), and SSH (22).
 - **Cloudflare DNS Sync**: Syncs public node IPs to Cloudflare A records automatically.
-- **Security-First Firewall**: Configures UFW for internal cluster ports while exposing public HTTP (80), HTTPS (443), and SSH (22).
 
 ---
 
@@ -178,7 +178,7 @@
 ## How It Works
 
 1. **Multiplexed SSH**: Crane opens a single multiplexed master SSH connection (`ControlMaster`) to each node.
-2. **Security Provisioning**: configures the nodes firewall (UFW) to only expose ports 22, 80, and 443 publicly, and fully whitelist inter-node communication.
+2. **Firewall Provisioning**: configures the nodes firewall to only expose ports 22, 80, and 443 publicly, and fully whitelist inter-node communication.
 3. **Database Topology**: Configures Patroni and etcd clusters on nodes with the `postgres` role.
 4. **App Delivery**: Compresses the application, transfers it over SCP, extracts it, merges environmental variables, starts the systemd service instances, and polls health checks.
 5. **Reverse Proxying**: Hooks up HAProxy/Traefik reverse proxies to distribute incoming public traffic across the running instances.

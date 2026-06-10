@@ -18,9 +18,9 @@ pub fn configure_postgres_cron_backup(
         })?;
 
         // Ensure directories exist
+        let pg_backup_dir = interactor.server_paths().pg_backup_dir;
         interactor.mkdir("/etc/crane")?;
         interactor.mkdir("/opt/crane")?;
-        let pg_backup_dir = interactor.server_paths().pg_backup_dir;
         interactor.mkdir(&pg_backup_dir)?;
         interactor.chown(&pg_backup_dir, "postgres", "postgres")?;
         interactor.chmod(&pg_backup_dir, "755")?;
@@ -48,12 +48,13 @@ replica_pass = "{}"
             version,
             replica_pass
         );
-        // Write postgres-backup-config.toml directly
+
+        // Write postgres-backup-config.toml
         interactor.create_file("/etc/crane/postgres-backup-config.toml", &s3_toml_str)?;
         interactor.chown("/etc/crane/postgres-backup-config.toml", "root", "root")?;
         interactor.chmod("/etc/crane/postgres-backup-config.toml", "600")?;
 
-        // Write postgres-backup.py directly
+        // Write postgres-backup.py
         interactor.create_file("/opt/crane/postgres-backup.py", PYTHON_BACKUP_SCRIPT)?;
         interactor.chown("/opt/crane/postgres-backup.py", "root", "root")?;
         interactor.chmod("/opt/crane/postgres-backup.py", "755")?;

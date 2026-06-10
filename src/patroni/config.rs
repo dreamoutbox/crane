@@ -31,7 +31,7 @@ restapi:
 
 bootstrap:
   dcs:
-    ttl: 20
+    ttl: 25
     loop_wait: 10
     retry_timeout: 10
     maximum_lag_on_failover: 1048576

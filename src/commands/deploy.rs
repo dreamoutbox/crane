@@ -66,6 +66,14 @@ pub async fn run_deploy_command(
         handle.await??;
     }
 
+    // Manage firewall before deploying database cluster and apps to ensure connectivity
+    println!("\nConfiguring firewalls on all nodes...");
+    for node in &config.nodes {
+        println!("\tSetting up firewall on {}...", node.name);
+        let interactor = get_server_interactor(&node.name)?;
+        interactor.setup_firewall(config)?;
+    }
+
     // Install postgres database cluster if enabled
     let pg_enabled = config
         .db
@@ -134,14 +142,6 @@ pub async fn run_deploy_command(
 
     // Reload HAProxy once at the end on all app nodes
     crate::haproxy_unit::haproxy::reload_haproxy_on_each_nodes_wrapper(&app_nodes).await?;
-
-    // Manage firewall
-    println!("\nConfiguring firewalls on all nodes...");
-    for node in &config.nodes {
-        println!("\tSetting up firewall on {}...", node.name);
-        let interactor = get_server_interactor(&node.name)?;
-        interactor.setup_firewall(config)?;
-    }
 
     let deploy_elapse = now.elapsed();
     println!("\nDEPLOY COMPLETE ({} secs)\n", deploy_elapse.as_secs());

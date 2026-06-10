@@ -19,7 +19,10 @@ async fn test_scale_up_node() {
         .await
         .expect("deploy 1 node failed");
 
+    println!("\n=============================");
     println!("STEP 2: scale up to 3 nodes");
+    println!("=============================\n");
+
     let config_3node_path = Path::new("tests/deploy/crane.3node.toml");
     let config_3node =
         crane::config::read_config_toml_file(config_3node_path).expect("Failed to load config");

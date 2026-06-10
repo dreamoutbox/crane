@@ -34,6 +34,7 @@ pub async fn postgres_setup_wrapper(config: &config::Config) -> Result<(), anyho
     let barrier_installed = std::sync::Arc::new(std::sync::Barrier::new(num_nodes));
     let barrier_etcd_started = std::sync::Arc::new(std::sync::Barrier::new(num_nodes));
     let barrier_quorum = std::sync::Arc::new(std::sync::Barrier::new(num_nodes));
+    let barrier_leader_started = std::sync::Arc::new(std::sync::Barrier::new(num_nodes));
 
     let mut handles = vec![];
     for (i, node) in pg_nodes.iter().enumerate() {
@@ -47,6 +48,8 @@ pub async fn postgres_setup_wrapper(config: &config::Config) -> Result<(), anyho
         let barrier_installed = barrier_installed.clone();
         let barrier_etcd_started = barrier_etcd_started.clone();
         let barrier_quorum = barrier_quorum.clone();
+        let barrier_leader_started = barrier_leader_started.clone();
+
         let is_first_node = i == 0;
 
         let handle = tokio::task::spawn_blocking(move || {
@@ -60,6 +63,7 @@ pub async fn postgres_setup_wrapper(config: &config::Config) -> Result<(), anyho
                 barrier_installed,
                 barrier_etcd_started,
                 barrier_quorum,
+                barrier_leader_started,
                 is_first_node,
             )
         });
@@ -135,6 +139,7 @@ fn inner_setup_postgres_node(
     barrier_installed: std::sync::Arc<std::sync::Barrier>,
     barrier_etcd_started: std::sync::Arc<std::sync::Barrier>,
     barrier_quorum: std::sync::Arc<std::sync::Barrier>,
+    barrier_leader_started: std::sync::Arc<std::sync::Barrier>,
     is_first_node: bool,
 ) -> anyhow::Result<(String, std::sync::Arc<dyn ServerInteractor + Send + Sync>)> {
     println!("Configuring node {}...", node.name);
@@ -203,6 +208,11 @@ fn inner_setup_postgres_node(
             .map(|code| code == 200)
             .unwrap_or(false);
 
+    if !is_first_node {
+        // Wait for leader to start and initialize DCS first
+        barrier_leader_started.wait();
+    }
+
     if patroni_already_healthy {
         println!(
             "\tPatroni already healthy on node {}, skipping restart",
@@ -230,6 +240,29 @@ fn inner_setup_postgres_node(
         } else {
             println!("\tPatroni started successfully on node {}", node.name);
         }
+    }
+
+    if is_first_node {
+        // Poll local Patroni REST API until healthy/leader in DCS
+        println!("\tWaiting for leader Patroni REST API to become healthy...");
+        let start = std::time::Instant::now();
+        let mut healthy = false;
+
+        while start.elapsed().as_secs() < 30 {
+            if let Ok(code) = interactor.check_http_status("http://127.0.0.1:8008/health") {
+                if code == 200 {
+                    healthy = true;
+                    break;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+
+        if !healthy {
+            println!("\tWarning: leader Patroni REST API did not become healthy in 30s");
+        }
+
+        barrier_leader_started.wait();
     }
 
     println!(
