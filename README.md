@@ -86,8 +86,6 @@
    domain = "myapp.localhost"
    # Replicas
    instances = 1
-   min_replicas = 1
-   max_replicas = 3
    # ENV for myapp
    [app.myapp.env]
    LOG_LEVEL = "debug"
@@ -115,8 +113,6 @@
    domain = "myapp2.localhost"
    # Replicas
    instances = 2
-   min_replicas = 1
-   max_replicas = 3
    # ENV for myapp2
    [app.myapp2.env]
    LOG_LEVEL = "debug"

@@ -127,7 +127,6 @@ LOG_LEVEL = "debug"
 
 [monitor]
 interval = 30
-
 [monitor.autoscale]
 min_replicas = 1
 max_replicas = 4

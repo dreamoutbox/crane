@@ -43,7 +43,6 @@ pub struct AppConfig {
     pub deploy_user: String,
     pub port_start: u16,
     pub port_end: Option<u16>,
-    pub instances: u32,
     pub dependencies: Option<Vec<String>>,
     pub health_check_path: Option<String>,
     pub health_check_timeout: Option<u64>,
@@ -52,8 +51,9 @@ pub struct AppConfig {
     pub domain: Option<String>,
     pub ssl_cert: Option<String>,
     pub env: Option<HashMap<String, String>>,
-    pub min_replicas: Option<u32>,
-    pub max_replicas: Option<u32>,
+    pub instances: u32,
+    // pub min_replicas: Option<u32>,
+    // pub max_replicas: Option<u32>,
     pub database: Option<Vec<AppDatabaseConfig>>,
 }
 

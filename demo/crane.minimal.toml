@@ -37,8 +37,6 @@ health_check_interval = 5
 domain = "myapp.localhost"
 # Replicas
 instances = 1
-min_replicas = 1
-max_replicas = 1
 # ENV for myapp
 [app.myapp.env]
 APP_ENV = "simulation"
