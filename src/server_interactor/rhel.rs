@@ -769,8 +769,44 @@ impl ServerInteractor for RHELInteractor {
             println!("\tetcd is already installed.");
         }
 
+        let initial_cluster = pg_nodes
+            .iter()
+            .map(|n| format!("{}=http://{}:2380", n.name, n.internal_ip))
+            .collect::<Vec<_>>()
+            .join(",");
+
         let etcd_configured = self.exists("/etc/etcd/etcd.conf").unwrap_or(false);
-        if !etcd_configured {
+
+        let mut should_reset_etcd = false;
+
+        if etcd_configured {
+            if let Ok(content) = self.read_file("/etc/etcd/etcd.conf") {
+                let mut old_initial_cluster = None;
+                for line in content.lines() {
+                    let line = line.trim();
+                    if line.starts_with("ETCD_INITIAL_CLUSTER=") {
+                        let val = line
+                            .trim_start_matches("ETCD_INITIAL_CLUSTER=")
+                            .trim_matches('"');
+                        old_initial_cluster = Some(val.to_string());
+                        break;
+                    }
+                }
+
+                if let Some(old_cluster) = old_initial_cluster {
+                    if old_cluster != initial_cluster {
+                        println!(
+                            "\tetcd cluster members configuration changed (old: {}, new: {}), resetting etcd...",
+                            old_cluster, initial_cluster
+                        );
+
+                        should_reset_etcd = true;
+                    }
+                }
+            }
+        }
+
+        if !etcd_configured || should_reset_etcd {
             let _ = self.stop_service("etcd");
             let _ = self.wait_for_service_status("etcd", "inactive", 30);
             let _ = self.rm("/var/lib/etcd/");
@@ -779,12 +815,6 @@ impl ServerInteractor for RHELInteractor {
             self.chown("/var/lib/etcd", "etcd", "etcd")?;
             self.chmod("/var/lib/etcd", "700")?;
         }
-
-        let initial_cluster = pg_nodes
-            .iter()
-            .map(|n| format!("{}=http://{}:2380", n.name, n.internal_ip))
-            .collect::<Vec<_>>()
-            .join(",");
 
         let has_etcd_data = self
             .exists("/var/lib/etcd/default.etcd/member")

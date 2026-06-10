@@ -55,12 +55,12 @@ impl DebianInteractor {
                 return Ok(String::new());
             }
 
-            println!(
-                "error DebianInteractor#runw executing command:\n{}\n(exit code: {})\n",
-                cmd, out.exit_code
-            );
-            println!("STDOUT:\n{}\n", out.stdout);
-            println!("STDERR:\n{}\n", out.stderr);
+            // println!(
+            //     "error DebianInteractor#runw executing command:\n{}\n(exit code: {})\n",
+            //     cmd, out.exit_code
+            // );
+            // println!("STDOUT:\n{}\n", out.stdout);
+            // println!("STDERR:\n{}\n", out.stderr);
 
             anyhow::bail!(
                 "Command '{}' failed with exit code {}: {}",
@@ -737,8 +737,44 @@ impl ServerInteractor for DebianInteractor {
             println!("\tetcd is already installed.");
         }
 
+        let initial_cluster = pg_nodes
+            .iter()
+            .map(|n| format!("{}=http://{}:2380", n.name, n.internal_ip))
+            .collect::<Vec<_>>()
+            .join(",");
+
         let etcd_configured = self.exists("/etc/default/etcd").unwrap_or(false);
-        if !etcd_configured {
+
+        let mut should_reset_etcd = false;
+
+        if etcd_configured {
+            if let Ok(content) = self.read_file("/etc/default/etcd") {
+                let mut old_initial_cluster = None;
+                for line in content.lines() {
+                    let line = line.trim();
+                    if line.starts_with("ETCD_INITIAL_CLUSTER=") {
+                        let val = line
+                            .trim_start_matches("ETCD_INITIAL_CLUSTER=")
+                            .trim_matches('"');
+                        old_initial_cluster = Some(val.to_string());
+                        break;
+                    }
+                }
+
+                if let Some(old_cluster) = old_initial_cluster {
+                    if old_cluster != initial_cluster {
+                        println!(
+                            "\tetcd cluster members configuration changed (old: {}, new: {}), resetting etcd...",
+                            old_cluster, initial_cluster
+                        );
+
+                        should_reset_etcd = true;
+                    }
+                }
+            }
+        }
+
+        if !etcd_configured || should_reset_etcd {
             // Stop etcd cleanly and remove data directory; wait to ensure it is fully stopped
             let _ = self.stop_service("etcd");
             let _ = self.wait_for_service_status("etcd", "inactive", 30);
@@ -749,12 +785,6 @@ impl ServerInteractor for DebianInteractor {
             self.chown("/var/lib/etcd", "etcd", "etcd")?;
             self.chmod("/var/lib/etcd", "700")?;
         }
-
-        let initial_cluster = pg_nodes
-            .iter()
-            .map(|n| format!("{}=http://{}:2380", n.name, n.internal_ip))
-            .collect::<Vec<_>>()
-            .join(",");
 
         // Use "existing" if etcd member data already exists to avoid re-triggering
         // Patroni DCS re-bootstrap (and pg_basebackup) on every redeploy.

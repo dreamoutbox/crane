@@ -4,29 +4,34 @@
 name = "vps1"
 public_ip = "10.0.0.11"
 internal_ip = "10.0.0.11"
-ssh_ip = "127.0.0.1"
-ssh_port = 2221
 roles = ["app", "haproxy", "postgres", "redis"]
 user = "crane"
+ssh_ip = "127.0.0.1"
+ssh_port = 2221
 private_key = "keys/id_ed25519"
 sudo_pass = "${SUDO_PASS_VPS1}"
+
 
 [db.postgres]
 enabled = true
 version = "17"
 replica_pass = "replica"
-
 [db.postgres.backup]
-full_backup_every = "1d"
-incremental_backup_every = "1h"
-
-[[db.postgres.users]]
-user = "u1"
-password = "old-password"
-databases = ["mydb"]
-
+full_backup_every = "1h"
+incremental_backup_every = "15m"
 [db.postgres.mydb]
 name = "mydb"
+[[db.postgres.users]]
+# state = "present" / "absent"
+state = "present"
+user = "u1"
+password = "u1"
+databases = ["mydb"]
+[[db.postgres.users]]
+state = "present"
+user = "u2"
+password = "u2"
+databases = ["mydb"]
 
 
 [backup.s3]
@@ -39,7 +44,8 @@ secret_access_key = "miniominio"
 
 [domain]
 provider = "cloudflare"
-domain_name = "example.com"
+domain_name = "localhost"
+token = "${CLOUDFLARE_TOKEN}"
 
 
 [app]
