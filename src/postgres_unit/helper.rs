@@ -18,6 +18,19 @@ pub fn get_pg_version(config: &config::Config) -> String {
 pub fn pg_get_primary(config: &config::Config) -> anyhow::Result<Option<config::NodeConfig>> {
     let pg_nodes = config_get_nodes(config, "postgres");
 
+    if crate::config::postgres_is_minimal(config) {
+        if let Some(node) = pg_nodes.into_iter().next() {
+            if let Ok(interactor) = get_server_interactor(&node.name) {
+                if let Ok(output) = interactor.psql(Some("select pg_is_in_recovery();"), None, None, true) {
+                    if output.stdout.trim() == "f" {
+                        return Ok(Some(node));
+                    }
+                }
+            }
+        }
+        return Ok(None);
+    }
+
     for node in pg_nodes {
         if let Ok(interactor) = get_server_interactor(&node.name) {
             // First check via Patroni REST API

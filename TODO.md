@@ -10,6 +10,6 @@
 
 - [x] add curl install command instruction in README to download and install CLI from github releases.
 
-- [ ] add `minimal` in `[db.postgres]`. if true, don't deploy postgres cluster, setup replication, no setup Patroni/etcd. just deploy single postgres node.
+- [x] add `minimal` in `[db.postgres]`. if true, don't deploy postgres cluster, setup replication, no setup Patroni/etcd. just deploy single postgres node.
 
 - [ ] deploy from minimal to postgres cluster if `db.postgres.minimal` change from `false` to `true`, and vice versa. auto run data migration.

@@ -65,34 +65,68 @@ defaults
         .unwrap_or(false);
 
     if pg_enabled {
-        // Try to dynamically get postgres leader
-        let leader_node = match crate::postgres_unit::helper::pg_get_primary(config) {
-            Ok(Some(n)) => Some(n),
-            _ => {
-                // Fallback to first node with postgres role
-                config
-                    .nodes
-                    .iter()
-                    .find(|n| n.roles.contains(&"postgres".to_string()))
-                    .cloned()
-            }
-        };
-
-        if let Some(leader) = leader_node {
-            let follower_ips: Vec<String> = config
+        if crate::config::postgres_is_minimal(config) {
+            let pg_node = config
                 .nodes
                 .iter()
-                .filter(|n| {
-                    n.roles.contains(&"postgres".to_string()) && n.internal_ip != leader.internal_ip
-                })
-                .map(|n| n.internal_ip.clone())
-                .collect();
+                .find(|n| n.roles.contains(&"postgres".to_string()))
+                .cloned();
 
-            let mut pg_ips = vec![leader.internal_ip.clone()];
-            pg_ips.extend(follower_ips);
+            if let Some(node) = pg_node {
+                haproxy_cfg.push_str(&format!(
+                    r#"
+frontend postgres_primary_front
+    bind *:5000
+    mode tcp
+    option tcplog
+    default_backend postgres_primary_back
 
-            haproxy_cfg.push_str(
-                r#"
+backend postgres_primary_back
+    mode tcp
+    server postgres-node-1 {ip}:5432 check
+
+frontend postgres_replica_front
+    bind *:5001
+    mode tcp
+    option tcplog
+    default_backend postgres_replica_back
+
+backend postgres_replica_back
+    mode tcp
+    server postgres-node-1 {ip}:5432 check
+"#,
+                    ip = node.internal_ip
+                ));
+            }
+        } else {
+            // Try to dynamically get postgres leader
+            let leader_node = match crate::postgres_unit::helper::pg_get_primary(config) {
+                Ok(Some(n)) => Some(n),
+                _ => {
+                    // Fallback to first node with postgres role
+                    config
+                        .nodes
+                        .iter()
+                        .find(|n| n.roles.contains(&"postgres".to_string()))
+                        .cloned()
+                }
+            };
+
+            if let Some(leader) = leader_node {
+                let follower_ips: Vec<String> = config
+                    .nodes
+                    .iter()
+                    .filter(|n| {
+                        n.roles.contains(&"postgres".to_string()) && n.internal_ip != leader.internal_ip
+                    })
+                    .map(|n| n.internal_ip.clone())
+                    .collect();
+
+                let mut pg_ips = vec![leader.internal_ip.clone()];
+                pg_ips.extend(follower_ips);
+
+                haproxy_cfg.push_str(
+                    r#"
 frontend postgres_primary_front
     bind *:5000
     mode tcp
@@ -105,18 +139,18 @@ backend postgres_primary_back
     http-check expect status 200
     default-server inter 3s fall 3 rise 2 check port 8008 on-marked-down shutdown-sessions
 "#,
-            );
+                );
 
-            for (idx, ip) in pg_ips.iter().enumerate() {
-                haproxy_cfg.push_str(&format!(
-                    "    server postgres-node-{} {}:5432 check\n",
-                    idx + 1,
-                    ip
-                ));
-            }
+                for (idx, ip) in pg_ips.iter().enumerate() {
+                    haproxy_cfg.push_str(&format!(
+                        "    server postgres-node-{} {}:5432 check\n",
+                        idx + 1,
+                        ip
+                    ));
+                }
 
-            haproxy_cfg.push_str(
-                r#"
+                haproxy_cfg.push_str(
+                    r#"
 frontend postgres_replica_front
     bind *:5001
     mode tcp
@@ -130,14 +164,15 @@ backend postgres_replica_back
     http-check expect status 200
     default-server inter 3s fall 3 rise 2 check port 8008
 "#,
-            );
+                );
 
-            for (idx, ip) in pg_ips.iter().enumerate() {
-                haproxy_cfg.push_str(&format!(
-                    "    server postgres-node-{} {}:5432 check\n",
-                    idx + 1,
-                    ip
-                ));
+                for (idx, ip) in pg_ips.iter().enumerate() {
+                    haproxy_cfg.push_str(&format!(
+                        "    server postgres-node-{} {}:5432 check\n",
+                        idx + 1,
+                        ip
+                    ));
+                }
             }
         }
     }

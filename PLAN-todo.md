@@ -22,14 +22,14 @@ Repo notes: `PostgresConfig` in `src/config.rs`; cluster setup in `src/postgres_
   - [x] Document in README and SPEC.md.
 - Done when: config tests pass; existing postgres configs still parse unchanged.
 
-### Phase 3: Deploy single postgres node when minimal [STATUS: TODO]
+### Phase 3: Deploy single postgres node when minimal [STATUS: DONE]
 - Goal: `minimal = true` deploys plain PostgreSQL, with no Patroni, etcd, or replication.
 - Tasks:
-  - [ ] New `src/postgres_unit/setup_minimal.rs` (own function, no change to the cluster path): install postgres, init data dir, configure listen address and `pg_hba`, enable the systemd `postgresql` service.
-  - [ ] Reuse `setup_postgres_primary` for DBs and users. Check what it assumes about Patroni (the leader lookup via `pg_get_primary`, restarts) and abstract it if needed.
-  - [ ] Branch in `postgres_setup_wrapper` (or in `deploy.rs`) on the minimal helper.
-  - [ ] Make dependents mode-aware: HAProxy config (route to the single node directly), app env URIs (`POSTGRES_*_LEADER`/`FOLLOWER` both point to the node), status/logs/promote/demote/reset commands (reject or adapt), and the backup/restore scripts (they currently assume Patroni).
-  - [ ] Skip etcd setup and the firewall rules for etcd/Patroni ports in minimal mode.
+  - [x] New `src/postgres_unit/setup_minimal.rs` (own function, no change to the cluster path): install postgres, init data dir, configure listen address and `pg_hba`, enable the systemd `postgresql` service.
+  - [x] Reuse `setup_postgres_primary` for DBs and users. Check what it assumes about Patroni (the leader lookup via `pg_get_primary`, restarts) and abstract it if needed.
+  - [x] Branch in `postgres_setup_wrapper` (or in `deploy.rs`) on the minimal helper.
+  - [x] Make dependents mode-aware: HAProxy config (route to the single node directly), app env URIs (`POSTGRES_*_LEADER`/`FOLLOWER` both point to the node), status/logs/promote/demote/reset commands (reject or adapt), and the backup/restore scripts (they currently assume Patroni).
+  - [x] Skip etcd setup and the firewall rules for etcd/Patroni ports in minimal mode.
 - Done when: `cargo build` has no warnings, config tests pass, and the user manually verifies minimal deploy (Patroni/etcd absent, DB/user exist, backup works).
 
 ### Phase 4: Migration between minimal and cluster [STATUS: TODO]

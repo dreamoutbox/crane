@@ -13,6 +13,10 @@ use crate::{
 };
 
 pub async fn postgres_setup_wrapper(config: &config::Config) -> Result<(), anyhow::Error> {
+    if crate::config::postgres_is_minimal(config) {
+        return crate::postgres_unit::setup_minimal::setup_postgres_minimal(config).await;
+    }
+
     let pg_version = get_pg_version(&config);
     let replica_pass = get_pg_replica_pass(&config);
 

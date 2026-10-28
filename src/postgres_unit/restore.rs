@@ -200,9 +200,11 @@ pub async fn postgres_restore(
         handle.await??;
     }
 
-    // 2. Clear DCS (etcd) keys for the cluster to prevent conflicts
-    println!("\nClearing Etcd DCS cluster state...");
-    etcd_clear_dcs_state(interactor);
+    // 2. Clear DCS (etcd) keys for the cluster to prevent conflicts (skipped in minimal mode)
+    if !crate::config::postgres_is_minimal(config) {
+        println!("\nClearing Etcd DCS cluster state...");
+        etcd_clear_dcs_state(interactor);
+    }
 
     // 3. Clear existing data directory on all nodes
     let mut handles = vec![];
@@ -470,6 +472,40 @@ pub async fn postgres_restore(
             );
         }
         println!("PITR recovery complete and database promoted!");
+    }
+
+    if crate::config::postgres_is_minimal(config) {
+        println!("Starting PostgreSQL on node {}...", primary_node.name);
+        interactor.enable_service("postgresql")?;
+        interactor.restart_service("postgresql")?;
+
+        let mut primary_ready = false;
+        let start_time = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(300);
+        while start_time.elapsed() < timeout {
+            if let Ok(res) = interactor.psql(Some("SELECT 1;"), None, None, true) {
+                if res.stdout.trim() == "1" {
+                    primary_ready = true;
+                    break;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+
+        if !primary_ready {
+            anyhow::bail!("Timeout waiting for standalone PostgreSQL to start after restore");
+        }
+
+        if pitr_time.is_some() {
+            let pitr_conf_path = format!("{}/postgresql.auto.conf", pgdata_dir);
+            let _ = interactor.cmd(&format!(
+                "sudo -u postgres sed -i '/restore_command/d;/recovery_target/d' {}",
+                pitr_conf_path
+            ));
+            let _ = interactor.psql(Some("SELECT pg_reload_conf();"), None, None, false);
+        }
+
+        return Ok(());
     }
 
     // Start Patroni on the primary node only

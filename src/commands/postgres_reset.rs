@@ -26,26 +26,38 @@ pub fn run_postgres_reset_cmd(config: &config::Config, force: bool) -> anyhow::R
 
     let pg_version = get_pg_version(config);
 
-    // 1. Stop Patroni on all nodes
-    println!("\nStopping Patroni on all PostgreSQL nodes...");
-    for node in &pg_nodes {
-        println!("Connecting to node {}...", node.name);
-        let interactor = get_server_interactor(&node.name)?;
+    if crate::config::postgres_is_minimal(config) {
+        println!("\nStopping PostgreSQL on standalone node...");
+        for node in &pg_nodes {
+            println!("Connecting to node {}...", node.name);
+            let interactor = get_server_interactor(&node.name)?;
 
-        println!("\tStopping Patroni service...");
-        let _ = interactor.stop_service("patroni");
+            println!("\tStopping PostgreSQL service...");
+            let _ = interactor.stop_service("postgresql");
+            let _ = interactor.kill_postgres_processes();
+        }
+    } else {
+        // 1. Stop Patroni on all nodes
+        println!("\nStopping Patroni on all PostgreSQL nodes...");
+        for node in &pg_nodes {
+            println!("Connecting to node {}...", node.name);
+            let interactor = get_server_interactor(&node.name)?;
 
-        // Also kill any remaining postgres processes
-        let _ = interactor.kill_postgres_processes();
-    }
+            println!("\tStopping Patroni service...");
+            let _ = interactor.stop_service("patroni");
 
-    // 2. Clear DCS (etcd) keys for the cluster to prevent conflicts
-    if let Some(first_node) = pg_nodes.first() {
-        // run on first node
-        let interactor = get_server_interactor(&first_node.name)?;
+            // Also kill any remaining postgres processes
+            let _ = interactor.kill_postgres_processes();
+        }
 
-        println!("Clearing Etcd DCS cluster state...");
-        etcd_clear_dcs_state(&*interactor);
+        // 2. Clear DCS (etcd) keys for the cluster to prevent conflicts
+        if let Some(first_node) = pg_nodes.first() {
+            // run on first node
+            let interactor = get_server_interactor(&first_node.name)?;
+
+            println!("Clearing Etcd DCS cluster state...");
+            etcd_clear_dcs_state(&*interactor);
+        }
     }
 
     // 3. Remove PostgreSQL data directory on all nodes

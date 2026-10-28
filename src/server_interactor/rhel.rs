@@ -70,7 +70,7 @@ impl RHELInteractor {
 
     fn resolve_service_name(&self, service_name: &str) -> String {
         if service_name == "postgresql" {
-            for v in &["17", "16", "15", "14"] {
+            for v in &["19", "18", "17", "16", "15", "14"] {
                 let path = format!("/usr/lib/systemd/system/postgresql-{}.service", v);
                 if self.exists(&path).unwrap_or(false) {
                     return format!("postgresql-{}", v);

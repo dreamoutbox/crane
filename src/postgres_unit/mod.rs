@@ -4,6 +4,7 @@ pub mod entity;
 pub mod helper;
 pub mod restore;
 pub mod setup;
+pub mod setup_minimal;
 pub mod setup_postgres_primary;
 
 pub const PYTHON_BACKUP_SCRIPT: &str = include_str!("backup.py");

@@ -6,6 +6,10 @@ pub fn run_postgres_promote_cmd(
     config: &crate::config::Config,
     target_node: &str,
 ) -> anyhow::Result<()> {
+    if crate::config::postgres_is_minimal(config) {
+        anyhow::bail!("Cannot promote node: PostgreSQL is running in minimal standalone mode (no cluster/replicas)");
+    }
+
     let target_conf_node = find_node_config(&config, target_node)
         .ok_or_else(|| anyhow::anyhow!("Node '{}' not found in configuration", target_node))?;
 
