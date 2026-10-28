@@ -143,6 +143,8 @@ provider = "cloudflare"
 tls_email = "dev@example.com"
 
 [db.postgres]
+enabled = true
+minimal = false  # set true for standalone single-node (no Patroni/etcd cluster)
 version = "16"
 name = "myapp_db"
 user = "deployman"
@@ -321,11 +323,14 @@ deploystate/
 
 ---
 
-## Postgres Multi-Node Replication
+## Postgres Multi-Node Replication & Minimal Mode
 
-- First node with role `postgres` = **primary**: crane configures `postgresql.conf` (WAL level, max_wal_senders), `pg_hba.conf` (replication slot for each replica)
-- Subsequent postgres nodes = **replicas**: crane runs `pg_basebackup`, writes `recovery.conf` / `postgresql.auto.conf` (v12+), starts in standby mode
-- Replica promotion on failure: `crane db postgres promote --node <host>` (manual trigger in v1, auto in v2)
+- When `minimal = true`: crane deploys a standalone single-node PostgreSQL instance on the single node with the `postgres` role, bypassing Patroni, etcd, and replication.
+- When `minimal = false` (default):
+  - Automated cluster topology with Patroni and etcd.
+  - First node with role `postgres` = **primary**: crane configures `postgresql.conf` (WAL level, max_wal_senders), `pg_hba.conf` (replication slot for each replica)
+  - Subsequent postgres nodes = **replicas**: crane runs `pg_basebackup`, writes `recovery.conf` / `postgresql.auto.conf` (v12+), starts in standby mode
+  - Replica promotion on failure: `crane db postgres promote --node <host>` (manual trigger in v1, auto in v2)
 
 ---
 

@@ -69,3 +69,170 @@ token = "${CLOUDFLARE_TOKEN}"
     assert!(config.domain.unwrap().enabled);
     assert!(config.backup.unwrap().s3.unwrap().enabled);
 }
+
+#[test]
+fn test_postgres_minimal_default_false() {
+    let toml_content = r#"
+[[nodes]]
+name = "vps1"
+public_ip = "10.0.0.11"
+internal_ip = "10.0.0.11"
+ssh_ip = "127.0.0.1"
+ssh_port = 2221
+roles = ["app", "postgres"]
+ssh_user = "crane"
+private_key = "keys/id_ed25519"
+
+[[nodes]]
+name = "vps2"
+public_ip = "10.0.0.12"
+internal_ip = "10.0.0.12"
+ssh_ip = "127.0.0.1"
+ssh_port = 2222
+roles = ["postgres"]
+ssh_user = "crane"
+private_key = "keys/id_ed25519"
+
+[app.myapp]
+name = "myapp"
+deploy_dir = "./examples"
+entrypoint = "./myapp"
+deploy_user = "deployman"
+port_start = 3000
+instances = 1
+
+[db.postgres]
+enabled = true
+version = "18"
+replica_pass = "secret"
+"#;
+
+    let config: crane::config::Config = toml::from_str(toml_content).unwrap();
+    let pg = config.db.as_ref().unwrap().postgres.as_ref().unwrap();
+    assert!(!pg.minimal, "minimal should default to false when omitted");
+    assert!(!crane::config::postgres_is_minimal(&config));
+    assert!(crane::config::validate_config(&config).is_ok());
+}
+
+#[test]
+fn test_postgres_minimal_true_single_node() {
+    let toml_content = r#"
+[[nodes]]
+name = "vps1"
+public_ip = "10.0.0.11"
+internal_ip = "10.0.0.11"
+ssh_ip = "127.0.0.1"
+ssh_port = 2221
+roles = ["app", "postgres"]
+ssh_user = "crane"
+private_key = "keys/id_ed25519"
+
+[app.myapp]
+name = "myapp"
+deploy_dir = "./examples"
+entrypoint = "./myapp"
+deploy_user = "deployman"
+port_start = 3000
+instances = 1
+
+[db.postgres]
+enabled = true
+minimal = true
+version = "18"
+replica_pass = "secret"
+"#;
+
+    let config: crane::config::Config = toml::from_str(toml_content).unwrap();
+    let pg = config.db.as_ref().unwrap().postgres.as_ref().unwrap();
+    assert!(pg.minimal, "minimal should be parsed as true");
+    assert!(crane::config::postgres_is_minimal(&config));
+    assert!(crane::config::validate_config(&config).is_ok());
+}
+
+#[test]
+fn test_postgres_minimal_invalid_multi_node() {
+    let toml_content = r#"
+[[nodes]]
+name = "vps1"
+public_ip = "10.0.0.11"
+internal_ip = "10.0.0.11"
+ssh_ip = "127.0.0.1"
+ssh_port = 2221
+roles = ["app", "postgres"]
+ssh_user = "crane"
+private_key = "keys/id_ed25519"
+
+[[nodes]]
+name = "vps2"
+public_ip = "10.0.0.12"
+internal_ip = "10.0.0.12"
+ssh_ip = "127.0.0.1"
+ssh_port = 2222
+roles = ["postgres"]
+ssh_user = "crane"
+private_key = "keys/id_ed25519"
+
+[app.myapp]
+name = "myapp"
+deploy_dir = "./examples"
+entrypoint = "./myapp"
+deploy_user = "deployman"
+port_start = 3000
+instances = 1
+
+[db.postgres]
+enabled = true
+minimal = true
+version = "18"
+replica_pass = "secret"
+"#;
+
+    let config: crane::config::Config = toml::from_str(toml_content).unwrap();
+    let res = crane::config::validate_config(&config);
+    assert!(res.is_err(), "minimal with multiple postgres nodes should fail validation");
+    let err = res.unwrap_err().to_string();
+    assert!(
+        err.contains("minimal mode requires exactly 1 node with role 'postgres'"),
+        "error message should explain single-node requirement, got: {}",
+        err
+    );
+}
+
+#[test]
+fn test_postgres_minimal_invalid_zero_node() {
+    let toml_content = r#"
+[[nodes]]
+name = "vps1"
+public_ip = "10.0.0.11"
+internal_ip = "10.0.0.11"
+ssh_ip = "127.0.0.1"
+ssh_port = 2221
+roles = ["app"]
+ssh_user = "crane"
+private_key = "keys/id_ed25519"
+
+[app.myapp]
+name = "myapp"
+deploy_dir = "./examples"
+entrypoint = "./myapp"
+deploy_user = "deployman"
+port_start = 3000
+instances = 1
+
+[db.postgres]
+enabled = true
+minimal = true
+version = "18"
+replica_pass = "secret"
+"#;
+
+    let config: crane::config::Config = toml::from_str(toml_content).unwrap();
+    let res = crane::config::validate_config(&config);
+    assert!(res.is_err(), "minimal with zero postgres nodes should fail validation");
+    let err = res.unwrap_err().to_string();
+    assert!(
+        err.contains("minimal mode requires exactly 1 node with role 'postgres'"),
+        "error message should explain single-node requirement, got: {}",
+        err
+    );
+}

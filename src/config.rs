@@ -115,6 +115,8 @@ pub struct DbConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub struct PostgresConfig {
     pub enabled: bool,
+    #[serde(default)]
+    pub minimal: bool,
     pub version: String,
     pub replica_pass: String,
     pub backup: Option<PostgresBackupSchedule>,
@@ -303,6 +305,43 @@ pub fn validate_config_paths<P: AsRef<Path>>(config: &Config, config_file_path: 
     Ok(())
 }
 
+/// Validates configuration rules and topology constraints.
+///
+/// Ensures that when `[db.postgres]` is enabled in minimal mode (`minimal = true`),
+/// exactly one node in `config.nodes` has the `postgres` role.
+///
+/// # Arguments
+/// * `config` - Reference to loaded configuration
+///
+/// # Returns
+/// `Ok(())` if configuration passes validation, or `Err` with descriptive message.
+///
+/// # Example
+/// ```no_run
+/// use crane::config::{Config, validate_config};
+///
+/// # fn test(cfg: &Config) -> anyhow::Result<()> {
+/// validate_config(cfg)?;
+/// # Ok(())
+/// # }
+/// ```
+pub fn validate_config(config: &Config) -> anyhow::Result<()> {
+    if postgres_is_minimal(config) {
+        let pg_nodes_count = config
+            .nodes
+            .iter()
+            .filter(|n| n.roles.iter().any(|r| r == "postgres"))
+            .count();
+        if pg_nodes_count != 1 {
+            anyhow::bail!(
+                "[db.postgres] minimal mode requires exactly 1 node with role 'postgres', but found {}",
+                pg_nodes_count
+            );
+        }
+    }
+    Ok(())
+}
+
 pub fn read_config_toml_file_with_env<P: AsRef<Path>, E: AsRef<Path>>(
     path: P,
     env_path: Option<E>,
@@ -315,6 +354,7 @@ pub fn read_config_toml_file_with_env<P: AsRef<Path>, E: AsRef<Path>>(
     let content = std::fs::read_to_string(path)?;
     let resolved_content = resolve_placeholders(&content, &dot_env)?;
     let config: Config = toml::from_str(&resolved_content)?;
+    validate_config(&config)?;
 
     // Initialize/update the global server interactor registry with the loaded config
     crate::server_interactor::init_registry(config.clone());
@@ -511,5 +551,35 @@ pub fn s3_backup_enabled(config: &Config) -> bool {
         .as_ref()
         .and_then(|b| b.s3.as_ref())
         .map(|s| s.enabled)
+        .unwrap_or(false)
+}
+
+/// Checks whether PostgreSQL minimal mode is active.
+///
+/// When minimal mode is enabled, PostgreSQL runs as a standalone single-node service
+/// without Patroni or etcd high-availability clustering.
+///
+/// # Arguments
+/// * `config` - Reference to loaded configuration
+///
+/// # Returns
+/// `true` if `[db.postgres]` is configured, `enabled = true`, and `minimal = true`, otherwise `false`.
+///
+/// # Example
+/// ```no_run
+/// use crane::config::{Config, postgres_is_minimal};
+///
+/// # fn check(cfg: &Config) {
+/// if postgres_is_minimal(cfg) {
+///     println!("Postgres minimal mode active");
+/// }
+/// # }
+/// ```
+pub fn postgres_is_minimal(config: &Config) -> bool {
+    config
+        .db
+        .as_ref()
+        .and_then(|db| db.postgres.as_ref())
+        .map(|pg| pg.enabled && pg.minimal)
         .unwrap_or(false)
 }

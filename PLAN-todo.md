@@ -13,13 +13,13 @@ Repo notes: `PostgresConfig` in `src/config.rs`; cluster setup in `src/postgres_
   - [x] Run shellcheck on the script.
 - Done when: script runs in a clean Docker container and `crane --version` works; README renders the command; no Rust changes, build unaffected.
 
-### Phase 2: `minimal` config option (parse only) [STATUS: TODO]
+### Phase 2: `minimal` config option (parse only) [STATUS: DONE]
 - Goal: `[db.postgres] minimal` parses with default `false`.
 - Tasks:
-  - [ ] Add `minimal: bool` with `#[serde(default)]` to `PostgresConfig`; add a helper `postgres_is_minimal(config)` next to existing config getters.
-  - [ ] Validation: minimal requires exactly one node with the `postgres` role (clear error otherwise).
-  - [ ] Extend `tests/config/parse_config_test.rs` (default false, true, invalid multi-node).
-  - [ ] Document in README and SPEC.md.
+  - [x] Add `minimal: bool` with `#[serde(default)]` to `PostgresConfig`; add a helper `postgres_is_minimal(config)` next to existing config getters.
+  - [x] Validation: minimal requires exactly one node with the `postgres` role (clear error otherwise).
+  - [x] Extend `tests/config/parse_config_test.rs` (default false, true, invalid multi-node).
+  - [x] Document in README and SPEC.md.
 - Done when: config tests pass; existing postgres configs still parse unchanged.
 
 ### Phase 3: Deploy single postgres node when minimal [STATUS: TODO]

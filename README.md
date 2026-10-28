@@ -137,6 +137,7 @@
    
    [db.postgres]
    enabled = true
+   # minimal = false # Optional: set true for standalone single-node postgres (no Patroni/etcd cluster)
    version = "17"
    replica_pass = "replica"
    
