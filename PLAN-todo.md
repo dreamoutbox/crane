@@ -5,12 +5,12 @@ Order: 1 is independent; 3 depends on 2.
 
 Repo notes: `PostgresConfig` in `src/config.rs`; cluster setup in `src/postgres_unit/setup.rs` (`postgres_setup_wrapper`, Patroni/etcd barriers), called from `src/commands/deploy.rs`; release assets built by `.github/workflows/release.yml` as `crane-<tag>-<target>.tar.gz` (`.zip` for Windows). Integration tests (`tests/postgres/*`) are omitted by request; the user tests manually. Config tests in `tests/config/*`: run one test at a time, e.g. `cargo nextest run --test config --test-threads 1 <test_name> --no-capture`.
 
-### Phase 1: README curl install [STATUS: TODO]
+### Phase 1: README curl install [STATUS: DONE]
 - Goal: One-line CLI install from GitHub releases documented.
 - Tasks:
-  - [ ] Add an install script (e.g. `install.sh` at repo root) that detects OS/arch, maps to release targets (linux gnu/musl x86_64, aarch64, macOS x86_64/arm64), resolves latest tag (or `CRANE_VERSION`), downloads `crane-<tag>-<target>.tar.gz`, extracts, installs to `/usr/local/bin` or `~/.local/bin`.
-  - [ ] Replace "Compile or download" in README Quick Start step 1 with `curl -fsSL .../install.sh | sh`, plus manual download and version-pin examples; note Windows uses the `.zip`.
-  - [ ] Run shellcheck on the script.
+  - [x] Add an install script (e.g. `install.sh` at repo root) that detects OS/arch, maps to release targets (linux gnu/musl x86_64, aarch64, macOS x86_64/arm64), resolves latest tag (or `CRANE_VERSION`), downloads `crane-<tag>-<target>.tar.gz`, extracts, installs to `/usr/local/bin` or `~/.local/bin`.
+  - [x] Replace "Compile or download" in README Quick Start step 1 with `curl -fsSL .../install.sh | sh`, plus manual download and version-pin examples; note Windows uses the `.zip`.
+  - [x] Run shellcheck on the script.
 - Done when: script runs in a clean Docker container and `crane --version` works; README renders the command; no Rust changes, build unaffected.
 
 ### Phase 2: `minimal` config option (parse only) [STATUS: TODO]

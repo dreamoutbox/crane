@@ -18,7 +18,18 @@
 ## Quick Start
 
 1. **Install Crane**:
-   Compile or download the `crane` binary and place it in your `$PATH`.
+
+   Install the precompiled binary via `curl`:
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/dreamoutbox/crane/master/install.sh | sh
+   ```
+
+   To install a specific version:
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/dreamoutbox/crane/master/install.sh | CRANE_VERSION=0.5.4 sh
+   ```
+
+   You can also download archives directly from [GitHub Releases](https://github.com/dreamoutbox/crane/releases) (Windows users can download the `crane-<version>-x86_64-pc-windows-msvc.zip` release).
 
 2. **Scaffold Configuration**:
    Create a `crane.toml` configuration and `.env` secrets file in your repository:

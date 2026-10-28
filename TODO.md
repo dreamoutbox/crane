@@ -8,7 +8,7 @@
 
 - [x] add `enabled` option in TOML config `[backup.s3]`. if disabled ignore backup.
 
-- [ ] add curl install command instruction in README to download and install CLI from github releases.
+- [x] add curl install command instruction in README to download and install CLI from github releases.
 
 - [ ] add `minimal` in `[db.postgres]`. if true, don't deploy postgres cluster, setup replication, no setup Patroni/etcd. just deploy single postgres node.
 
