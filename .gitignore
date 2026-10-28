@@ -16,3 +16,9 @@ debug_output/*
 haproxy.cfg
 demo/myapp.exe
 crane-*.zip
+
+examples/keystest/
+examples/keys/
+keys*/
+
+examples-local/

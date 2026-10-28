@@ -2,14 +2,15 @@
 
 [[nodes]]
 name = "vps1"
-public_ip = "10.0.0.11"
-internal_ip = "10.0.0.11"
-roles = ["app", "haproxy", "postgres", "redis"]
-user = "crane"
+ssh_user = "root"
 ssh_ip = "127.0.0.1"
 ssh_port = 2221
+public_ip = "127.0.0.1"
+internal_ip = "10.0.0.1"
+roles = ["app", "haproxy", "postgres", "redis"]
 private_key = "keys/id_ed25519"
 sudo_pass = "${SUDO_PASS_VPS1}"
+firewall_expose_port_range = ["3000-3100", "8080"]
 
 
 [[users]]
@@ -18,12 +19,13 @@ groups = ["www"]
 ssh_authorized_keys = ["keys/id_ed25519.pub"]
 private_key = "keys/id_ed25519"
 
+
 [app.myapp]
 name = "myapp"
 # Setup Info
-dependencies = ["openssl-libs", "ca-certificates"]
+dependencies = ["libssl3", "ca-certificates"]
 # Deploy Info
-deploy_dir = "./demo"
+deploy_dir = "./examples"
 entrypoint = "./myapp"
 pre_deploy_script = "./before-deploy.sh"
 deploy_user = "deployman"
@@ -50,12 +52,12 @@ user = "u1"
 
 [db.postgres]
 enabled = true
-version = "17"
+version = "18"
 replica_pass = "replica"
 
 [db.postgres.backup]
 full_backup_every = "1h"
-incremental_backup_every = "15m"
+incremental_backup_every = "30m"
 
 [db.postgres.mydb]
 name = "mydb"
@@ -68,6 +70,7 @@ databases = ["mydb"]
 
 
 [backup.s3]
+enabled = false
 bucket = "crane1"
 region = "us-east-1"
 endpoint = "http://s3:9000"
@@ -76,6 +79,7 @@ secret_access_key = "${S3_SECRET_ACCESS_KEY}"
 
 
 [domain]
+enabled = false
 provider = "cloudflare"
 domain_name = "localhost"
 token = "${CLOUDFLARE_TOKEN}"
