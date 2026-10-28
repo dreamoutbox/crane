@@ -18,7 +18,12 @@ pub async fn postgres_setup_wrapper(config: &config::Config) -> Result<(), anyho
 
     let schedule = get_postgres_backup_schedule_config(config);
     let s3_config = if schedule.is_some() {
-        Some(crate::s3::get_s3_config(config)?)
+        if crate::config::s3_backup_enabled(config) {
+            Some(crate::s3::get_s3_config(config)?)
+        } else {
+            println!("\tS3 backup is disabled in [backup.s3]. Skipping automated backup cron setup.");
+            None
+        }
     } else {
         None
     };

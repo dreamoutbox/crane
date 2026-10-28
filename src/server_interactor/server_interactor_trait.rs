@@ -81,7 +81,7 @@ pub trait ServerInteractor {
         source: Option<&str>,
     ) -> anyhow::Result<()>;
     fn firewall_allow_source(&self, source: &str) -> anyhow::Result<()>;
-    fn setup_firewall(&self, config: &Config) -> anyhow::Result<()>;
+    fn setup_firewall(&self, config: &Config, node: &crate::config::NodeConfig) -> anyhow::Result<()>;
 
     // UTILITIES & HELPER METHODS
     fn user_exists(&self, username: &str) -> anyhow::Result<bool>;

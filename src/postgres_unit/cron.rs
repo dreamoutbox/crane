@@ -12,10 +12,16 @@ pub fn configure_postgres_cron_backup(
     s3_config: &Option<crate::s3::S3Config>,
 ) -> anyhow::Result<()> {
     if let Some(schedule) = schedule {
-        // Resolve S3Config
-        let s3_config = s3_config.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("S3 backup configuration [backup.s3] is missing in crane.toml")
-        })?;
+        // If s3_config is None, clean up any existing cron file and return
+        let s3_config = match s3_config.as_ref() {
+            Some(s) => s,
+            None => {
+                if interactor.exists("/etc/cron.d/postgres-backup")? {
+                    interactor.rm("/etc/cron.d/postgres-backup")?;
+                }
+                return Ok(());
+            }
+        };
 
         // Ensure directories exist
         let pg_backup_dir = interactor.server_paths().pg_backup_dir;

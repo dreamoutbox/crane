@@ -332,9 +332,9 @@ pub fn run_status_command(
         println!("{}:", app.name);
 
         // Determine external URL
-        let external_url = if app.domain.is_some() {
-            format!("https://{}", app.domain.as_ref().unwrap())
-        } else if let Some(ref d) = config.domain {
+        let external_url = if let Some(d) = crate::config::app_domain(config, app) {
+            format!("https://{}", d)
+        } else if let Some(d) = crate::config::enabled_domain(config) {
             format!("https://{}", d.domain_name)
         } else {
             // Find first app node

@@ -879,13 +879,30 @@ ETCD_ADVERTISE_CLIENT_URLS="http://{internal_ip}:2379"
         Ok(())
     }
 
-    fn setup_firewall(&self, config: &Config) -> anyhow::Result<()> {
+    fn setup_firewall(&self, config: &Config, node: &crate::config::NodeConfig) -> anyhow::Result<()> {
         let mut allow_sources = String::new();
-        for node in &config.nodes {
+        for n in &config.nodes {
             allow_sources.push_str(&format!(
                 "firewall-cmd --permanent --zone=trusted --add-source={}\n",
-                node.internal_ip
+                n.internal_ip
             ));
+        }
+
+        let mut exposed_ports = String::new();
+        if let Some(ref port_ranges) = node.firewall_expose_port_range {
+            for range in port_ranges {
+                if range.start == range.end {
+                    exposed_ports.push_str(&format!(
+                        "firewall-cmd --permanent --add-port={}/tcp\n",
+                        range.start
+                    ));
+                } else {
+                    exposed_ports.push_str(&format!(
+                        "firewall-cmd --permanent --add-port={}-{}/tcp\n",
+                        range.start, range.end
+                    ));
+                }
+            }
         }
 
         let script_content = format!(
@@ -915,12 +932,14 @@ firewall-cmd --permanent --add-port=22/tcp
 firewall-cmd --permanent --add-port=80/tcp
 firewall-cmd --permanent --add-port=443/tcp
 
-# 4. Allow all incoming traffic from internal IPs of all nodes in the cluster
+# 4. Allow exposed port ranges configured on this node
 {}
-# 5. Reload firewall to apply rules
+# 5. Allow all incoming traffic from internal IPs of all nodes in the cluster
+{}
+# 6. Reload firewall to apply rules
 firewall-cmd --reload
 "#,
-            allow_sources
+            exposed_ports, allow_sources
         );
 
         self.mkdir("/tmp/crane")?;

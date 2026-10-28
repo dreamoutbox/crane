@@ -16,6 +16,10 @@ pub fn get_s3_config(config: &crate::config::Config) -> anyhow::Result<S3Config>
             anyhow::anyhow!("S3 backup configuration [backup.s3] is missing in crane.toml")
         })?;
 
+    if !s3_config.enabled {
+        anyhow::bail!("S3 backup is disabled ([backup.s3] enabled = false)");
+    }
+
     let bucket = s3_config.bucket.clone();
 
     let region = s3_config

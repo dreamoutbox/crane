@@ -11,6 +11,7 @@ These ports must be allowed from any source globally to ensure public client acc
 | **22** | TCP | SSH | Used for deployment, server management, and admin access. |
 | **80** | TCP | HTTP | Inbound web traffic, managed by HAProxy. Routes traffic to app instances and handles HTTP-to-HTTPS redirection. |
 | **443** | TCP | HTTPS | Inbound secure web traffic, managed by HAProxy. Terminates TLS using Let's Encrypt certificates. |
+| **Custom** | TCP | Node Expose Ports | Optional user-configured port ranges defined via `firewall_expose_port_range` in `[[nodes]]` (e.g. `["3000-3100", "8080"]`). |
 
 ---
 

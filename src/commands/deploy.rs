@@ -46,7 +46,7 @@ pub async fn run_deploy_command(
         let handle = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
             println!(
                 "Installing dependencies on {}@{} (port: {}) {:?}",
-                node.user, node.name, node.ssh_port, all_deps
+                node.ssh_user, node.name, node.ssh_port, all_deps
             );
 
             let interactor = get_server_interactor(&node.name)?;
@@ -71,7 +71,7 @@ pub async fn run_deploy_command(
     for node in &config.nodes {
         println!("\tSetting up firewall on {}...", node.name);
         let interactor = get_server_interactor(&node.name)?;
-        interactor.setup_firewall(config)?;
+        interactor.setup_firewall(config, node)?;
     }
 
     // Install postgres database cluster if enabled
@@ -147,7 +147,9 @@ pub async fn run_deploy_command(
     println!("\nDEPLOY COMPLETE ({} secs)\n", deploy_elapse.as_secs());
 
     if !no_dns_update {
-        if let Err(e) = crate::cloudflare_unit::setup::update_dns(&config, None).await {
+        if crate::config::enabled_domain(&config).is_none() {
+            println!("Domain management is disabled. Skipping DNS update.");
+        } else if let Err(e) = crate::cloudflare_unit::setup::update_dns(&config, None).await {
             eprintln!("Failed to update DNS records: {}", e);
         }
     }
@@ -262,7 +264,7 @@ fn inner_deploy_single_app(
             "\n[{}] Deploying to node {}: {}@{} (port: {})",
             app.name,
             node.name,
-            node.user,
+            node.ssh_user,
             node.ssh_ip,
             node.ssh_port
         );
@@ -431,9 +433,7 @@ fn inner_deploy_single_app(
         }
 
         // 5b. Update /etc/hosts on the VPS so apps can resolve each other by service name
-        let global_domain = config
-            .domain
-            .as_ref()
+        let global_domain = crate::config::enabled_domain(config)
             .map(|d| d.domain_name.as_str())
             .unwrap_or("localhost");
 
@@ -441,7 +441,7 @@ fn inner_deploy_single_app(
             .app
             .values()
             .filter_map(|a| {
-                let dom = a.domain.as_deref().unwrap_or(&a.name);
+                let dom = crate::config::app_domain(config, a).unwrap_or(&a.name);
                 // Strip the shared domain suffix to get just the service label
                 let hostname = if dom.ends_with(&format!(".{}", global_domain)) {
                     dom.trim_end_matches(&format!(".{}", global_domain))

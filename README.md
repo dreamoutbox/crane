@@ -31,18 +31,19 @@
    public_ip = "10.0.0.11"
    internal_ip = "10.0.0.11"
    roles = ["app", "haproxy", "postgres", "redis"]
-   user = "crane"
+   ssh_user = "crane"
    ssh_ip = "127.0.0.1"
    ssh_port = 2221
    private_key = "keys/id_ed25519"
    sudo_pass = "${SUDO_PASS_VPS1}"
+   firewall_expose_port_range = ["3000-3100", "8080"]
    
    [[nodes]]
    name = "vps2"
    public_ip = "10.0.0.12"
    internal_ip = "10.0.0.12"
    roles = ["app", "haproxy", "postgres", "redis"]
-   user = "crane"
+   ssh_user = "crane"
    ssh_ip = "127.0.0.1"
    ssh_port = 2222
    private_key = "keys/id_ed25519"
@@ -53,7 +54,7 @@
    public_ip = "10.0.0.13"
    internal_ip = "10.0.0.13"
    roles = ["app", "haproxy", "postgres", "redis"]
-   user = "crane"
+   ssh_user = "crane"
    ssh_ip = "127.0.0.1"
    ssh_port = 2223
    private_key = "keys/id_ed25519"
@@ -150,6 +151,7 @@
 
 
    [backup.s3]
+   enabled = true
    bucket = "crane1"
    region = "us-east-1"
    endpoint = "http://s3:9000"
@@ -158,6 +160,7 @@
    
    
    [domain]
+   enabled = true
    provider = "cloudflare"
    domain_name = "localhost"
    token = "${CLOUDFLARE_TOKEN}"

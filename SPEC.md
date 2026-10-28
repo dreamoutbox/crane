@@ -74,15 +74,16 @@ host = "localhost"
 public_ip = "localhost"
 internal_ip = "localhost"
 port = 2221
-user = "admin"
+ssh_user = "admin"
 roles = ["app", "traefik"]
+firewall_expose_port_range = ["3000-3100", "8080"]
 
 [[nodes]]
 host = "localhost"
 public_ip = "localhost"
 internal_ip = "localhost"
 port = 2222
-user = "admin"
+ssh_user = "admin"
 roles = ["app", "traefik"]
 
 [[nodes]]
@@ -90,7 +91,7 @@ host = "localhost"
 public_ip = "localhost"
 internal_ip = "localhost"
 port = 2223
-user = "admin"
+ssh_user = "admin"
 roles = ["postgres", "redis"]
 
 [[nodes]]
@@ -98,7 +99,7 @@ host = "localhost"
 public_ip = "localhost"
 internal_ip = "localhost"
 port = 2224
-user = "admin"
+ssh_user = "admin"
 roles = ["minio"]
 
 [[users]]
@@ -136,6 +137,7 @@ scale_up_memory = 85
 cooldown = 120
 
 [domain]
+enabled = true
 name = "myapp.local"
 provider = "cloudflare"
 tls_email = "dev@example.com"
@@ -151,6 +153,7 @@ version = "7"
 bind = "127.0.0.1"
 
 [backup.s3]
+enabled = true
 bucket = "crane1"
 region = "us-east-1"
 endpoint = "http://127.0.0.1:9000"
@@ -431,4 +434,4 @@ Prompts for: app name, VPS host(s), domain, then generates.
 - **Postgres primary election**: first `postgres`-role node in `[[nodes]]` array order is primary. Document this clearly.
 - **`crane setup` OS check**: run `lsb_release -is` via SSH, fail fast with clear error if not Debian/Ubuntu.
 - **`.env` precedence**: merge order is `[app.env]` (base) → `.env` (override). Clearly document this.
-- **Deploy user SSH**: the SSH `user` in `[[nodes]]` is the admin user (for setup). `deploy_user` in `[app]` is the unprivileged runtime user. These are different.
+- **Deploy user SSH**: the `ssh_user` in `[[nodes]]` is the admin user (for setup). `deploy_user` in `[app]` is the unprivileged runtime user. These are different.

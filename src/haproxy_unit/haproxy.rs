@@ -148,15 +148,15 @@ backend postgres_replica_back
         let mut cert_args = format!("crt {}", cert_path);
 
         let mut custom_certs = Vec::new();
-        if let Some(ref dom) = config.domain {
+        if let Some(dom) = crate::config::enabled_domain(config) {
             if let Some(ref cert) = dom.ssl_cert {
                 custom_certs.push(cert.clone());
             }
         }
 
         for app in config.app.values() {
-            if let Some(ref cert) = app.ssl_cert {
-                custom_certs.push(cert.clone());
+            if let Some(cert) = crate::config::app_ssl_cert(config, app) {
+                custom_certs.push(cert.to_string());
             }
         }
 

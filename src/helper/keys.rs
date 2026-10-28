@@ -6,7 +6,7 @@ pub fn find_private_key_for_user(
 ) -> anyhow::Result<String> {
     // Search in node configurations
     for node in &config.nodes {
-        if node.user == username {
+        if node.ssh_user == username {
             let pk = &node.private_key;
             return Ok(pk.clone());
         }

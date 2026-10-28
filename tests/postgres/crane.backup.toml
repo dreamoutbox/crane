@@ -8,7 +8,7 @@ internal_ip = "10.0.0.11"
 ssh_ip = "127.0.0.1"
 ssh_port = 2221
 roles = ["app", "haproxy", "postgres", "redis"]
-user = "crane"
+ssh_user = "crane"
 private_key = "keys/id_ed25519"
 sudo_pass = "${SUDO_PASS_VPS1}"
 
@@ -19,7 +19,7 @@ internal_ip = "10.0.0.12"
 ssh_ip = "127.0.0.1"
 ssh_port = 2222
 roles = ["app", "haproxy", "postgres", "redis"]
-user = "crane"
+ssh_user = "crane"
 private_key = "keys/id_ed25519"
 sudo_pass = "${SUDO_PASS_VPS2}"
 
@@ -30,7 +30,7 @@ internal_ip = "10.0.0.13"
 ssh_ip = "127.0.0.1"
 ssh_port = 2223
 roles = ["app", "haproxy", "postgres", "redis"]
-user = "crane"
+ssh_user = "crane"
 private_key = "keys/id_ed25519"
 sudo_pass = "${SUDO_PASS_VPS3}"
 
@@ -56,6 +56,7 @@ name = "mydb"
 
 
 [backup.s3]
+enabled = true
 bucket = "crane1"
 region = "us-east-1"
 endpoint = "http://127.0.0.1:9000"
@@ -64,6 +65,7 @@ secret_access_key = "miniominio"
 
 
 [domain]
+enabled = true
 provider = "cloudflare"
 domain_name = "example.com"
 

@@ -10,10 +10,12 @@ use anyhow::{Context, Result};
 /// - `is_deploy`: If `true` (called during deploy), missing token logs a warning and returns Ok.
 ///   If `false` (called explicitly via CLI), missing token returns an Error.
 pub async fn update_dns(config: &Config, app_name: Option<&str>) -> Result<()> {
-    let token = config
-        .domain
-        .as_ref()
-        .and_then(|d| d.token.clone())
+    let domain_cfg = crate::config::enabled_domain(config)
+        .ok_or_else(|| anyhow::anyhow!("Domain configuration is disabled or not set"))?;
+
+    let token = domain_cfg
+        .token
+        .clone()
         .unwrap_or_default();
 
     if token.is_empty() {
@@ -46,13 +48,16 @@ pub async fn update_dns(config: &Config, app_name: Option<&str>) -> Result<()> {
     }
 
     for app in target_apps {
-        let app_domain = app.domain.clone().unwrap_or_else(|| {
-            config
-                .domain
-                .as_ref()
-                .map(|d| d.domain_name.clone())
-                .unwrap_or_else(|| "localhost".to_string())
-        });
+        let app_domain = match crate::config::app_domain(config, app) {
+            Some(d) => d.to_string(),
+            None => {
+                println!(
+                    "Skipping DNS update for app '{}' (no domain configured or domain disabled)",
+                    app.name
+                );
+                continue;
+            }
+        };
 
         // Skip local/dev domains
         if app_domain == "localhost"
@@ -133,7 +138,7 @@ pub async fn update_dns(config: &Config, app_name: Option<&str>) -> Result<()> {
 
 /// Helper to get the Cloudflare zone name (apex domain) from an app domain.
 fn get_zone_name(app_domain: &str, config: &Config) -> String {
-    if let Some(ref dom) = config.domain {
+    if let Some(dom) = crate::config::enabled_domain(config) {
         if app_domain == dom.domain_name {
             return dom.domain_name.clone();
         }

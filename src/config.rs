@@ -2,6 +2,38 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::Path;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(try_from = "String")]
+pub struct PortRange {
+    pub start: u16,
+    pub end: u16,
+}
+
+impl TryFrom<String> for PortRange {
+    type Error = anyhow::Error;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        let s = s.trim();
+        if let Some((start_s, end_s)) = s.split_once('-') {
+            let start: u16 = start_s.trim().parse().map_err(|_| anyhow::anyhow!("Invalid start port in range '{}'", s))?;
+            let end: u16 = end_s.trim().parse().map_err(|_| anyhow::anyhow!("Invalid end port in range '{}'", s))?;
+            if start == 0 || end == 0 {
+                anyhow::bail!("Port cannot be 0 in range '{}'", s);
+            }
+            if start > end {
+                anyhow::bail!("Start port cannot be greater than end port in range '{}'", s);
+            }
+            Ok(PortRange { start, end })
+        } else {
+            let port: u16 = s.parse().map_err(|_| anyhow::anyhow!("Invalid port '{}'", s))?;
+            if port == 0 {
+                anyhow::bail!("Port cannot be 0 in '{}'", s);
+            }
+            Ok(PortRange { start: port, end: port })
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
     pub nodes: Vec<NodeConfig>,
@@ -18,12 +50,13 @@ pub struct NodeConfig {
     pub name: String,
     pub public_ip: String,
     pub internal_ip: String,
-    pub user: String,
+    pub ssh_user: String,
     pub roles: Vec<String>,
     pub ssh_ip: String,
     pub ssh_port: u16,
     pub private_key: String,
     pub sudo_pass: Option<String>,
+    pub firewall_expose_port_range: Option<Vec<PortRange>>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -65,6 +98,7 @@ pub struct AppDatabaseConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct DomainConfig {
+    pub enabled: bool,
     pub provider: String,
     pub domain_name: String,
     pub tls_email: Option<String>,
@@ -118,6 +152,7 @@ pub struct BackupConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct S3BackupConfig {
+    pub enabled: bool,
     pub bucket: String,
     pub region: Option<String>,
     pub endpoint: Option<String>,
@@ -323,4 +358,37 @@ pub fn get_postgres_backup_schedule_config(
         .as_ref()
         .and_then(|db| db.postgres.as_ref())
         .and_then(|pg| pg.backup.clone())
+}
+
+/// Returns `[domain]` only when it is present and `enabled = true`.
+pub fn enabled_domain(config: &Config) -> Option<&DomainConfig> {
+    config.domain.as_ref().filter(|d| d.enabled)
+}
+
+/// Returns the app's configured domain only if `[domain]` is present and enabled.
+pub fn app_domain<'a>(config: &'a Config, app: &'a AppConfig) -> Option<&'a str> {
+    if enabled_domain(config).is_some() {
+        app.domain.as_deref()
+    } else {
+        None
+    }
+}
+
+/// Returns the app's configured ssl_cert only if `[domain]` is present and enabled.
+pub fn app_ssl_cert<'a>(config: &'a Config, app: &'a AppConfig) -> Option<&'a str> {
+    if enabled_domain(config).is_some() {
+        app.ssl_cert.as_deref()
+    } else {
+        None
+    }
+}
+
+/// Returns true when `[backup.s3]` is present and `enabled = true`.
+pub fn s3_backup_enabled(config: &Config) -> bool {
+    config
+        .backup
+        .as_ref()
+        .and_then(|b| b.s3.as_ref())
+        .map(|s| s.enabled)
+        .unwrap_or(false)
 }

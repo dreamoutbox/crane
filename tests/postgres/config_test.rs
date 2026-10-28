@@ -9,7 +9,7 @@ public_ip = "127.0.0.1"
 internal_ip = "10.0.0.11"
 ssh_ip = "127.0.0.1"
 ssh_port = 2221
-user = "admin"
+ssh_user = "admin"
 roles = ["postgres"]
 private_key = "dummy"
 

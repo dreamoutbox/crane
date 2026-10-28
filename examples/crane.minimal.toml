@@ -2,16 +2,15 @@
 
 [[nodes]]
 name = "vps1"
-ssh_user = "root"
-ssh_ip = "127.0.0.1"
-ssh_port = 2221
-public_ip = "127.0.0.1"
-internal_ip = "10.0.0.1"
+user = "root"
+ssh_ip = "68.183.177.114"
+ssh_port = 22
+public_ip = "68.183.177.114"
+internal_ip = "10.104.0.2"
 roles = ["app", "haproxy", "postgres", "redis"]
 private_key = "keys/id_ed25519"
 sudo_pass = "${SUDO_PASS_VPS1}"
-firewall_expose_port_range = ["3000-3100", "8080"]
-
+firewall_expose_port_range = ["22", "80", "443", "3000-3100"]
 
 [[users]]
 name = "deployman"
