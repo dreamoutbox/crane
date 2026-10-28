@@ -858,7 +858,11 @@ ETCD_ADVERTISE_CLIENT_URLS="http://{internal_ip}:2379"
         Ok(())
     }
 
-    fn setup_firewall(&self, config: &Config, node: &crate::config::NodeConfig) -> anyhow::Result<()> {
+    fn setup_firewall(
+        &self,
+        config: &Config,
+        node: &crate::config::NodeConfig,
+    ) -> anyhow::Result<()> {
         let mut allow_sources = String::new();
         for n in &config.nodes {
             allow_sources.push_str(&format!("ufw allow from {}\n", n.internal_ip));
@@ -870,7 +874,8 @@ ETCD_ADVERTISE_CLIENT_URLS="http://{internal_ip}:2379"
                 if range.start == range.end {
                     exposed_ports.push_str(&format!("ufw allow {}/tcp\n", range.start));
                 } else {
-                    exposed_ports.push_str(&format!("ufw allow {}:{}/tcp\n", range.start, range.end));
+                    exposed_ports
+                        .push_str(&format!("ufw allow {}:{}/tcp\n", range.start, range.end));
                 }
             }
         }

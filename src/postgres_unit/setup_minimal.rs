@@ -4,10 +4,7 @@ use crate::{
         get_postgres_dbs_and_users_config,
     },
     helper::config::config_get_nodes,
-    postgres_unit::{
-        helper::get_pg_version,
-        setup_postgres_primary::setup_postgres_primary,
-    },
+    postgres_unit::{helper::get_pg_version, setup_postgres_primary::setup_postgres_primary},
     server_interactor::{get_server_interactor, server_interactor_trait::ServerInteractor},
 };
 
@@ -60,10 +57,7 @@ fn get_postgres_config_paths(
 }
 
 /// Ensures pg_hba.conf permits local connections and authentication for replication and app traffic.
-fn configure_pg_hba(
-    interactor: &dyn ServerInteractor,
-    pg_hba_path: &str,
-) -> anyhow::Result<()> {
+fn configure_pg_hba(interactor: &dyn ServerInteractor, pg_hba_path: &str) -> anyhow::Result<()> {
     let existing_hba = interactor.read_file(pg_hba_path).unwrap_or_default();
     let mut updated_hba = existing_hba.clone();
 
@@ -72,12 +66,21 @@ fn configure_pg_hba(
             updated_hba.push('\n');
         }
         updated_hba.push_str("\n# Crane minimal mode access rules\n");
-        updated_hba.push_str("local   all             all                                     trust\n");
-        updated_hba.push_str("host    all             all             127.0.0.1/32            trust\n");
-        updated_hba.push_str("host    all             all             ::1/128                 trust\n");
-        updated_hba.push_str("host    all             all             0.0.0.0/0               scram-sha-256\n");
-        updated_hba.push_str("host    replication     replicator      127.0.0.1/32            scram-sha-256\n");
-        updated_hba.push_str("host    replication     replicator      0.0.0.0/0               scram-sha-256\n");
+        updated_hba
+            .push_str("local   all             all                                     trust\n");
+        updated_hba
+            .push_str("host    all             all             127.0.0.1/32            trust\n");
+        updated_hba
+            .push_str("host    all             all             ::1/128                 trust\n");
+        updated_hba.push_str(
+            "host    all             all             0.0.0.0/0               scram-sha-256\n",
+        );
+        updated_hba.push_str(
+            "host    replication     replicator      127.0.0.1/32            scram-sha-256\n",
+        );
+        updated_hba.push_str(
+            "host    replication     replicator      0.0.0.0/0               scram-sha-256\n",
+        );
     }
 
     if updated_hba != existing_hba {
@@ -155,7 +158,9 @@ pub async fn setup_postgres_minimal(config: &config::Config) -> Result<(), anyho
         if crate::config::s3_backup_enabled(config) {
             Some(crate::s3::get_s3_config(config)?)
         } else {
-            println!("\tS3 backup is disabled in [backup.s3]. Skipping automated backup cron setup.");
+            println!(
+                "\tS3 backup is disabled in [backup.s3]. Skipping automated backup cron setup."
+            );
             None
         }
     } else {
@@ -167,7 +172,10 @@ pub async fn setup_postgres_minimal(config: &config::Config) -> Result<(), anyho
         .first()
         .ok_or_else(|| anyhow::anyhow!("No postgres node configured for minimal deployment"))?;
 
-    println!("Setting up minimal standalone PostgreSQL on node {}...", node.name);
+    println!(
+        "Setting up minimal standalone PostgreSQL on node {}...",
+        node.name
+    );
     let interactor = get_server_interactor(&node.name)?;
 
     // 1. Install PostgreSQL binaries
@@ -191,7 +199,10 @@ pub async fn setup_postgres_minimal(config: &config::Config) -> Result<(), anyho
     configure_pg_hba(&*interactor, &hba_path)?;
 
     // 5. Start and enable standard PostgreSQL system service
-    println!("\tStarting and enabling PostgreSQL service on node {}...", node.name);
+    println!(
+        "\tStarting and enabling PostgreSQL service on node {}...",
+        node.name
+    );
     interactor.service_daemon_reload()?;
     interactor.enable_service("postgresql")?;
     interactor.restart_service("postgresql")?;
@@ -210,7 +221,10 @@ pub async fn setup_postgres_minimal(config: &config::Config) -> Result<(), anyho
     }
 
     if !pg_ready {
-        anyhow::bail!("Timeout waiting for PostgreSQL service to start on node {}", node.name);
+        anyhow::bail!(
+            "Timeout waiting for PostgreSQL service to start on node {}",
+            node.name
+        );
     }
     println!("\tPostgreSQL service is healthy on node {}", node.name);
 
@@ -231,7 +245,12 @@ pub async fn setup_postgres_minimal(config: &config::Config) -> Result<(), anyho
     let psql_res = interactor.psql(None, Some(tmp_sql), None, false);
     let _ = interactor.rm(tmp_sql);
     psql_res?;
-    let _ = interactor.psql(Some("GRANT pg_read_server_files TO replicator;"), None, None, false);
+    let _ = interactor.psql(
+        Some("GRANT pg_read_server_files TO replicator;"),
+        None,
+        None,
+        false,
+    );
 
     // 7. Provision databases and users
     let (db_configs, user_configs) = get_postgres_dbs_and_users_config(config);
@@ -254,6 +273,9 @@ pub async fn setup_postgres_minimal(config: &config::Config) -> Result<(), anyho
         &s3_config,
     )?;
 
-    println!("\tMinimal standalone PostgreSQL setup completed on node {}", node.name);
+    println!(
+        "\tMinimal standalone PostgreSQL setup completed on node {}",
+        node.name
+    );
     Ok(())
 }

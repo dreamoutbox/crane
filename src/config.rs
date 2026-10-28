@@ -15,21 +15,35 @@ impl TryFrom<String> for PortRange {
     fn try_from(s: String) -> Result<Self, Self::Error> {
         let s = s.trim();
         if let Some((start_s, end_s)) = s.split_once('-') {
-            let start: u16 = start_s.trim().parse().map_err(|_| anyhow::anyhow!("Invalid start port in range '{}'", s))?;
-            let end: u16 = end_s.trim().parse().map_err(|_| anyhow::anyhow!("Invalid end port in range '{}'", s))?;
+            let start: u16 = start_s
+                .trim()
+                .parse()
+                .map_err(|_| anyhow::anyhow!("Invalid start port in range '{}'", s))?;
+            let end: u16 = end_s
+                .trim()
+                .parse()
+                .map_err(|_| anyhow::anyhow!("Invalid end port in range '{}'", s))?;
             if start == 0 || end == 0 {
                 anyhow::bail!("Port cannot be 0 in range '{}'", s);
             }
             if start > end {
-                anyhow::bail!("Start port cannot be greater than end port in range '{}'", s);
+                anyhow::bail!(
+                    "Start port cannot be greater than end port in range '{}'",
+                    s
+                );
             }
             Ok(PortRange { start, end })
         } else {
-            let port: u16 = s.parse().map_err(|_| anyhow::anyhow!("Invalid port '{}'", s))?;
+            let port: u16 = s
+                .parse()
+                .map_err(|_| anyhow::anyhow!("Invalid port '{}'", s))?;
             if port == 0 {
                 anyhow::bail!("Port cannot be 0 in '{}'", s);
             }
-            Ok(PortRange { start: port, end: port })
+            Ok(PortRange {
+                start: port,
+                end: port,
+            })
         }
     }
 }
@@ -219,7 +233,10 @@ pub fn check_config_path_exists<P: AsRef<Path>>(raw_path: &str, config_dir: P) -
 ///
 /// # Returns
 /// `Ok(())` if all referenced paths exist, or `Err` with descriptive message naming missing paths.
-pub fn validate_config_paths<P: AsRef<Path>>(config: &Config, config_file_path: P) -> anyhow::Result<()> {
+pub fn validate_config_paths<P: AsRef<Path>>(
+    config: &Config,
+    config_file_path: P,
+) -> anyhow::Result<()> {
     let config_dir = config_file_path
         .as_ref()
         .parent()

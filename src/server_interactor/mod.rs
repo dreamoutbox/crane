@@ -50,7 +50,8 @@ pub fn get_server_interactor(
         })
         .ok_or_else(|| anyhow::anyhow!("Node '{}' not found in configuration", node_name))?;
 
-    let private_key = crate::helper::keys::find_private_key_for_user(&node.ssh_user, &registry.config)?;
+    let private_key =
+        crate::helper::keys::find_private_key_for_user(&node.ssh_user, &registry.config)?;
     let ssh = SSHSession::new(
         node.ssh_ip.clone(),
         node.ssh_user.clone(),

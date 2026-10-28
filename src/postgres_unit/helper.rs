@@ -21,7 +21,9 @@ pub fn pg_get_primary(config: &config::Config) -> anyhow::Result<Option<config::
     if crate::config::postgres_is_minimal(config) {
         if let Some(node) = pg_nodes.into_iter().next() {
             if let Ok(interactor) = get_server_interactor(&node.name) {
-                if let Ok(output) = interactor.psql(Some("select pg_is_in_recovery();"), None, None, true) {
+                if let Ok(output) =
+                    interactor.psql(Some("select pg_is_in_recovery();"), None, None, true)
+                {
                     if output.stdout.trim() == "f" {
                         return Ok(Some(node));
                     }

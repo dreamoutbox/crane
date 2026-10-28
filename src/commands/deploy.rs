@@ -239,7 +239,8 @@ fn inner_deploy_single_app(
 
             let leader_uri = build_uri(5000);
 
-            let follower_uri = if pg_nodes.len() > 1 && !crate::config::postgres_is_minimal(config) {
+            let follower_uri = if pg_nodes.len() > 1 && !crate::config::postgres_is_minimal(config)
+            {
                 build_uri(5001)
             } else {
                 leader_uri.clone()

@@ -117,7 +117,8 @@ backend postgres_replica_back
                     .nodes
                     .iter()
                     .filter(|n| {
-                        n.roles.contains(&"postgres".to_string()) && n.internal_ip != leader.internal_ip
+                        n.roles.contains(&"postgres".to_string())
+                            && n.internal_ip != leader.internal_ip
                     })
                     .map(|n| n.internal_ip.clone())
                     .collect();

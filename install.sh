@@ -115,3 +115,4 @@ case ":$PATH:" in
         echo "  export PATH=\"\$PATH:$DEST_DIR\""
         ;;
 esac
+

@@ -13,10 +13,7 @@ pub async fn update_dns(config: &Config, app_name: Option<&str>) -> Result<()> {
     let domain_cfg = crate::config::enabled_domain(config)
         .ok_or_else(|| anyhow::anyhow!("Domain configuration is disabled or not set"))?;
 
-    let token = domain_cfg
-        .token
-        .clone()
-        .unwrap_or_default();
+    let token = domain_cfg.token.clone().unwrap_or_default();
 
     if token.is_empty() {
         anyhow::bail!("config CLOUDFLARE_TOKEN environment variable is not set.");

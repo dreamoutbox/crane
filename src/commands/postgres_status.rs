@@ -36,8 +36,10 @@ pub async fn get_postgres_status_wrapper(
 
             match get_server_interactor(&node.name) {
                 Ok(interactor) => {
-                    let is_recovery = interactor.psql(Some("select pg_is_in_recovery();"), None, None, true);
-                    let db_ver_str = interactor.psql(Some("show server_version;"), None, None, true);
+                    let is_recovery =
+                        interactor.psql(Some("select pg_is_in_recovery();"), None, None, true);
+                    let db_ver_str =
+                        interactor.psql(Some("show server_version;"), None, None, true);
 
                     if let Ok(rec) = is_recovery {
                         let rec_trimmed = rec.stdout.trim();

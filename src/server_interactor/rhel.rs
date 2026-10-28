@@ -879,7 +879,11 @@ ETCD_ADVERTISE_CLIENT_URLS="http://{internal_ip}:2379"
         Ok(())
     }
 
-    fn setup_firewall(&self, config: &Config, node: &crate::config::NodeConfig) -> anyhow::Result<()> {
+    fn setup_firewall(
+        &self,
+        config: &Config,
+        node: &crate::config::NodeConfig,
+    ) -> anyhow::Result<()> {
         let mut allow_sources = String::new();
         for n in &config.nodes {
             allow_sources.push_str(&format!(

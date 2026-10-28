@@ -51,6 +51,7 @@ user = "u1"
 
 [db.postgres]
 enabled = true
+minimal = true
 version = "18"
 replica_pass = "replica"
 

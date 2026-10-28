@@ -133,7 +133,10 @@ async fn migrate_minimal_to_cluster(config: &config::Config) -> anyhow::Result<(
     let interactor = get_server_interactor(&primary_node.name)?;
 
     // 1. Verify health of source database
-    println!("Step 1/6: Verifying source PostgreSQL health on {}...", primary_node.name);
+    println!(
+        "Step 1/6: Verifying source PostgreSQL health on {}...",
+        primary_node.name
+    );
     let health_check = interactor.psql(Some("SELECT 1;"), None, None, true)?;
     if health_check.stdout.trim() != "1" {
         anyhow::bail!(
@@ -145,7 +148,10 @@ async fn migrate_minimal_to_cluster(config: &config::Config) -> anyhow::Result<(
     // 2. Export full data dump to temporary file
     let dump_file = "/tmp/crane_migration_minimal_to_cluster.sql";
     println!("Step 2/6: Exporting full data dump to {}...", dump_file);
-    let dump_cmd = format!("sudo -u postgres pg_dumpall --clean --if-exists > {}", dump_file);
+    let dump_cmd = format!(
+        "sudo -u postgres pg_dumpall --clean --if-exists > {}",
+        dump_file
+    );
     let dump_res = interactor.cmd(&dump_cmd)?;
     if dump_res.exit_code != 0 {
         anyhow::bail!("Failed to export database dump: {}", dump_res.stderr);
@@ -218,7 +224,10 @@ async fn migrate_cluster_to_minimal(config: &config::Config) -> anyhow::Result<(
         "Step 2/5: Exporting full data dump from leader {}...",
         current_leader.name
     );
-    let dump_cmd = format!("sudo -u postgres pg_dumpall --clean --if-exists > {}", dump_file);
+    let dump_cmd = format!(
+        "sudo -u postgres pg_dumpall --clean --if-exists > {}",
+        dump_file
+    );
     let dump_res = leader_interactor.cmd(&dump_cmd)?;
     if dump_res.exit_code != 0 {
         anyhow::bail!("Failed to export database dump: {}", dump_res.stderr);
@@ -254,7 +263,10 @@ async fn migrate_cluster_to_minimal(config: &config::Config) -> anyhow::Result<(
     }
 
     // 4. Deploy standalone PostgreSQL on the target minimal node
-    println!("Step 4/5: Deploying standalone PostgreSQL on node {}...", minimal_node.name);
+    println!(
+        "Step 4/5: Deploying standalone PostgreSQL on node {}...",
+        minimal_node.name
+    );
     setup_postgres_minimal(config).await?;
 
     // 5. Restore data dump into standalone PostgreSQL

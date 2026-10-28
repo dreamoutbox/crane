@@ -155,7 +155,11 @@ impl ServerInteractor for MockServerInteractorLogsRecorder {
     fn firewall_allow_source(&self, _source: &str) -> anyhow::Result<()> {
         Ok(())
     }
-    fn setup_firewall(&self, _config: &crane::config::Config, _node: &crane::config::NodeConfig) -> anyhow::Result<()> {
+    fn setup_firewall(
+        &self,
+        _config: &crane::config::Config,
+        _node: &crane::config::NodeConfig,
+    ) -> anyhow::Result<()> {
         let _ = self.cmd("setup_firewall")?;
         Ok(())
     }

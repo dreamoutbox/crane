@@ -54,7 +54,9 @@ pub async fn setup_postgres_cluster(config: &config::Config) -> Result<(), anyho
         if crate::config::s3_backup_enabled(config) {
             Some(crate::s3::get_s3_config(config)?)
         } else {
-            println!("\tS3 backup is disabled in [backup.s3]. Skipping automated backup cron setup.");
+            println!(
+                "\tS3 backup is disabled in [backup.s3]. Skipping automated backup cron setup."
+            );
             None
         }
     } else {

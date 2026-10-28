@@ -62,8 +62,14 @@ token = "${CLOUDFLARE_TOKEN}"
     assert_eq!(
         config.nodes[0].firewall_expose_port_range,
         Some(vec![
-            crane::config::PortRange { start: 3000, end: 3100 },
-            crane::config::PortRange { start: 8080, end: 8080 },
+            crane::config::PortRange {
+                start: 3000,
+                end: 3100
+            },
+            crane::config::PortRange {
+                start: 8080,
+                end: 8080
+            },
         ])
     );
     assert!(config.domain.unwrap().enabled);
@@ -189,7 +195,10 @@ replica_pass = "secret"
 
     let config: crane::config::Config = toml::from_str(toml_content).unwrap();
     let res = crane::config::validate_config(&config);
-    assert!(res.is_err(), "minimal with multiple postgres nodes should fail validation");
+    assert!(
+        res.is_err(),
+        "minimal with multiple postgres nodes should fail validation"
+    );
     let err = res.unwrap_err().to_string();
     assert!(
         err.contains("minimal mode requires exactly 1 node with role 'postgres'"),
@@ -228,7 +237,10 @@ replica_pass = "secret"
 
     let config: crane::config::Config = toml::from_str(toml_content).unwrap();
     let res = crane::config::validate_config(&config);
-    assert!(res.is_err(), "minimal with zero postgres nodes should fail validation");
+    assert!(
+        res.is_err(),
+        "minimal with zero postgres nodes should fail validation"
+    );
     let err = res.unwrap_err().to_string();
     assert!(
         err.contains("minimal mode requires exactly 1 node with role 'postgres'"),
