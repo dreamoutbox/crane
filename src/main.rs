@@ -209,7 +209,17 @@ async fn main() -> anyhow::Result<()> {
 
     let config_file = matches.get_one::<String>("config").unwrap();
     let config_path = std::path::Path::new(config_file);
-    let config = read_config_toml_file(config_path)?;
+    let config = match read_config_toml_file(config_path) {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            eprintln!("Configuration error: {}", e);
+            std::process::exit(1);
+        }
+    };
+    if let Err(e) = crane::config::validate_config_paths(&config, config_path) {
+        eprintln!("Configuration path validation error: {}", e);
+        std::process::exit(1);
+    }
 
     match matches.subcommand() {
         Some(("deploy", sub_m)) => {

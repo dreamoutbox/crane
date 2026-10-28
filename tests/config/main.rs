@@ -62,11 +62,23 @@ fn test_port_range_parse() {
 
     // Single port
     let single: PortRange = "8080".to_string().try_into().unwrap();
-    assert_eq!(single, PortRange { start: 8080, end: 8080 });
+    assert_eq!(
+        single,
+        PortRange {
+            start: 8080,
+            end: 8080
+        }
+    );
 
     // Range
     let range: PortRange = "3000-3100".to_string().try_into().unwrap();
-    assert_eq!(range, PortRange { start: 3000, end: 3100 });
+    assert_eq!(
+        range,
+        PortRange {
+            start: 3000,
+            end: 3100
+        }
+    );
 
     // Single with whitespace
     let single_ws: PortRange = "  22  ".to_string().try_into().unwrap();
@@ -74,7 +86,13 @@ fn test_port_range_parse() {
 
     // Range with whitespace
     let range_ws: PortRange = " 3000 - 3100 ".to_string().try_into().unwrap();
-    assert_eq!(range_ws, PortRange { start: 3000, end: 3100 });
+    assert_eq!(
+        range_ws,
+        PortRange {
+            start: 3000,
+            end: 3100
+        }
+    );
 
     // Inverted range fails
     let inverted: Result<PortRange, _> = "3100-3000".to_string().try_into();
@@ -117,10 +135,22 @@ fn test_node_ssh_user_and_expose_ports() {
     assert_eq!(parsed.nodes[0].ssh_user, "root");
     let ranges = parsed.nodes[0].firewall_expose_port_range.as_ref().unwrap();
     assert_eq!(ranges.len(), 4);
-    assert_eq!(ranges[0], crane::config::PortRange { start: 3000, end: 3100 });
+    assert_eq!(
+        ranges[0],
+        crane::config::PortRange {
+            start: 3000,
+            end: 3100
+        }
+    );
     assert_eq!(ranges[1], crane::config::PortRange { start: 22, end: 22 });
     assert_eq!(ranges[2], crane::config::PortRange { start: 80, end: 80 });
-    assert_eq!(ranges[3], crane::config::PortRange { start: 8080, end: 8080 });
+    assert_eq!(
+        ranges[3],
+        crane::config::PortRange {
+            start: 8080,
+            end: 8080
+        }
+    );
 
     // Old 'user' in [[nodes]] should fail deserialization because ssh_user is required
     let toml_old_user = r#"
@@ -171,7 +201,10 @@ fn test_domain_enabled_required() {
     "#;
 
     let res: Result<crane::config::Config, _> = toml::from_str(toml_missing_enabled);
-    assert!(res.is_err(), "Expected missing 'enabled' in [domain] to fail");
+    assert!(
+        res.is_err(),
+        "Expected missing 'enabled' in [domain] to fail"
+    );
 }
 
 #[test]
@@ -200,7 +233,10 @@ fn test_backup_enabled_required() {
     "#;
 
     let res: Result<crane::config::Config, _> = toml::from_str(toml_missing_enabled);
-    assert!(res.is_err(), "Expected missing 'enabled' in [backup.s3] to fail");
+    assert!(
+        res.is_err(),
+        "Expected missing 'enabled' in [backup.s3] to fail"
+    );
 }
 
 #[test]
@@ -236,4 +272,116 @@ fn test_domain_disabled_helpers() {
     assert!(crane::config::enabled_domain(&config).is_none());
     assert_eq!(crane::config::app_domain(&config, app), None);
     assert_eq!(crane::config::app_ssl_cert(&config, app), None);
+}
+
+#[test]
+fn test_validate_config_paths() {
+    let temp_dir = std::env::temp_dir();
+    let config_dir = temp_dir.join("crane_test_validate_paths");
+    let _ = std::fs::remove_dir_all(&config_dir);
+    std::fs::create_dir_all(&config_dir).unwrap();
+
+    let dummy_key = config_dir.join("id_ed25519");
+    let dummy_pub_key = config_dir.join("id_ed25519.pub");
+    let app_dir = config_dir.join("app");
+    let dummy_entrypoint = app_dir.join("server");
+    let dummy_pre_script = app_dir.join("setup.sh");
+
+    std::fs::write(&dummy_key, "private-key-data").unwrap();
+    std::fs::write(&dummy_pub_key, "public-key-data").unwrap();
+    std::fs::create_dir_all(&app_dir).unwrap();
+    std::fs::write(&dummy_entrypoint, "#!/bin/sh").unwrap();
+    std::fs::write(&dummy_pre_script, "#!/bin/sh").unwrap();
+
+    let toml_valid = format!(
+        r#"
+    [[nodes]]
+    name = "vps1"
+    public_ip = "127.0.0.1"
+    internal_ip = "127.0.0.1"
+    ssh_ip = "127.0.0.1"
+    ssh_port = 22
+    ssh_user = "root"
+    roles = ["app"]
+    private_key = "{}"
+
+    [[users]]
+    name = "deployman"
+    groups = ["www"]
+    ssh_authorized_keys = ["{}"]
+    private_key = "{}"
+
+    [app.myapp]
+    name = "myapp"
+    deploy_dir = "./app"
+    entrypoint = "./server"
+    pre_deploy_script = "./setup.sh"
+    deploy_user = "deployman"
+    port_start = 3000
+    instances = 1
+    "#,
+        dummy_key.to_string_lossy(),
+        dummy_pub_key.to_string_lossy(),
+        dummy_key.to_string_lossy()
+    );
+
+    let config_path = config_dir.join("crane.toml");
+    let config: crane::config::Config = toml::from_str(&toml_valid).unwrap();
+    let valid_res = crane::config::validate_config_paths(&config, &config_path);
+    assert!(
+        valid_res.is_ok(),
+        "Expected valid paths to pass: {:?}",
+        valid_res.err()
+    );
+
+    // Test missing node private_key fails
+    let mut bad_config = config.clone();
+    bad_config.nodes[0].private_key = "keys/nonexistent".to_string();
+    let bad_node_key = crane::config::validate_config_paths(&bad_config, &config_path);
+    assert!(bad_node_key.is_err());
+    assert!(
+        bad_node_key
+            .unwrap_err()
+            .to_string()
+            .contains("private_key not found")
+    );
+
+    // Test missing deploy_dir fails
+    let mut bad_config2 = config.clone();
+    bad_config2.app.get_mut("myapp").unwrap().deploy_dir = "./missing_dir".to_string();
+    let bad_deploy_dir = crane::config::validate_config_paths(&bad_config2, &config_path);
+    assert!(bad_deploy_dir.is_err());
+    assert!(
+        bad_deploy_dir
+            .unwrap_err()
+            .to_string()
+            .contains("deploy_dir not found")
+    );
+
+    // Test missing entrypoint fails
+    let mut bad_config3 = config.clone();
+    bad_config3.app.get_mut("myapp").unwrap().entrypoint = "./missing_bin".to_string();
+    let bad_entrypoint = crane::config::validate_config_paths(&bad_config3, &config_path);
+    assert!(bad_entrypoint.is_err());
+    assert!(
+        bad_entrypoint
+            .unwrap_err()
+            .to_string()
+            .contains("entrypoint not found")
+    );
+
+    // Test missing pre_deploy_script fails
+    let mut bad_config4 = config.clone();
+    bad_config4.app.get_mut("myapp").unwrap().pre_deploy_script =
+        Some("./missing_script.sh".to_string());
+    let bad_pre_script = crane::config::validate_config_paths(&bad_config4, &config_path);
+    assert!(bad_pre_script.is_err());
+    assert!(
+        bad_pre_script
+            .unwrap_err()
+            .to_string()
+            .contains("pre_deploy_script not found")
+    );
+
+    let _ = std::fs::remove_dir_all(&config_dir);
 }

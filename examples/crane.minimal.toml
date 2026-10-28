@@ -2,11 +2,11 @@
 
 [[nodes]]
 name = "vps1"
-user = "root"
-ssh_ip = "68.183.177.114"
+ssh_user = "root"
+ssh_ip = "139.59.105.85"
 ssh_port = 22
-public_ip = "68.183.177.114"
-internal_ip = "10.104.0.2"
+public_ip = "139.59.105.85"
+internal_ip = "139.59.105.85"
 roles = ["app", "haproxy", "postgres", "redis"]
 private_key = "keys/id_ed25519"
 sudo_pass = "${SUDO_PASS_VPS1}"
@@ -26,7 +26,7 @@ dependencies = ["libssl3", "ca-certificates"]
 # Deploy Info
 deploy_dir = "./examples"
 entrypoint = "./myapp"
-pre_deploy_script = "./before-deploy.sh"
+pre_deploy_script = "./startup.sh"
 deploy_user = "deployman"
 port_start = 3000
 port_end = 3100
@@ -40,7 +40,7 @@ domain = "myapp.localhost"
 instances = 1
 # ENV for myapp
 [app.myapp.env]
-APP_ENV = "simulation"
+APP_ENV = "production"
 LOG_LEVEL = "debug"
 APP_NAME = "myapp"
 # Databases for myapp

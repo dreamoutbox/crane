@@ -182,6 +182,127 @@ pub struct AutoscaleConfig {
     pub cooldown: Option<u32>,
 }
 
+/// Checks whether a path configured in the TOML exists relative to the config file directory or CWD.
+///
+/// # Arguments
+/// * `raw_path` - The path string specified in the configuration file
+/// * `config_dir` - The directory containing the configuration file
+///
+/// # Returns
+/// `true` if the path exists at either location, otherwise `false`.
+///
+/// # Example
+/// ```no_run
+/// use std::path::Path;
+/// use crane::config::check_config_path_exists;
+///
+/// let exists = check_config_path_exists("keys/id_ed25519", Path::new("."));
+/// ```
+pub fn check_config_path_exists<P: AsRef<Path>>(raw_path: &str, config_dir: P) -> bool {
+    let raw = Path::new(raw_path);
+    if raw.is_absolute() {
+        return raw.exists();
+    }
+    config_dir.as_ref().join(raw).exists() || raw.exists()
+}
+
+/// Validates that referenced local filesystem paths in configuration exist.
+///
+/// Checks node private keys, user private keys and authorized key files,
+/// and app deploy dirs, entrypoints, and pre-deploy scripts.
+///
+/// # Arguments
+/// * `config` - Reference to loaded configuration
+/// * `config_file_path` - Path to configuration file used to resolve relative paths
+///
+/// # Returns
+/// `Ok(())` if all referenced paths exist, or `Err` with descriptive message naming missing paths.
+pub fn validate_config_paths<P: AsRef<Path>>(config: &Config, config_file_path: P) -> anyhow::Result<()> {
+    let config_dir = config_file_path
+        .as_ref()
+        .parent()
+        .unwrap_or_else(|| Path::new("."));
+
+    // Check node private keys
+    for node in &config.nodes {
+        if !check_config_path_exists(&node.private_key, config_dir) {
+            anyhow::bail!(
+                "Node '{}' private_key not found at '{}'",
+                node.name,
+                node.private_key
+            );
+        }
+    }
+
+    // Check user private keys and ssh authorized keys
+    if let Some(ref users) = config.users {
+        for user in users {
+            if !check_config_path_exists(&user.private_key, config_dir) {
+                anyhow::bail!(
+                    "User '{}' private_key not found at '{}'",
+                    user.name,
+                    user.private_key
+                );
+            }
+            for key_path in &user.ssh_authorized_keys {
+                // If it looks like a public key file path, check if it exists
+                if (key_path.ends_with(".pub") || key_path.contains('/'))
+                    && !check_config_path_exists(key_path, config_dir)
+                {
+                    anyhow::bail!(
+                        "User '{}' ssh_authorized_key file not found at '{}'",
+                        user.name,
+                        key_path
+                    );
+                }
+            }
+        }
+    }
+
+    // Check app paths: deploy_dir, entrypoint, pre_deploy_script
+    for (app_key, app) in &config.app {
+        if !check_config_path_exists(&app.deploy_dir, config_dir) {
+            anyhow::bail!(
+                "App '{}' deploy_dir not found at '{}'",
+                app_key,
+                app.deploy_dir
+            );
+        }
+
+        let resolved_deploy_dir = if config_dir.join(&app.deploy_dir).exists() {
+            config_dir.join(&app.deploy_dir)
+        } else {
+            Path::new(&app.deploy_dir).to_path_buf()
+        };
+
+        // Check entrypoint inside deploy_dir
+        let entrypoint_subpath = app.entrypoint.trim_start_matches("./");
+        let entrypoint_full = resolved_deploy_dir.join(entrypoint_subpath);
+        if !entrypoint_full.exists() && !check_config_path_exists(&app.entrypoint, config_dir) {
+            anyhow::bail!(
+                "App '{}' entrypoint not found at '{}'",
+                app_key,
+                app.entrypoint
+            );
+        }
+
+        // Check pre_deploy_script if specified
+        if let Some(ref pre_script) = app.pre_deploy_script {
+            let pre_script_subpath = pre_script.trim_start_matches("./");
+            let pre_script_full = resolved_deploy_dir.join(pre_script_subpath);
+            if !pre_script_full.exists() && !check_config_path_exists(pre_script, config_dir) {
+                anyhow::bail!(
+                    "App '{}' pre_deploy_script not found at '{}'",
+                    app_key,
+                    pre_script
+                );
+            }
+        }
+    }
+
+    Ok(())
+}
+
 pub fn read_config_toml_file_with_env<P: AsRef<Path>, E: AsRef<Path>>(
     path: P,
     env_path: Option<E>,
