@@ -13,10 +13,39 @@ use crate::{
 };
 
 pub async fn postgres_setup_wrapper(config: &config::Config) -> Result<(), anyhow::Error> {
+    if crate::postgres_unit::migration::maybe_migrate_postgres_topology(config).await? {
+        return Ok(());
+    }
+
     if crate::config::postgres_is_minimal(config) {
         return crate::postgres_unit::setup_minimal::setup_postgres_minimal(config).await;
     }
 
+    setup_postgres_cluster(config).await
+}
+
+/// Deploys and configures a high-availability PostgreSQL cluster using Patroni and etcd.
+///
+/// Coordinates multi-node installation, quorum establishment, leader election, and
+/// dynamic primary provisioning.
+///
+/// # Arguments
+/// * `config` - Loaded configuration containing cluster node definitions
+///
+/// # Returns
+/// `Ok(())` upon successful cluster deployment and health check completion.
+///
+/// # Example
+/// ```no_run
+/// use crane::config::Config;
+/// use crane::postgres_unit::setup::setup_postgres_cluster;
+///
+/// # async fn deploy(cfg: &Config) -> anyhow::Result<()> {
+/// setup_postgres_cluster(cfg).await?;
+/// # Ok(())
+/// # }
+/// ```
+pub async fn setup_postgres_cluster(config: &config::Config) -> Result<(), anyhow::Error> {
     let pg_version = get_pg_version(&config);
     let replica_pass = get_pg_replica_pass(&config);
 

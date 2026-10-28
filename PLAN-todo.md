@@ -32,13 +32,13 @@ Repo notes: `PostgresConfig` in `src/config.rs`; cluster setup in `src/postgres_
   - [x] Skip etcd setup and the firewall rules for etcd/Patroni ports in minimal mode.
 - Done when: `cargo build` has no warnings, config tests pass, and the user manually verifies minimal deploy (Patroni/etcd absent, DB/user exist, backup works).
 
-### Phase 4: Migration between minimal and cluster [STATUS: TODO]
+### Phase 4: Migration between minimal and cluster [STATUS: DONE]
 - Goal: Flipping `minimal` auto-migrates data, in both directions.
 - Tasks:
-  - [ ] Detect the current mode on the server (Patroni service/config present vs plain `postgresql` service); compare with the config.
-  - [ ] Minimal to cluster: take a safety backup or `pg_basebackup`, set up etcd and Patroni with the existing node as the initial leader (adopt the existing data dir), then bootstrap the replicas.
-  - [ ] Cluster to minimal: promote or pick the leader, stop Patroni, etcd and the replicas, convert the leader's data dir to standalone postgres, and clean up the Patroni/etcd units.
-  - [ ] Pre-flight guards: require a healthy source, take a backup first (when S3 is enabled), print the migration plan, and abort without data loss on failure.
+  - [x] Detect the current mode on the server (Patroni service/config present vs plain `postgresql` service); compare with the config.
+  - [x] Minimal to cluster: take a safety backup or `pg_basebackup`, set up etcd and Patroni with the existing node as the initial leader (adopt the existing data dir), then bootstrap the replicas.
+  - [x] Cluster to minimal: promote or pick the leader, stop Patroni, etcd and the replicas, convert the leader's data dir to standalone postgres, and clean up the Patroni/etcd units.
+  - [x] Pre-flight guards: require a healthy source, take a backup first (when S3 is enabled), print the migration plan, and abort without data loss on failure.
 - Done when: `cargo build` passes, and the user manually verifies both flip directions (data intact, topology correct) and that re-running deploy with an unchanged config is a no-op.
 
 ## Unknowns, risks, assumptions

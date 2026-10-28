@@ -2,6 +2,8 @@ pub mod backup;
 pub mod cron;
 pub mod entity;
 pub mod helper;
+pub mod migration;
+pub mod postgres_deployment_mode;
 pub mod restore;
 pub mod setup;
 pub mod setup_minimal;
