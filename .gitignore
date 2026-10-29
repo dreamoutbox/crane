@@ -20,5 +20,8 @@ crane-*.zip
 examples/keystest/
 examples/keys/
 keys*/
+dev-docker/keys
 
 examples-local/
+
+handoff.md

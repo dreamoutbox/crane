@@ -27,7 +27,8 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Setup PostgreSQL repository and install patroni, etcd, haproxy, python3-boto3, and postgresql-17
+# Setup PostgreSQL repository and install patroni, 
+# etcd, haproxy, python3-boto3, and postgresql-17
 RUN rm -f /etc/apt/trusted.gpg.d/postgresql.gpg && \
     sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list' && \
     curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg && \
@@ -60,12 +61,16 @@ RUN systemctl mask \
 # SSH hardening + config + tmpfiles.d creation for /run/sshd
 RUN mkdir -p /run/sshd && \
     ssh-keygen -A && \
-    sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config && \
+    sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config && \
     sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config && \
     sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
     sed -i 's/#AuthorizedKeysFile/AuthorizedKeysFile/' /etc/ssh/sshd_config && \
     mkdir -p /etc/tmpfiles.d && \
-    echo "d /run/sshd 0755 root root -" > /etc/tmpfiles.d/ssh.conf
+    echo "d /run/sshd 0755 root root -" > /etc/tmpfiles.d/ssh.conf && \
+    mkdir -p /root/.ssh && \
+    chmod 700 /root/.ssh && \
+    touch /root/.ssh/authorized_keys && \
+    chmod 600 /root/.ssh/authorized_keys
 
 #Create crane user (VPS deploy user) 
 #with UID/GID 1000 to match host user
@@ -78,10 +83,10 @@ RUN (userdel -r ubuntu || true) && \
     chmod 700 /home/crane/.ssh && \
     chown crane:crane /home/crane/.ssh
 
-# Mount authorized_keys at runtime via volume (see docker-compose)
-# Fallback: copy if present at build time
-COPY --chown=crane:crane keys/authorized_keys /home/crane/.ssh/authorized_keys
-RUN chmod 600 /home/crane/.ssh/authorized_keys 2>/dev/null || true
+# Create authorized_keys file
+RUN touch /home/crane/.ssh/authorized_keys && \
+    chmod 600 /home/crane/.ssh/authorized_keys && \
+    chown crane:crane /home/crane/.ssh/authorized_keys
 
 #Change root password
 RUN echo 'root:rootpass' | chpasswd

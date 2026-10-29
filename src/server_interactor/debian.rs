@@ -637,6 +637,14 @@ impl ServerInteractor for DebianInteractor {
             println!("\tPostgreSQL {} is already installed.", version);
         }
 
+        // Binaries can exist without the Debian "main" cluster (e.g. it was dropped
+        // earlier); recreate it so /etc/postgresql/<ver>/main/*.conf exist.
+        let conf_path = format!("/etc/postgresql/{}/main/postgresql.conf", version);
+        if !self.exists(&conf_path).unwrap_or(false) {
+            println!("\tCreating PostgreSQL {} main cluster...", version);
+            self.cmd(&format!("sudo pg_createcluster {} main", version))?;
+        }
+
         Ok(())
     }
 

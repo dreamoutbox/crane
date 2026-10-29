@@ -99,19 +99,19 @@ services:
   # simulate external s3 service
   s3:
     platform: linux/amd64
-    image: minio/minio
+    image: chrislusf/seaweedfs
     container_name: s3
     hostname: s3
-    command: server /data --console-address ":9001"
+    command: "mini -dir=/data -s3.port=9000 -bucket=crane1"
     ports:
       - "9000:9000"
-      - "9001:9001"
     environment:
       TZ: Asia/Bangkok
-      MINIO_ROOT_USER: miniominio
-      MINIO_ROOT_PASSWORD: miniominio
+      AWS_ACCESS_KEY_ID: miniominio
+      AWS_SECRET_ACCESS_KEY: miniominio
+      S3_BUCKET: crane1
     volumes:
-      - minio_data:/data
+      - seaweedfs_data:/data
     networks:
       crane-net:
         ipv4_address: 10.0.0.200
@@ -127,4 +127,4 @@ networks:
         - subnet: 10.0.0.0/24
 
 volumes:
-  minio_data:
+  seaweedfs_data:
