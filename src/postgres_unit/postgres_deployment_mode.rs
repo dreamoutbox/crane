@@ -17,11 +17,11 @@ impl PostgresDeploymentMode {
     /// use crane::postgres_unit::postgres_deployment_mode::PostgresDeploymentMode;
     ///
     /// let mode = PostgresDeploymentMode::Minimal;
-    /// assert_eq!(mode.as_str(), "Minimal (standalone single-node)");
+    /// assert_eq!(mode.as_str(), "Minimal (single node)");
     /// ```
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Minimal => "Minimal (standalone single-node)",
+            Self::Minimal => "Minimal (single node)",
             Self::Cluster => "Cluster (Patroni + etcd HA)",
             Self::Uninstalled => "Uninstalled",
         }
