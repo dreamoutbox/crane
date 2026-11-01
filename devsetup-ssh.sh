@@ -5,8 +5,9 @@
 set -euo pipefail
 
 # Keys dir
-KEYS_DIR="$(dirname "$0")/keys"
+KEYS_DIR="$(dirname "$0")/dev-ssh-keys"
 mkdir -p "$KEYS_DIR"
+chmod 600 "$KEYS_DIR/id_ed25519" 2>/dev/null || true
 
 # Add vps hosts to SSH config to avoid StrictHostKeyChecking prompts
 SSH_CONFIG="$HOME/.ssh/config"
@@ -15,12 +16,12 @@ MARKER="# crane-vps"
 # Use existing SSH key or generate a dedicated sim key
 if [[ -f "$KEYS_DIR/id_ed25519.pub" ]]; then
   cp "$KEYS_DIR/id_ed25519.pub" "$KEYS_DIR/authorized_keys"
-  echo "✓ Copied keys/id_ed25519.pub → keys/authorized_keys"
+  echo "Copied dev-ssh-keys/id_ed25519.pub -> dev-ssh-keys/authorized_keys"
 else
   echo "No existing SSH key found. Generating crane-sim key..."
   ssh-keygen -t ed25519 -C "crane-sim" -f "$KEYS_DIR/id_ed25519" -N ""
   cp "$KEYS_DIR/id_ed25519.pub" "$KEYS_DIR/authorized_keys"
-  echo "✓ Generated keys/id_ed25519"
+  echo "Generated dev-ssh-keys/id_ed25519"
 fi
 
 if ! grep -q "$MARKER" "$SSH_CONFIG" 2>/dev/null; then

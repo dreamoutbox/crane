@@ -8,7 +8,7 @@ roles = ["app", "haproxy", "postgres", "redis"]
 ssh_user = "crane"
 ssh_ip = "127.0.0.1"
 ssh_port = 2221
-private_key = "keys/id_ed25519"
+private_key = "dev-ssh-keys/id_ed25519"
 sudo_pass = "${SUDO_PASS_VPS1}"
 
 [[nodes]]
@@ -19,7 +19,7 @@ roles = ["app", "haproxy", "postgres", "redis"]
 ssh_user = "crane"
 ssh_ip = "127.0.0.1"
 ssh_port = 2222
-private_key = "keys/id_ed25519"
+private_key = "dev-ssh-keys/id_ed25519"
 sudo_pass = "${SUDO_PASS_VPS2}"
 
 [[nodes]]
@@ -30,7 +30,7 @@ roles = ["app", "haproxy", "postgres", "redis"]
 ssh_user = "crane"
 ssh_ip = "127.0.0.1"
 ssh_port = 2223
-private_key = "keys/id_ed25519"
+private_key = "dev-ssh-keys/id_ed25519"
 sudo_pass = "${SUDO_PASS_VPS3}"
 
 

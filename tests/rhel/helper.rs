@@ -1,8 +1,18 @@
 use crane::server_interactor::server_interactor_trait::ServerInteractor;
 
 pub async fn reset_rocky_docker_compose() {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = std::fs::metadata("dev-ssh-keys/id_ed25519") {
+            let mut perms = meta.permissions();
+            perms.set_mode(0o600);
+            let _ = std::fs::set_permissions("dev-ssh-keys/id_ed25519", perms);
+        }
+    }
+
     let output_down = std::process::Command::new("docker")
-        .args(["compose", "-f", "docker-compose.rocky.dev.yml", "down"])
+        .args(["compose", "-f", "dev-docker/docker-compose.rocky.dev.yml", "down"])
         .output()
         .expect("Failed to execute docker compose down");
     if !output_down.status.success() {
@@ -16,7 +26,7 @@ pub async fn reset_rocky_docker_compose() {
         .args([
             "compose",
             "-f",
-            "docker-compose.rocky.dev.yml",
+            "dev-docker/docker-compose.rocky.dev.yml",
             "up",
             "-d",
             "--build",
@@ -39,7 +49,7 @@ pub async fn reset_rocky_docker_compose() {
                     node,
                     "sh",
                     "-c",
-                    "cp /opt/authorized_keys /home/crane/.ssh/authorized_keys && chown crane:crane /home/crane/.ssh/authorized_keys && chmod 600 /home/crane/.ssh/authorized_keys",
+                    "cp /opt/authorized_keys /home/crane/.ssh/authorized_keys && chown crane:crane /home/crane/.ssh/authorized_keys && chmod 600 /home/crane/.ssh/authorized_keys && mkdir -p /root/.ssh && cp /opt/authorized_keys /root/.ssh/authorized_keys && chmod 700 /root/.ssh && chmod 600 /root/.ssh/authorized_keys",
                 ])
                 .output()
                 .expect("Failed to execute docker exec to setup ssh key");
@@ -70,7 +80,7 @@ pub async fn reset_rocky_docker_compose() {
             let status = std::process::Command::new("ssh")
                 .args([
                     "-i",
-                    "keys/id_ed25519",
+                    "dev-ssh-keys/id_ed25519",
                     "-o",
                     "StrictHostKeyChecking=no",
                     "-o",

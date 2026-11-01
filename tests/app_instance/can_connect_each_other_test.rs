@@ -4,7 +4,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use crate::common_helper::reset_docker_compose;
+use crate::common_helper::{build_go_demo_app, reset_docker_compose};
 
 #[tokio::test]
 async fn test_app_instances_can_connect_each_other() {
@@ -12,19 +12,10 @@ async fn test_app_instances_can_connect_each_other() {
     reset_docker_compose().await;
 
     // 1. Build Go demo app
-    let go_build = Command::new("go")
-        .arg("build")
-        .current_dir("demo")
-        .output()
-        .expect("failed to run go build");
-    assert!(
-        go_build.status.success(),
-        "go build failed: {}",
-        String::from_utf8_lossy(&go_build.stderr)
-    );
+    build_go_demo_app("examples");
 
     // 2. Deploy app configuration to VPS nodes
-    let config_path = Path::new("demo/crane.toml");
+    let config_path = Path::new("examples/crane.toml");
     let config = crane::config::read_config_toml_file(config_path).expect("Failed to load config");
     crane::commands::deploy::run_deploy_command(&config, config_path, true)
         .await

@@ -13,7 +13,7 @@ async fn test_database_persist_after_deploy() {
     println!("Recreating Docker compose...");
     reset_docker_compose().await;
 
-    let config_path = std::path::Path::new("demo/crane.minimal.toml");
+    let config_path = std::path::Path::new("examples/crane.minimal.toml");
     let config = read_config_toml_file(config_path).expect("Failed to load crane.toml");
 
     // Deploy

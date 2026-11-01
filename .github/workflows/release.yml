@@ -36,10 +36,7 @@ jobs:
       - name: Setup SSH keys
         if: runner.os != 'Windows'
         run: |
-          KEYS_DIR="${{ github.workspace }}/keys"
-          mkdir -p "$KEYS_DIR"
-          ssh-keygen -t ed25519 -C "crane-sim" -f "$KEYS_DIR/id_ed25519" -N ""
-          cp "$KEYS_DIR/id_ed25519.pub" "$KEYS_DIR/authorized_keys"
+          chmod 600 "${{ github.workspace }}/dev-ssh-keys/id_ed25519"
           mkdir -p ~/.ssh
           cat >> ~/.ssh/config <<EOF
 
@@ -83,7 +80,7 @@ jobs:
           whoami
           id
           echo "================= SSH configuration ================="
-          ls -la ${{ github.workspace }}/keys || true
+          ls -la ${{ github.workspace }}/dev-ssh-keys || true
           ls -la ~/.ssh || true
           cat ~/.ssh/config || true
           echo "=========== Docker & Docker Compose info ==========="
@@ -103,7 +100,7 @@ jobs:
           SUDO_PASS_VPS2: "cranepass"
           SUDO_PASS_VPS3: "cranepass"
         # run specific tests first
-        run: cargo nextest run test_app_instances_can_connect_each_other test_backup_restore_extend --locked --no-capture
+        run: cargo nextest run test_app_instances_can_connect_each_other test_backup_restore_extend --locked --test-threads 1 --fail-fast --no-capture
         # test_single_deploy test_deploy 
 
   build:

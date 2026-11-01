@@ -4,7 +4,7 @@ use std::process::Command;
 use crane::postgres_unit::helper::pg_get_primary;
 use crane::server_interactor::get_server_interactor;
 
-use crate::common_helper::{pg_allow_host_machine, reset_docker_compose};
+use crate::common_helper::{build_go_demo_app, pg_allow_host_machine, reset_docker_compose};
 
 // RUN:
 // cargo nextest run test_deploy --nocapture
@@ -16,20 +16,11 @@ async fn test_deploy() {
 
     println!("STEP: 1. Build Go demo app");
     // 1. Build Go demo app
-    let go_build = Command::new("go")
-        .arg("build")
-        .current_dir("demo")
-        .output()
-        .expect("failed to run go build");
-    assert!(
-        go_build.status.success(),
-        "go build failed: {}",
-        String::from_utf8_lossy(&go_build.stderr)
-    );
+    build_go_demo_app("examples");
 
     println!("STEP: 2. Deploy app configuration to VPS nodes");
     // 2. Deploy app configuration to VPS nodes
-    let config_path = Path::new("demo/crane.toml");
+    let config_path = Path::new("examples/crane.toml");
     let config = crane::config::read_config_toml_file(config_path).expect("Failed to load config");
     crane::commands::deploy::run_deploy_command(&config, config_path, true)
         .await

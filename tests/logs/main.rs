@@ -6,7 +6,7 @@ static TEST_MUTEX: Mutex<()> = Mutex::new(());
 #[test]
 fn test_logs_command_single_instance() {
     let _guard = TEST_MUTEX.lock().unwrap();
-    let config_path = Path::new("demo/crane.toml");
+    let config_path = Path::new("examples/crane.toml");
     let config = crane::config::read_config_toml_file(config_path).unwrap();
 
     let result = crane::commands::logs::run_logs_cmd(
@@ -26,7 +26,7 @@ fn test_logs_command_single_instance() {
 #[test]
 fn test_logs_command_all_instances() {
     let _guard = TEST_MUTEX.lock().unwrap();
-    let config_path = Path::new("demo/crane.toml");
+    let config_path = Path::new("examples/crane.toml");
     let config = crane::config::read_config_toml_file(config_path).unwrap();
 
     let result = crane::commands::logs::run_logs_cmd(
@@ -46,7 +46,7 @@ fn test_logs_command_all_instances() {
 #[test]
 fn test_logs_command_invalid_instance() {
     let _guard = TEST_MUTEX.lock().unwrap();
-    let config_path = Path::new("demo/crane.toml");
+    let config_path = Path::new("examples/crane.toml");
     let config = crane::config::read_config_toml_file(config_path).unwrap();
 
     let result = crane::commands::logs::run_logs_cmd(

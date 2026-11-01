@@ -6,7 +6,7 @@ use crate::{
 #[test]
 fn test_postgres_logs_command() {
     POSTGRES_LOGS_COMMANDS.lock().unwrap().clear();
-    let _config_path = std::path::Path::new("demo/crane.toml");
+    let _config_path = std::path::Path::new("examples/crane.toml");
 
     let interactor = MockServerInteractorLogsRecorder;
     let result = crane::commands::postgres_logs::run_postgres_logs_wrapper(
@@ -37,7 +37,7 @@ fn test_postgres_logs_command() {
 #[test]
 fn test_postgres_logs_command_user_not_exist() {
     POSTGRES_LOGS_COMMANDS.lock().unwrap().clear();
-    let _config_path = std::path::Path::new("demo/crane.toml");
+    let _config_path = std::path::Path::new("examples/crane.toml");
 
     let interactor = MockServerInteractorUserNotExist;
     let result = crane::commands::postgres_logs::run_postgres_logs_wrapper(

@@ -1,7 +1,26 @@
+use std::path::Path;
+use std::process::Command;
+
 use crane::{postgres_unit::helper::pg_get_primary, server_interactor::get_server_interactor};
 
+/// Resets the development Docker environment by running `./dev-docker/bootstrap.sh`.
+///
+/// Ensures the Docker daemon is available and local SSH keys have proper permissions
+/// before bootstrapping mock VPS nodes and SeaweedFS S3 storage.
+///
+/// # Arguments
+/// None.
+///
+/// # Example
+/// ```no_run
+/// use crate::common_helper::reset_docker_compose;
+///
+/// # async fn run() {
+/// reset_docker_compose().await;
+/// # }
+/// ```
 pub async fn reset_docker_compose() {
-    let docker_check = std::process::Command::new("docker").arg("info").output();
+    let docker_check = Command::new("docker").arg("info").output();
 
     let docker_available = match docker_check {
         Ok(output) => output.status.success(),
@@ -15,122 +34,44 @@ pub async fn reset_docker_compose() {
         std::process::exit(0);
     }
 
-    let output_down = std::process::Command::new("docker")
-        .args(["compose", "-f", "docker-compose.dev.yml", "down"])
-        .output()
-        .expect("Failed to execute docker compose down");
-    if !output_down.status.success() {
-        panic!(
-            "docker compose down failed: {}",
-            String::from_utf8_lossy(&output_down.stderr)
-        );
-    }
-
-    let output_up = std::process::Command::new("docker")
-        .args(["compose", "-f", "docker-compose.dev.yml", "up", "-d"])
-        .output()
-        .expect("Failed to execute docker compose up -d");
-
-    if !output_up.status.success() {
-        panic!(
-            "docker compose up failed: {}",
-            String::from_utf8_lossy(&output_up.stderr)
-        );
-    }
-
-    for node in ["vps1", "vps2", "vps3"] {
-        let mut attempt = 1;
-        loop {
-            let output_cp = std::process::Command::new("docker")
-                .args([
-                    "exec",
-                    node,
-                    "sh",
-                    "-c",
-                    "cp /opt/authorized_keys /home/crane/.ssh/authorized_keys && chown crane:crane /home/crane/.ssh/authorized_keys && chmod 600 /home/crane/.ssh/authorized_keys",
-                ])
-                .output()
-                .expect("Failed to execute docker exec to setup ssh key");
-
-            if output_cp.status.success() {
-                break;
-            }
-
-            if attempt >= 5 {
-                panic!(
-                    "Failed to setup SSH key in container {} after 5 attempts.\nSTDOUT:\n{}\nSTDERR:\n{}",
-                    node,
-                    String::from_utf8_lossy(&output_cp.stdout),
-                    String::from_utf8_lossy(&output_cp.stderr)
-                );
-            }
-
-            attempt += 1;
-            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = std::fs::metadata("dev-ssh-keys/id_ed25519") {
+            let mut perms = meta.permissions();
+            perms.set_mode(0o600);
+            let _ = std::fs::set_permissions("dev-ssh-keys/id_ed25519", perms);
         }
     }
 
-    println!("Checking SSH connectivity to vps1-3...");
-    for port in [2221, 2222, 2223] {
-        let mut attempt = 1;
+    let status = Command::new("./dev-docker/bootstrap.sh")
+        .status()
+        .expect("Failed to execute dev-docker/bootstrap.sh");
+    assert!(status.success(), "dev-docker/bootstrap.sh failed");
+}
 
-        loop {
-            let output = std::process::Command::new("ssh")
-                .args([
-                    "-i",
-                    "keys/id_ed25519",
-                    "-o",
-                    "StrictHostKeyChecking=no",
-                    "-o",
-                    "UserKnownHostsFile=/dev/null",
-                    "-o",
-                    "ConnectTimeout=2",
-                    "-p",
-                    &port.to_string(),
-                    "crane@localhost",
-                    "true",
-                ])
-                .output();
-
-            match output {
-                Ok(output) if output.status.success() => {
-                    break;
-                }
-                Ok(output) => {
-                    eprintln!(
-                        "SSH connection attempt {} to port {} failed:\n--- stdout ---\n{}\n--- stderr ---\n{}",
-                        attempt,
-                        port,
-                        String::from_utf8_lossy(&output.stdout),
-                        String::from_utf8_lossy(&output.stderr)
-                    );
-                    if attempt >= 15 {
-                        panic!(
-                            "Failed to connect to vps on port {} after 15 attempts",
-                            port
-                        );
-                    }
-
-                    attempt += 1;
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                }
-                Err(e) => {
-                    eprintln!("Failed to run ssh command: {:?}", e);
-                    if attempt >= 15 {
-                        panic!(
-                            "Failed to connect to vps on port {} after 15 attempts",
-                            port
-                        );
-                    }
-
-                    attempt += 1;
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                }
-            }
-        }
-    }
-
-    println!("Connection to all VPS ready");
+/// Compiles the Go demo application binary in the specified directory.
+///
+/// # Arguments
+/// * `dir` - Relative or absolute path to the directory containing Go project files (e.g. `"examples"`).
+///
+/// # Example
+/// ```no_run
+/// use crate::common_helper::build_go_demo_app;
+///
+/// build_go_demo_app("examples");
+/// ```
+pub fn build_go_demo_app<P: AsRef<Path>>(dir: P) {
+    let go_build = Command::new("go")
+        .arg("build")
+        .current_dir(dir.as_ref())
+        .output()
+        .expect("failed to run go build");
+    assert!(
+        go_build.status.success(),
+        "go build failed: {}",
+        String::from_utf8_lossy(&go_build.stderr)
+    );
 }
 
 pub fn pg_allow_host_machine(config: &crane::config::Config) {
